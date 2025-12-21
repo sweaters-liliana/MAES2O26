@@ -3,84 +3,149 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v3.9.6 (Hub Central)</title>
-    
-    <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
-    <meta name="theme-color" content="#1e293b">
-    
+    <title>Gestión de Inventario - Hilaturas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
     <style>
-        /* --- ESTILOS DE IMPRESIÓN --- */
-        @media print {
-            body, html, #root { 
-                background: white;
-                -webkit-print-color-adjust: exact; 
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                padding: 0;
-            }
-            .no-print, .dashboard-grid { display: none !important; }
-            ::-webkit-scrollbar { display: none; }
+        /* Fija el encabezado de la tabla para que sea visible al hacer scroll */
+        .inventory-table thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
-        /* ESTILO: CARTA VERTICAL (ORDEN NORMAL) */
-        @media print {
-            body:not(.print-mode-ticket) @page { size: letter portrait; margin: 1cm; }
-            body:not(.print-mode-ticket) .print-visible-wrapper { display: block !important; width: 100% !important; }
-            body:not(.print-mode-ticket) .ticket-container { display: none !important; }
-            body:not(.print-mode-ticket) h1 { font-size: 36pt !important; line-height: 0.9 !important; margin-bottom: 5px; }
-            body:not(.print-mode-ticket) table { border-collapse: collapse; width: 100%; border: 3px solid black; table-layout: fixed; margin-bottom: 8px; }
-            body:not(.print-mode-ticket) th { background-color: #d1d5db !important; color: black !important; font-weight: 900 !important; font-size: 11pt !important; border: 2px solid black !important; }
-            body:not(.print-mode-ticket) td { border: 2px solid black !important; padding: 4px !important; font-size: 12pt !important; font-weight: 700 !important; color: black !important; }
-            body:not(.print-mode-ticket) .machine-number-val { font-size: 60pt !important; font-weight: 900; line-height: 0.8; }
-            body:not(.print-mode-ticket) .print-only { display: block !important; }
+        /* Fija los encabezados de grupo */
+        .group-header-row {
+             position: sticky;
+             top: 48px; /* Altura del thead */
+             z-index: 9;
         }
-        /* ESTILO: PAPELETA 4x6 (ETIQUETAS) */
-        @media print {
-            body.print-mode-ticket @page { size: 6in 4in landscape; margin: 0; }
-            body.print-mode-ticket { width: 6in; height: 4in; }
-            body.print-mode-ticket .print-visible-wrapper { display: none !important; } 
-            body.print-mode-ticket .ticket-container { display: flex !important; width: 6in; height: 4in; page-break-after: always; overflow: hidden; padding: 5px; box-sizing: border-box; fontFamily: sans-serif; color: black; }
-            body.print-mode-ticket .ticket-content { width: 100%; height: 100%; border: 3px solid black; border-radius: 8px; display: flex; flex-direction: column; }
-            .ticket-row { display: flex; border-bottom: 2px solid black; }
-            .ticket-col { flex: 1; padding: 2px 4px; border-right: 2px solid black; display: flex; flex-direction: column; justify-content: center; }
-            .ticket-col:last-child { border-right: none; }
-            .ticket-label { font-size: 8pt; font-weight: bold; text-transform: uppercase; color: #333; line-height: 1; mb-0.5; }
-            .ticket-value { font-size: 12pt; font-weight: 900; text-transform: uppercase; line-height: 1.1; word-break: break-word; }
-            .ticket-value.large { font-size: 16pt; }
-            .ticket-value.huge { font-size: 32pt; }
-            .ticket-value.enormous { font-size: 48pt; color: #dc2626; }
-            .no-border-bottom { border-bottom: none !important; }
+        /* Estilo para el modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
         }
-        .print-only { display: none; }
-        .ticket-container { display: none; }
-        /* Dashboard Styles */
-        .dashboard-grid { display: grid; grid-template-rows: 60vh 1fr; height: 100vh; overflow: hidden; }
-        .top-pane { overflow-y: auto; border-bottom: 4px solid #334155; }
-        .bottom-pane { overflow-x: auto; background: #1e293b; color: white; display: flex; padding: 10px; gap: 10px; }
-        .machine-card { min-width: 320px; background: #334155; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; height: 100%; }
-        .pkg-list { overflow-y: auto; flex-grow: 1; margin-top: 10px; padding-right: 4px; }
-        .pkg-list::-webkit-scrollbar { width: 6px; }
-        .pkg-list::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
-        .obs-input { background: transparent; border: none; color: #cbd5e1; width: 100%; font-size: 10px; border-bottom: 1px solid #475569; }
-        .obs-input:focus { outline: none; border-bottom: 1px solid #94a3b8; color: white; }
     </style>
 </head>
-<body class="bg-slate-100 text-slate-800 font-sans">
+<body class="bg-slate-50 text-slate-800 font-sans">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo } = React;
+        
+        // --- DATOS DE COLORES SPUN (Extraídos de Untitled.pdf) ---
+        const SPUN_COLORS = [
+            { num: "01", name: "Rosado Pálido", hex: "#E9D2E0" },
+            { num: "02", name: "Rosado Brillante", hex: "#E870A2" },
+            { num: "03", name: "Magenta Suave", hex: "#E33A7C" },
+            { num: "04", name: "Rosa Intenso", hex: "#DE0A52" }, // Se corrigió '#DEOA52' a '#DE0A52'
+            { num: "05", name: "Rojo Rosado", hex: "#D00045" },
+            { num: "06", name: "Rojo Oscuro", hex: "#A8002D" }, 
+            { num: "07", name: "Vino/Borgona", hex: "#8B0D36" }, // Se corrigió '#8BOD36' a '#8B0D36'
+            { num: "09", name: "Fucsia Brillante", hex: "#E90065" },
+            { num: "10", name: "Magenta Intenso", hex: "#C50047" },
+            { num: "14", name: "Morado Oscuro", hex: "#7D0039" },
+            { num: "15", name: "Púrpura/Ciruela", hex: "#5F002C" },
+            { num: "16", name: "Berenjena Oscuro", hex: "#430029" },
+            { num: "19", name: "Azul Marino Oscuro", hex: "#130D29" },
+            { num: "20", name: "Negro/Azul muy oscuro", hex: "#0A090F" },
+            { num: "21", name: "Púrpura", hex: "#4B0D5D" }, 
+            { num: "22", name: "Violeta Oscuro", hex: "#580D74" },
+            { num: "23", name: "Azul Morado", hex: "#6F0C8B" }, 
+            { num: "24", name: "Morado Lavanda", hex: "#920EAA" },
+            { num: "25", name: "Violeta Brillante", hex: "#AD00C1" },
+            { num: "26", name: "Púrpura Claro", hex: "#9E3FB0" },
+            { num: "27", name: "Azul Púrpura", hex: "#724089" },
+            { num: "28", name: "Gris Morado", hex: "#544865" },
+            { num: "29", name: "Azul Pizarra Oscuro", hex: "#3B394A" },
+            { num: "30", name: "Verde Azulado Oscuro", hex: "#343940" },
+            { num: "31", name: "Verde Lima Pálido", hex: "#D3EB9B" },
+            { num: "33", name: "Verde Amarillento", hex: "#A1E455" },
+            { num: "34", name: "Verde Brillante", hex: "#6CD126" },
+            { num: "35", name: "Verde Pasto Oscuro", hex: "#459325" },
+            { num: "36", name: "Verde Olivo", hex: "#979A3F" },
+            { num: "37", name: "Verde Seco/Musgo", hex: "#778A3E" },
+            { num: "38", name: "Verde Bosque Oscuro", hex: "#455C2C" },
+            { num: "39", name: "Caqui Oscuro", hex: "#38492C" },
+            { num: "40", name: "Ladrillo/Rojizo", hex: "#9C3833" },
+            { num: "41", name: "Rojo Caliente", hex: "#B93433" },
+            { num: "42", name: "Naranja", hex: "#CD3534" },
+            { num: "43", name: "Coral Claro", hex: "#DB575B" },
+            { num: "44", name: "Rosa Salmón", hex: "#EB8488" },
+            { num: "45", name: "Rosa Pálido", hex: "#F4ADAD" },
+            { num: "46", name: "Rosa muy Pálido", hex: "#F7E4E4" },
+            { num: "47", name: "Azul Bebé", hex: "#B2DDEB" },
+            { num: "48", name: "Celeste Brillante", hex: "#84C8DD" },
+            { num: "50", name: "Turquesa Intenso", hex: "#1A86AA" },
+            { num: "51", name: "Azul Cielo", hex: "#307797" },
+            { num: "52", name: "Azul Rey Oscuro", hex: "#1F4A70" },
+            { num: "54", name: "Verde Menta", hex: "#58B490" },
+            { num: "55", name: "Verde Suave", hex: "#71D5A6" },
+            { num: "56", name: "Verde Neón", hex: "#85E8B3" },
+            { num: "57", name: "Verde Lima Pálido", hex: "#A7EBC5" },
+            { num: "58", name: "Verde Agua Claro", hex: "#C9F7DB" },
+            { num: "59", name: "Verde Esmeralda", hex: "#36C87C" },
+            { num: "60", name: "Verde Pino", hex: "#26A863" },
+            { num: "64", name: "Verde Botella", hex: "#1D794F" },
+            { num: "65", name: "Verde Profundo", hex: "#1D553A" },
+            { num: "69", name: "Verde Oliva Oscuro", hex: "#2D3934" },
+            { num: "70", name: "Caqui", hex: "#7D8D68" },
+            { num: "71", name: "Beige Arena", hex: "#C8C9A3" },
+            { num: "72", name: "Blanco Roto/Hueso", hex: "#E3E1DF" },
+            { num: "73", name: "Beige Claro", hex: "#D4C9BF" },
+            { num: "74", name: "Gris Pálido", hex: "#B8A99C" },
+            { num: "75", name: "Gris Taupe", hex: "#9C8F84" },
+            { num: "76", name: "Marrón Suave", hex: "#7D6F64" },
+            { num: "77", name: "Marrón Tierra", hex: "#5E534A" },
+            { num: "78", name: "Café Oscuro", hex: "#403A35" },
+            { num: "79", name: "Marrón Grisáceo", hex: "#373838" },
+            { num: "80", name: "Gris Oscuro", hex: "#2C2F30" },
+            { num: "81", name: "Azul Acero Oscuro", hex: "#28303C" },
+            { num: "82", name: "Azul Marino", hex: "#1D2D44" },
+            { num: "83", name: "Azul Noche", hex: "#132034" },
+            { num: "85", name: "Azul Prusia", hex: "#0E1729" },
+            { num: "88", name: "Gris muy Oscuro", hex: "#1D1C1B" },
+            { num: "89", name: "Gris Grafito", hex: "#252423" },
+            { num: "90", name: "Blanco Puro", hex: "#F4F5F4" },
+            { num: "101", name: "Gris Claro", hex: "#919396" },
+            { num: "169", name: "Azul Tinta Oscuro", hex: "#34465B" },
+            { num: "178", name: "Gris Medio", hex: "#605F61" },
+            { num: "182", name: "Negro", hex: "#1D1E1F" }
+        ];
+
+        // --- UTILS PARA MANEJO DE COLORES ---
+        const hexToRgb = (hex) => {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        };
+        
+        // Verifica si el color es oscuro para usar texto claro (blanco)
+        const isDarkColor = (hex) => {
+            const rgb = hexToRgb(hex);
+            if (!rgb) return true;
+            // Cálculo de Luminosidad (ITU-R BT.709)
+            const luminance = (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+            // Se considera oscuro si la luminosidad es menor a 0.5
+            return luminance < 0.5; 
+        };
+        // ------------------------------------
+
         
         const firebaseConfig = {
             apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
@@ -94,570 +159,890 @@
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
+        const Icon = ({ name, size = 18 }) => <i data-lucide={name} style={{ width: size, height: size }}></i>;
 
-        const Icon = ({ name, size = 18, className }) => <i data-lucide={name} width={size} height={size} className={className}></i>;
-        
-        const generateSmartID = (partida, pieces, maquina) => {
-            const piecePrefixes = pieces.map(p => p.pieza.substring(0, 2).toUpperCase()).join('/');
-            return `${partida}-${piecePrefixes}-M${maquina}`;
+        // =================================================================
+        // COMPONENTE: MODAL PALETA DE COLORES SPUN
+        // =================================================================
+        const ColorPaletteModal = ({ onClose }) => {
+            return (
+                <div className="modal-overlay">
+                    <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+                        <h3 className="text-xl font-bold mb-4 text-indigo-700 flex items-center justify-between border-b pb-2 shrink-0">
+                            <div className="flex items-center gap-2"><Icon name="palette"/> PALETA DE COLORES SPUN (Referencia)</div>
+                            <button onClick={onClose} className="text-red-500 font-bold text-sm flex items-center gap-1 hover:bg-red-50 p-1 rounded"><Icon name="x"/> CERRAR</button>
+                        </h3>
+                        
+                        <div className="overflow-y-auto p-2">
+                            <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-3">
+                                {SPUN_COLORS.map(color => {
+                                    const textColor = isDarkColor(color.hex) ? 'text-white' : 'text-slate-900';
+                                    
+                                    return (
+                                        <div 
+                                            key={color.num} 
+                                            className="aspect-square flex items-center justify-center p-1 rounded-lg shadow-md cursor-pointer transition transform hover:scale-105 hover:shadow-xl"
+                                            style={{ backgroundColor: color.hex }}
+                                            onClick={() => alert(`Número: ${color.num}\nColor Aproximado: ${color.name}\nCódigo HEX: ${color.hex}`)}
+                                            title={`Haga clic para ver: ${color.name}`}
+                                        >
+                                            <span className={`text-3xl font-black ${textColor} drop-shadow-lg`}>
+                                                {color.num}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-4 text-center">Haga clic en el cuadro para ver el nombre del color. Esta paleta no tiene interacción con la base de datos de inventario.</p>
+                        </div>
+                        
+                    </div>
+                </div>
+            );
         };
 
-        const useBarcodeScanner = (onScan) => {
-            useEffect(() => {
-                let buffer = '';
-                let lastKeyTime = Date.now();
-                const handleKeyDown = (e) => {
-                    const target = e.target;
-                    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
-                    const char = e.key;
-                    const currentTime = Date.now();
-                    if (currentTime - lastKeyTime > 100) buffer = '';
-                    lastKeyTime = currentTime;
-                    if (char === 'Enter') {
-                        if (buffer.length > 5) onScan(buffer);
-                        buffer = '';
-                    } else if (char.length === 1) buffer += char;
-                };
-                window.addEventListener('keydown', handleKeyDown);
-                return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [onScan]);
-        };
+        // =================================================================
+        // COMPONENTE: MODAL DE BITÁCORA (LOG) POR ITEM
+        // =================================================================
+        const ItemLogModal = ({ item, onClose }) => {
+            const [movements, setMovements] = useState([]);
+            const [loading, setLoading] = useState(true);
 
-        // --- COMPONENTE PAPELETA INDIVIDUAL (4x6) ---
-        const PackageTicket = ({ order, pkg }) => {
-            const canvasRef = useRef(null);
-            const pieceInfo = order.subPiecesData?.find(p => p.pieza === pkg.piezaNombre) || {};
-            
             useEffect(() => {
-                if (canvasRef.current) {
-                    const barcodeValue = `${order.id}-${pkg.id}`;
+                const fetchMovements = async () => {
+                    if (!item || !item.id) return;
                     try {
-                        JsBarcode(canvasRef.current, barcodeValue, {
-                            format: "CODE128", displayValue: false, height: 50, width: 2, margin: 0, background: "transparent"
-                        });
-                    } catch (e) { console.error("Error barcode", e); }
+                        // Buscar movimientos solo para el ID de este material
+                        const snapshot = await db.collection('inventory_movements')
+                            .where('materialId', '==', item.id)
+                            .orderBy('timestamp', 'desc')
+                            .limit(100)
+                            .get();
+                        setMovements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                        setLoading(false);
+                        setTimeout(() => lucide.createIcons(), 100);
+                    } catch (e) {
+                        console.error("Error fetching item movements:", e);
+                        setLoading(false);
+                    }
+                };
+                fetchMovements();
+            }, [item]);
+
+            const formatDate = (timestamp) => {
+                if (!timestamp) return 'N/A';
+                // El timestamp puede venir como número (Date.now()) o como objeto de Firebase
+                let date;
+                if (typeof timestamp === 'number') {
+                    date = new Date(timestamp);
+                } else if (timestamp.toDate) {
+                    date = timestamp.toDate();
+                } else {
+                    return 'N/A';
                 }
-            }, [order, pkg]);
+                return date.toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            };
+
+            const renderDetails = (m) => {
+                switch(m.type) {
+                    case 'ENTRADA':
+                        return <span className="text-green-700 font-semibold">Recepción de stock: {m.note || 'Sin nota'}</span>;
+                    case 'EDICION_DETALLE':
+                        return <span className="text-indigo-700 font-semibold">Detalles editados: Calibre, Color, etc.</span>;
+                    case 'SALIDA_ORDEN':
+                        return (
+                            <div className="flex flex-col text-red-700 font-semibold">
+                                <span>Consumo por Orden: <span className="font-mono">{m.orderId}</span></span>
+                                <span className="text-xs text-slate-500">Modelo: {m.model || 'N/A'} | Partida: {m.partida || 'N/A'}</span>
+                            </div>
+                        );
+                    default:
+                        return <span className="text-slate-500">Movimiento registrado: {m.note || 'N/A'}</span>;
+                }
+            }
 
             return (
-                <div className="ticket-container">
-                    <div className="ticket-content">
-                        <div className="ticket-row" style={{flex: '0 0 auto'}}>
-                            <div className="ticket-col" style={{flex: 2}}><span className="ticket-label">MODELO</span><span className="ticket-value large">{order.codigo}</span></div>
-                            <div className="ticket-col" style={{flex: 1}}><span className="ticket-label">PIEZAS</span><span className="ticket-value large text-center">{pkg.cantidad}</span></div>
-                            <div className="ticket-col" style={{flex: 2}}><span className="ticket-label">PARTIDA</span><span className="ticket-value large">{order.partida}</span></div>
-                            <div className="ticket-col" style={{flex: 3}}><span className="ticket-label">CLIENTE</span><span className="ticket-value large truncate">{order.cliente}</span></div>
-                        </div>
-                        <div className="ticket-row" style={{flex: '0 0 auto', padding: '4px'}}>
-                            <div className="ticket-col border-r-0"><span className="ticket-label">DESCRIPCION</span><span className="ticket-value text-lg leading-tight">{pkg.piezaNombre}</span></div>
-                        </div>
-                        <div className="ticket-row" style={{flex: '1 1 auto'}}>
-                            <div className="ticket-col text-center" style={{flex: 1}}><span className="ticket-label">NUMERO DE COSTURA</span><span className="ticket-value huge">{pkg.paqueteNum}</span><span className="text-xs font-bold">DE {pkg.paquetesDePieza}</span></div>
-                            <div className="ticket-col text-center" style={{flex: 1.5}}><span className="ticket-label">PIEZAS X COSTURA</span><span className="ticket-value huge">{pkg.cantidad}</span></div>
-                            <div className="ticket-col text-center bg-slate-100" style={{flex: 1}}><span className="ticket-label">MAQUINA</span><span className="ticket-value enormous">{order.maquina}</span></div>
-                        </div>
-                        <div className="ticket-row" style={{flex: '0 0 auto', fontSize: '9pt'}}>
-                             <div className="ticket-col" style={{flex: 1}}><span className="ticket-label">TALLA</span><span className="ticket-value">{pieceInfo.talla || '-'}</span></div>
-                            <div className="ticket-col" style={{flex: 2}}><span className="ticket-label">MATERIALES</span><div className="flex flex-col">{order.threading?.map((h, i) => (h.material && <span key={i} className="font-bold text-xs truncate">{h.material}</span>))}</div></div>
-                             <div className="ticket-col" style={{flex: 1.5}}>
-                                <div className="border-b-2 border-black mb-1 pb-1"><span className="ticket-label">FECHA ENTREGA</span><span className="ticket-value text-sm block">{new Date().toLocaleDateString('es-MX')}</span></div>
-                                <div><span className="ticket-label">TEJIDO POR:</span><span className="block border-b border-black h-4"></span></div>
+                <div className="modal-overlay">
+                    <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+                        <h3 className="text-xl font-black mb-4 text-slate-800 flex items-center justify-between border-b pb-2 shrink-0">
+                            <div className="flex items-center gap-2"><Icon name="history"/> Bitácora de {item?.material || 'Material'} ({item?.color || 'N/A'})</div>
+                            <button onClick={onClose} className="text-red-500 font-bold text-sm flex items-center gap-1 hover:bg-red-50 p-1 rounded"><Icon name="x"/> CERRAR</button>
+                        </h3>
+                        
+                        {loading ? (
+                            <div className="text-center py-10 text-slate-500">Cargando bitácora...</div>
+                        ) : (
+                            <div className="overflow-y-auto flex-grow">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="sticky top-0 bg-slate-100 border-b">
+                                        <tr>
+                                            <th className="p-2 w-32">Fecha/Hora</th>
+                                            <th className="p-2 w-20 text-center">Tipo</th>
+                                            <th className="p-2 w-20 text-right">Cantidad (Kg)</th>
+                                            <th className="p-2 w-20 text-center">Stock Final</th>
+                                            <th className="p-2">Detalle del Movimiento</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {movements.map(m => (
+                                            <tr key={m.id} className={`border-b 
+                                                ${m.type === 'ENTRADA' ? 'bg-green-50' : m.type === 'SALIDA_ORDEN' ? 'bg-red-50' : m.type === 'EDICION_DETALLE' ? 'bg-indigo-50' : 'bg-slate-50'}
+                                            `}>
+                                                <td className="p-2 font-mono text-[10px]">{formatDate(m.timestamp)}</td>
+                                                <td className="p-2 text-center font-bold">
+                                                    <span className={`px-2 py-0.5 rounded-full text-[10px] 
+                                                        ${m.type === 'ENTRADA' ? 'bg-green-600 text-white' : m.type === 'SALIDA_ORDEN' ? 'bg-red-600 text-white' : m.type === 'EDICION_DETALLE' ? 'bg-indigo-600 text-white' : 'bg-slate-600 text-white'}
+                                                    `}>
+                                                        {m.type === 'SALIDA_ORDEN' ? 'SALIDA' : m.type}
+                                                    </span>
+                                                </td>
+                                                <td className={`p-2 text-right font-black ${m.type === 'ENTRADA' ? 'text-green-700' : m.type === 'SALIDA_ORDEN' ? 'text-red-700' : 'text-slate-700'}`}>
+                                                    {m.type === 'SALIDA_ORDEN' ? `-${parseFloat(m.quantityKg).toFixed(2)}` : parseFloat(m.quantityKg).toFixed(2)}
+                                                </td>
+                                                <td className="p-2 text-center text-xs font-mono">{parseFloat(m.currentStock).toFixed(2)}</td>
+                                                <td className="p-2 text-[11px]">{renderDetails(m)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {movements.length === 0 && <div className="text-center py-4 text-slate-400">No hay movimientos registrados para este material.</div>}
                             </div>
+                        )}
+                        
+                    </div>
+                </div>
+            );
+        };
+
+
+        // =================================================================
+        // COMPONENTE 1: MODAL DE RECEPCIÓN DE STOCK (ENTRADA)
+        // =================================================================
+        const ReceptionModal = ({ items, onClose, onUpdate }) => {
+            const [selectedItem, setSelectedItem] = useState('');
+            const [kilosReceived, setKilosReceived] = useState('');
+            const [note, setNote] = useState('');
+            const [error, setError] = useState(null);
+
+            const materialOptions = items.map(i => ({ value: i.material, id: i.id, stock: i.stock, hex: i.hex, color: i.color }));
+
+            const handleSubmit = async () => {
+                const kilos = parseFloat(kilosReceived);
+                if (!selectedItem || isNaN(kilos) || kilos <= 0) {
+                    setError("Seleccione un material e ingrese una cantidad válida (mayor a 0).");
+                    return;
+                }
+                
+                const itemToUpdate = items.find(i => i.material === selectedItem);
+                if (!itemToUpdate) {
+                    setError("Material no encontrado.");
+                    return;
+                }
+
+                try {
+                    // 1. Calcular el nuevo stock
+                    const newStock = (parseFloat(itemToUpdate.stock) || 0) + kilos;
+
+                    // 2. Actualizar el inventario principal
+                    const updatedInventoryList = items.map(i => 
+                        i.id === itemToUpdate.id 
+                        ? { ...i, stock: newStock.toFixed(2) } // Actualiza el stock
+                        : i
+                    );
+
+                    await db.collection('inventory').doc('main').set({ items: updatedInventoryList });
+                    
+                    // 3. Registrar el movimiento de entrada (LOG)
+                    await db.collection('inventory_movements').add({
+                        materialId: itemToUpdate.id,
+                        materialName: itemToUpdate.material,
+                        color: itemToUpdate.color || '',
+                        hex: itemToUpdate.hex || '',
+                        type: "ENTRADA",
+                        quantityKg: kilos,
+                        currentStock: newStock.toFixed(2),
+                        date: new Date().toISOString().split('T')[0],
+                        timestamp: Date.now(),
+                        note: note || 'Recepción de stock'
+                    });
+
+                    onUpdate(); // Notificar a App que se actualizó
+                    onClose();
+                    alert(`¡Éxito! Se sumaron ${kilos} Kg a ${selectedItem}.`);
+
+                } catch (e) {
+                    console.error("Error al registrar entrada:", e);
+                    setError("Error al guardar en la base de datos.");
+                }
+            };
+
+            return (
+                <div className="modal-overlay">
+                    <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-md">
+                        <h3 className="text-xl font-bold mb-4 text-green-700 flex items-center gap-2 border-b pb-2">
+                            <Icon name="package-plus"/> Recepción de Stock (Entrada)
+                        </h3>
+                        {error && <div className="bg-red-100 text-red-700 p-2 rounded text-xs mb-3 font-bold">{error}</div>}
+                        
+                        <div className="mb-4">
+                            <label className="block text-xs font-bold mb-1">Material</label>
+                            <select 
+                                className="w-full border p-2 rounded font-bold" 
+                                value={selectedItem} 
+                                onChange={e => { setSelectedItem(e.target.value); setError(null); }}
+                            >
+                                <option value="">Seleccione Material...</option>
+                                {materialOptions.map(m => (
+                                    <option key={m.id} value={m.value}>{m.value} - {m.color} (Stock: {m.stock} Kg)</option>
+                                ))}
+                            </select>
                         </div>
-                        <div className="ticket-row no-border-bottom flex-col items-center justify-center pt-2" style={{flex: '0 0 auto'}}>
-                            <canvas ref={canvasRef} className="max-w-full"></canvas>
-                            <div className="text-[9px] font-mono text-center w-full leading-none mt-1">{pkg.codigoUnico}</div>
-                            <div className="text-[8px] font-mono text-center w-full leading-none text-slate-500">ID: {order.id}-{pkg.id}</div>
+                        <div className="mb-4">
+                            <label className="block text-xs font-bold mb-1">Kilos Recibidos (a sumar)</label>
+                            <input 
+                                type="number" 
+                                step="0.01" 
+                                placeholder="Ej: 50.00" 
+                                className="w-full border-2 border-green-300 p-2 rounded font-black text-xl text-green-700" 
+                                value={kilosReceived} 
+                                onChange={e => setKilosReceived(e.target.value)} 
+                            />
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-xs font-bold mb-1">Nota / Proveedor</label>
+                            <input 
+                                type="text" 
+                                placeholder="Ej: Recibido de Proveedor X" 
+                                className="w-full border p-2 rounded text-sm" 
+                                value={note} 
+                                onChange={e => setNote(e.target.value)} 
+                            />
+                        </div>
+                        
+                        <div className="flex justify-end gap-2">
+                            <button onClick={onClose} className="px-4 py-2 bg-slate-200 rounded font-bold text-sm">Cancelar</button>
+                            <button onClick={handleSubmit} className="px-4 py-2 bg-green-600 text-white rounded font-bold text-sm flex items-center gap-1">
+                                <Icon name="check"/> Confirmar Recepción
+                            </button>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // --- DRAFT EDITOR ---
-        const DraftEditor = ({ draft, onSave, onCancel }) => {
-            const [localDraft, setLocalDraft] = useState(draft);
-            const [inventory, setInventory] = useState([]);
-            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+        // =================================================================
+        // COMPONENTE 2: MODAL DE REPORTE DE MOVIMIENTOS
+        // =================================================================
+        const ReportModal = ({ onClose }) => {
+            const [movements, setMovements] = useState([]);
+            const [loading, setLoading] = useState(true);
+
             useEffect(() => {
-                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => { if (doc.exists && doc.data().items) setInventory(doc.data().items); });
+                const fetchMovements = async () => {
+                    try {
+                        // Limite aumentado a 300 para un reporte más amplio
+                        const snapshot = await db.collection('inventory_movements').orderBy('timestamp', 'desc').limit(300).get();
+                        setMovements(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                        setLoading(false);
+                        setTimeout(() => lucide.createIcons(), 100);
+                    } catch (e) {
+                        console.error("Error fetching movements:", e);
+                        setLoading(false);
+                    }
+                };
+                fetchMovements();
+            }, []);
+            
+            useEffect(() => { lucide.createIcons(); }, [movements]);
+
+            const formatDate = (timestamp) => {
+                 if (!timestamp) return 'N/A';
+                let date;
+                if (typeof timestamp === 'number') {
+                    date = new Date(timestamp);
+                } else if (timestamp.toDate) {
+                    date = timestamp.toDate();
+                } else {
+                    return 'N/A';
+                }
+                return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+            };
+
+            const getMovementStyle = (type) => {
+                if (type === 'ENTRADA') return { bg: 'bg-green-50', badge: 'bg-green-600 text-white' };
+                if (type === 'SALIDA_ORDEN') return { bg: 'bg-red-50', badge: 'bg-red-600 text-white' };
+                if (type === 'EDICION_DETALLE') return { bg: 'bg-indigo-50', badge: 'bg-indigo-600 text-white' };
+                return { bg: 'bg-slate-50', badge: 'bg-slate-600 text-white' };
+            };
+
+            return (
+                <div className="modal-overlay">
+                    <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+                        <h3 className="text-xl font-bold mb-4 text-slate-800 flex items-center justify-between border-b pb-2 shrink-0">
+                            <div className="flex items-center gap-2"><Icon name="bar-chart-3"/> Informe de Movimientos de Inventario (Últimos 300)</div>
+                            <button onClick={onClose} className="text-red-500 font-bold text-sm flex items-center gap-1 hover:bg-red-50 p-1 rounded"><Icon name="x"/> CERRAR</button>
+                        </h3>
+                        
+                        {loading ? (
+                            <div className="text-center py-10 text-slate-500">Cargando movimientos...</div>
+                        ) : (
+                            <div className="overflow-y-auto flex-grow">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="sticky top-0 bg-slate-100 border-b">
+                                        <tr>
+                                            <th className="p-2 w-20">Fecha</th>
+                                            <th className="p-2 w-16 text-center">Tipo</th>
+                                            <th className="p-2">Material</th>
+                                            <th className="p-2 w-20 text-right">Cantidad (Kg)</th>
+                                            <th className="p-2 w-20 text-center">Stock Final</th>
+                                            <th className="p-2">Detalle / Partida</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {movements.map(m => {
+                                            const { bg, badge } = getMovementStyle(m.type);
+                                            const quantityText = m.type === 'SALIDA_ORDEN' ? `-${parseFloat(m.quantityKg).toFixed(2)}` : parseFloat(m.quantityKg).toFixed(2);
+                                            const quantityColor = m.type === 'SALIDA_ORDEN' ? 'text-red-700' : 'text-green-700';
+
+                                            return (
+                                                <tr key={m.id} className={`border-b ${bg}`}>
+                                                    <td className="p-2 font-mono">{formatDate(m.timestamp)}</td>
+                                                    <td className="p-2 text-center font-bold">
+                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] ${badge}`}>
+                                                            {m.type === 'SALIDA_ORDEN' ? 'SALIDA' : m.type}
+                                                        </span>
+                                                    </td>
+                                                    <td className="p-2 font-bold flex items-center gap-2">
+                                                        <div 
+                                                            className="w-4 h-4 rounded-full shadow-sm border border-slate-200 shrink-0" 
+                                                            style={{ backgroundColor: m.hex || '#eee' }}
+                                                        ></div>
+                                                        {m.materialName} ({m.color})
+                                                    </td>
+                                                    <td className={`p-2 text-right font-black ${quantityColor}`}>{quantityText}</td>
+                                                    <td className="p-2 text-center text-xs font-mono">{parseFloat(m.currentStock).toFixed(2)}</td>
+                                                    <td className="p-2 text-[10px] text-slate-600">
+                                                        {m.type === 'SALIDA_ORDEN' ? `Orden: ${m.orderId || 'N/A'} / Mod: ${m.model || 'N/A'} / Partida: ${m.partida || 'N/A'}` : (m.note || 'N/A')}
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                                {movements.length === 0 && <div className="text-center py-4 text-slate-400">No hay movimientos registrados.</div>}
+                            </div>
+                        )}
+                        
+                    </div>
+                </div>
+            );
+        };
+
+
+        // =================================================================
+        // COMPONENTE PRINCIPAL DE INVENTARIO
+        // =================================================================
+        const InventoryApp = () => {
+            const [items, setItems] = useState([]);
+            const [loading, setLoading] = useState(true);
+            
+            // ESTADO PARA GUARDAR EL ITEM ORIGINAL ANTES DE EDITAR (para el log)
+            const [originalItem, setOriginalItem] = useState(null); 
+            
+            const [newItem, setNewItem] = useState({ material: '', color: '', hex: '#000000', calibre: '', estiraje: '', stock: '', proveedor: '', group: '', minStock: '10.00' });
+            const [isEditing, setIsEditing] = useState(null);
+            const [collapsedGroups, setCollapsedGroups] = useState({});
+            
+            // NUEVO: Estado para el modo de vista (grid o table)
+            const [viewMode, setViewMode] = useState('grid');
+            
+            // ESTADOS PARA MODALES
+            const [showReceptionModal, setShowReceptionModal] = useState(false);
+            const [showReportModal, setShowReportModal] = useState(false);
+            const [showPaletteModal, setShowPaletteModal] = useState(false);
+            const [showItemLogModal, setShowItemLogModal] = useState(false);
+            const [selectedItemForLog, setSelectedItemForLog] = useState(null);
+
+
+            // Cargar Inventario
+            const fetchInventory = () => {
+                 db.collection('inventory').doc('main').get().then(doc => {
+                    if (doc.exists) {
+                        setItems(doc.data().items || []);
+                    }
+                    setLoading(false);
+                    setTimeout(() => lucide.createIcons(), 500);
+                });
+            }
+            useEffect(() => {
+                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => {
+                    if (doc.exists) {
+                        setItems(doc.data().items || []);
+                    }
+                    setLoading(false);
+                    setTimeout(() => lucide.createIcons(), 500);
+                });
                 return () => unsubscribe();
             }, []);
-            const addThread = () => setLocalDraft({ ...localDraft, threading: [...(localDraft.threading || []), { guia: (localDraft.threading?.length || 0) + 1, material: '', porcentaje: '', materialId: null }] });
-            const removeThread = (idx) => setLocalDraft({ ...localDraft, threading: localDraft.threading.filter((_, i) => i !== idx) });
-            const updateThread = (idx, field, val) => { const newThreads = [...localDraft.threading]; newThreads[idx] = { ...newThreads[idx], [field]: val }; setLocalDraft({ ...localDraft, threading: newThreads }); };
-            const handleMaterialInput = (idx, val) => { updateThread(idx, 'material', val); if (val.length > 1) { const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); setSuggestions({ index: idx, items: filtered }); } else { setSuggestions({ index: null, items: [] }); } };
-            const selectSuggestion = (idx, item) => { const newThreads = [...localDraft.threading]; newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id, stockDisponible: item.stock || '0' }; setLocalDraft({ ...localDraft, threading: newThreads }); setSuggestions({ index: null, items: [] }); };
-            const calculateConsumption = (hilo) => { if (!hilo.materialId || !hilo.porcentaje) return 0; const totalGramos = localDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0); return ((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2); };
-            const updatePiece = (idx, field, val) => { const newPieces = [...localDraft.subPiecesData]; newPieces[idx] = { ...newPieces[idx], [field]: val }; setLocalDraft({ ...localDraft, subPiecesData: newPieces }); };
-            
-            return (
-                <div className="flex flex-col h-full">
-                    <div className="bg-indigo-600 p-4 text-white flex justify-between items-center shrink-0"><h2 className="font-bold text-lg"><Icon name="edit-3" className="inline mr-2"/> Editando Orden Máquina {localDraft.maquina}</h2></div>
-                    <div className="p-6 overflow-y-auto flex-grow space-y-6">
-                        <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded border">
-                            <div><label className="block text-xs font-bold text-gray-500">Máquina</label><input type="number" value={localDraft.maquina} onChange={e=>setLocalDraft({...localDraft, maquina: e.target.value})} className="w-full border p-1 rounded font-black text-xl"/></div>
-                            <div><label className="block text-xs font-bold text-gray-500">Cliente</label><input value={localDraft.cliente} disabled className="w-full border p-1 rounded bg-gray-200 text-gray-500"/></div>
-                             <div><label className="block text-xs font-bold text-gray-500">Partida</label><input value={localDraft.partida} disabled className="w-full border p-1 rounded bg-gray-200 text-gray-500"/></div>
-                        </div>
-                        <div>
-                            <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-sm text-slate-700">Enhebrado e Inventario</h3><button onClick={addThread} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold hover:bg-blue-200">+ Hilo</button></div>
-                            <table className="w-full text-xs border">
-                                <thead className="bg-slate-200"><tr><th className="p-1 w-10">Guía</th><th className="p-1">Material</th><th className="p-1 w-16">%</th><th className="p-1 w-24">Consumo</th><th className="p-1 w-8"></th></tr></thead>
-                                <tbody>
-                                    {(localDraft.threading || []).map((h, i) => (
-                                        <tr key={i} className="relative">
-                                            <td><input value={h.guia} onChange={e=>updateThread(i,'guia',e.target.value)} className="w-full text-center border-none bg-transparent"/></td>
-                                            <td className="p-1"><input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full border p-1 rounded outline-none"/>{suggestions.index === i && suggestions.items.length > 0 && (<div className="absolute z-50 bg-white border shadow-lg w-full max-w-md max-h-40 overflow-y-auto left-0 mt-1 rounded">{suggestions.items.map(item => (<div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b flex justify-between items-center"><div><span className="font-bold text-slate-700">{item.material}</span><span className="text-slate-500 ml-1">- {item.color}</span></div><span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-[10px] font-bold">Stock: {item.stock || 0}kg</span></div>))}</div>)}</td>
-                                            <td><input value={h.porcentaje} onChange={e=>updateThread(i,'porcentaje',e.target.value)} className="w-full text-center border p-1" placeholder="%"/></td>
-                                            <td className="text-center font-bold text-red-600 bg-red-50">{calculateConsumption(h)} Kg</td>
-                                            <td className="text-center"><button onClick={()=>removeThread(i)} className="text-red-500 font-bold">x</button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        <div>
-                            <h3 className="font-bold text-sm text-slate-700 mb-2">Detalles Técnicos (Piezas)</h3>
-                            {localDraft.subPiecesData.map((p, idx) => (
-                                <div key={idx} className="bg-white border rounded p-3 mb-2 shadow-sm">
-                                    <div className="font-bold text-indigo-700 mb-2 border-b pb-1">{p.pieza}</div>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        <div><label className="text-[10px] font-bold text-gray-400">Talla</label><input value={p.talla} onChange={e=>updatePiece(idx,'talla',e.target.value)} className="w-full border p-1 rounded text-xs font-bold"/></div>
-                                         <div><label className="text-[10px] font-bold text-gray-400">Peso (g)</label><input value={p.peso} onChange={e=>updatePiece(idx,'peso',e.target.value)} className="w-full border p-1 rounded text-xs"/></div>
-                                         <div><label className="text-[10px] font-bold text-gray-400">Tiempo (min)</label><input value={p.tiempo} onChange={e=>updatePiece(idx,'tiempo',e.target.value)} className="w-full border p-1 rounded text-xs"/></div>
-                                        <div><label className="text-[10px] font-bold text-gray-400">Cant.</label><input value={p.totalPedido} disabled className="w-full border p-1 rounded text-xs bg-gray-100 text-center"/></div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                    <div className="p-4 bg-gray-100 border-t flex justify-end gap-3">
-                        <button onClick={onCancel} className="px-4 py-2 rounded text-slate-600 font-bold hover:bg-slate-200">Cancelar</button>
-                        <button onClick={() => onSave(localDraft)} className="px-6 py-2 rounded bg-green-600 text-white font-bold hover:bg-green-700 shadow flex items-center gap-2"><Icon name="check-circle"/> CONFIRMAR</button>
-                    </div>
-                </div>
-            );
-        };
 
-        // --- ORDER GENERATOR ---
-        const OrderGeneratorModal = ({ onClose, onProcess }) => {
-            const [step, setStep] = useState('input');
-            const [drafts, setDrafts] = useState([]);
-            const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
-            const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
-            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
+            useEffect(() => lucide.createIcons(), [items]);
             
-            useEffect(() => {
-                if (!form.fecha) return;
-                const fechaObj = new Date(form.fecha + 'T00:00:00');
-                const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-                const mes = meses[fechaObj.getMonth()];
-                const year = fechaObj.getFullYear().toString().slice(-2);
-                setForm(prev => ({ ...prev, partidaCodigo: `${mes}${year}_01` }));
-            }, [form.fecha]);
+            const toggleGroup = (groupName) => {
+                setCollapsedGroups(prev => ({
+                    ...prev,
+                    [groupName]: !prev[groupName]
+                }));
+            };
 
-            const handleGenerateDrafts = () => {
-                if (!form.partidaCodigo || !form.cliente || !form.modelo) return alert("Faltan datos generales");
-                const ordersByMachine = {};
-                let hasValidComponent = false;
-                components.forEach(comp => {
-                    if(!comp.descripcion || !comp.maquina) return;
-                    hasValidComponent = true;
-                    const maquinaKey = String(comp.maquina);
-                    if (!ordersByMachine[maquinaKey]) {
-                        ordersByMachine[maquinaKey] = {
-                            codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(), maquina: maquinaKey, partida: form.partidaCodigo.toUpperCase(),
-                            subPiecesData: [], predefinedPackages: [], createdAt: new Date().toLocaleString('es-MX'),
-                            threading: [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }]
-                        };
-                    }
-                    const totalPiezasComp = form.totalPrendas * comp.multiplicador;
-                    ordersByMachine[maquinaKey].subPiecesData.push({ id: Date.now() + Math.random(), pieza: comp.descripcion.toUpperCase(), talla: 'UNI', totalPedido: totalPiezasComp, peso: '', tiempo: '' });
-                    const numPaquetes = comp.piezasPorPaquete > 0 ? Math.ceil(totalPiezasComp / comp.piezasPorPaquete) : 0;
-                    for (let i = 1; i <= numPaquetes; i++) {
-                        const cantidad = (i === numPaquetes && totalPiezasComp % comp.piezasPorPaquete !== 0) ? totalPiezasComp % comp.piezasPorPaquete : comp.piezasPorPaquete;
-                        ordersByMachine[maquinaKey].predefinedPackages.push({
-                            id: Date.now() + Math.random() + i, piezaNombre: comp.descripcion.toUpperCase(), cantidad: cantidad, paqueteNum: i, paquetesDePieza: numPaquetes,
-                            codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}_${numPaquetes}`, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''
-                        });
-                    }
+            const groupedItems = useMemo(() => {
+                const sortedItems = [...items].sort((a, b) => {
+                    const groupA = (a.group || 'SIN GRUPO').toUpperCase();
+                    const groupB = (b.group || 'SIN GRUPO').toUpperCase();
+                    if (groupA < groupB) return -1;
+                    if (groupA > groupB) return 1;
+                    
+                    if (a.material < b.material) return -1;
+                    if (a.material > b.material) return 1;
+                    return 0;
                 });
-                if(!hasValidComponent) return alert("Agrega al menos un componente válido");
-                setDrafts(Object.values(ordersByMachine));
-                setStep('staging');
-            };
 
-            const handleSaveOne = async (finalDraft) => {
-                try {
-                    const invDoc = await db.collection('inventory').doc('main').get();
-                    let currentItems = invDoc.exists && invDoc.data().items ? invDoc.data().items : [];
-                    const batch = db.batch();
-                    const newId = String(Date.now() + Math.random());
-                    const orderRef = db.collection('orders').doc(newId);
-                    const displayId = generateSmartID(finalDraft.partida, finalDraft.subPiecesData, finalDraft.maquina);
-                    batch.set(orderRef, { ...finalDraft, id: Number(newId), displayId: displayId, progreso: finalDraft.predefinedPackages, status: 'EN PROCESO', totalPedido: finalDraft.subPiecesData.reduce((a,b)=>a+Number(b.totalPedido),0) });
-                    const totalGramos = finalDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0);
-                    (finalDraft.threading || []).forEach(hilo => {
-                        if (hilo.materialId) {
-                            const cantADescontar = Number(((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2));
-                            const itemIndex = currentItems.findIndex(i => i.id === hilo.materialId);
-                            if(itemIndex !== -1) {
-                                currentItems[itemIndex].stock = (parseFloat(currentItems[itemIndex].stock || 0) - cantADescontar).toFixed(2);
-                                const moveRef = db.collection('inventory_movements').doc();
-                                batch.set(moveRef, { materialId: hilo.materialId, type: 'SALIDA_ORDEN', quantityKg: cantADescontar, orderId: displayId, model: finalDraft.codigo, partida: finalDraft.partida, timestamp: firebase.firestore.FieldValue.serverTimestamp(), note: `Consumo automático` });
-                            }
-                        }
-                    });
-                    batch.set(db.collection('inventory').doc('main'), { items: currentItems });
-                    await batch.commit();
-                    const remaining = drafts.filter((_, i) => i !== currentDraftIndex);
-                    setDrafts(remaining); setStep('staging'); setCurrentDraftIndex(null);
-                    if (remaining.length === 0) { alert("¡Órdenes creadas!"); onProcess(); }
-                } catch (e) { console.error("Error save:", e); alert("Error al guardar."); }
-            };
+                return sortedItems.reduce((acc, item) => {
+                    const groupName = item.group || 'SIN GRUPO';
+                    if (!acc[groupName]) {
+                        acc[groupName] = [];
+                    }
+                    acc[groupName].push(item);
+                    return acc;
+                }, {});
+            }, [items]);
+            
+            // Función auxiliar para registrar movimientos
+            const logMovement = async (item, type, quantity, note = '') => {
+                 await db.collection('inventory_movements').add({
+                    materialId: item.id,
+                    materialName: item.material,
+                    color: item.color || '',
+                    hex: item.hex || '',
+                    type: type,
+                    quantityKg: quantity,
+                    currentStock: item.stock, // El stock ya debe estar actualizado en 'item'
+                    date: new Date().toISOString().split('T')[0],
+                    timestamp: Date.now(),
+                    note: note
+                });
+            }
 
-            if (step === 'editing' && currentDraftIndex !== null) return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl h-[90vh] overflow-hidden relative"><DraftEditor draft={drafts[currentDraftIndex]} onSave={handleSaveOne} onCancel={() => setStep('staging')} /></div></div>);
-            if (step === 'staging') return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[80vh] overflow-hidden flex flex-col"><div className="bg-orange-600 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="layers"/> Órdenes Preparadas</h1></div><button onClick={() => setStep('input')} className="text-white bg-orange-700 px-3 py-1 rounded text-xs font-bold">Volver</button></div><div className="p-6 overflow-y-auto bg-slate-100 flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">{drafts.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-gray-400 py-10"><Icon name="check-circle" size={48} className="mb-2"/><button onClick={onClose} className="mt-4 text-blue-600 font-bold hover:underline">Cerrar</button></div>}{drafts.map((draft, idx) => (<div key={idx} className="bg-white rounded shadow border-l-4 border-indigo-500 p-4 flex flex-col justify-between"><div><div className="flex justify-between items-start mb-2"><h3 className="font-black text-xl text-slate-700">MÁQUINA {draft.maquina}</h3><span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded">BORRADOR</span></div><div className="text-sm text-gray-600 mb-2"><p><strong>Cliente:</strong> {draft.cliente}</p><p><strong>Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p></div></div><button onClick={() => { setCurrentDraftIndex(idx); setStep('editing'); }} className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded flex items-center justify-center gap-2"><Icon name="edit"/> REVISAR, PESOS E INVENTARIO</button></div>))}</div></div></div>);
 
-            return (
-                <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[90vh] overflow-y-auto flex flex-col">
-                        <div className="bg-blue-800 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><i className="fas fa-magic"></i> Generador Automático</h1></div><button onClick={onClose} className="text-white font-bold"><Icon name="x"/></button></div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
-                            <div className="space-y-4">
-                                <h2 className="text-lg font-semibold text-gray-700 border-b pb-1">1. Datos Generales</h2>
-                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Modelo</label><input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div><div><label className="block text-xs font-bold text-gray-700">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div></div>
-                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Fecha Entrega</label><input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="w-full p-2 border rounded"/></div><div><label className="block text-xs font-bold text-gray-700">Cód. Partida</label><input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full p-2 border bg-gray-100 rounded font-black"/></div></div>
-                                <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
-                                <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
-                                    {components.map((comp, idx) => (
-                                        <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
-                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><Icon name="x" size={14}/></button>
-                                            <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-[10px] font-bold text-gray-500">Descripción</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase"/></div><div><label className="text-[10px] font-bold text-gray-500">Sufijo Cód.</label><input value={comp.sufijo} onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-indigo-50"/></div></div>
-                                            <div className="grid grid-cols-3 gap-2"><div><label className="text-[10px] font-bold text-gray-500">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-black text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Pzs x Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs bg-blue-50 text-center"/></div></div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                        <div className="bg-gray-800 text-white p-4 shrink-0 mt-auto flex justify-end"><button onClick={handleGenerateDrafts} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded font-bold shadow-lg transform hover:scale-105 transition flex items-center gap-2"><Icon name="arrow-right"/> SIGUIENTE</button></div>
-                    </div>
-                </div>
-            );
-        };
+            const handleSave = async () => {
+                if (!newItem.material) return alert("El nombre del material es obligatorio");
+                
+                let updatedList;
+                
+                const stockValue = newItem.stock === '' || newItem.stock === null ? 0 : parseFloat(newItem.stock);
+                const minStockValue = newItem.minStock === '' || newItem.minStock === null ? 10 : parseFloat(newItem.minStock);
 
-        const InstallButton = () => {
-             const [deferredPrompt, setDeferredPrompt] = useState(null);
-            useEffect(() => { const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
-            const handleInstall = async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') setDeferredPrompt(null); };
-            if (!deferredPrompt) return null;
-            return (<button onClick={handleInstall} className="bg-yellow-500 hover:bg-yellow-600 text-black px-3 py-2 rounded font-bold shadow flex items-center gap-2 text-xs animate-pulse"><Icon name="download-cloud" size={16}/> INSTALAR APP</button>);
-        };
 
-        const MachineCard = ({ maquina, orders }) => {
-            const [is24Hours, setIs24Hours] = useState(true);
-            const pendingPackages = useMemo(() => {
-                let pkgs = [];
-                orders.forEach(o => { const incomplete = o.progreso?.filter(p => !p.finished) || []; incomplete.forEach(p => { const pieceData = o.subPiecesData?.find(sp => sp.pieza === p.piezaNombre) || o; const timePerPiece = Number(pieceData.tiempo) || 0; pkgs.push({ ...p, parentOrderId: o.id, orderCode: o.codigo, partida: o.partida, timeTotal: (p.cantidad * timePerPiece) }); }); });
-                return pkgs; 
-            }, [orders]);
-            const updateObs = async (pkgId, parentOrderId, newVal) => { const order = orders.find(o => o.id === parentOrderId); if(!order) return; const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, observaciones: newVal} : p); await db.collection('orders').doc(String(parentOrderId)).update({progreso: newProgreso}); };
-            const totalMinutesLeft = pendingPackages.reduce((sum, p) => sum + p.timeTotal, 0);
-            const hoursPerDay = is24Hours ? 24 : 12;
-            const daysLeft = totalMinutesLeft > 0 ? (totalMinutesLeft / 60 / hoursPerDay).toFixed(1) : 0;
-            const hoursLeft = (totalMinutesLeft / 60).toFixed(1);
+                const payload = {
+                    ...newItem,
+                    id: isEditing ? newItem.id : Date.now().toString(), // Usar string para el ID
+                    stock: stockValue.toFixed(2), 
+                    minStock: minStockValue.toFixed(2),
+                    hex: newItem.hex || '#000000',
+                    group: newItem.group.toUpperCase() || 'SIN GRUPO',
+                    updatedAt: new Date().toISOString()
+                };
 
-            return (
-                <div className="machine-card shadow-lg border border-slate-600">
-                    <div className="flex justify-between items-center border-b border-slate-500 pb-2 mb-2"><div><div className="text-xs text-slate-400 font-bold uppercase">Máquina</div><div className="text-3xl font-black text-yellow-400">#{maquina}</div></div><div className="text-right"><button onClick={()=>setIs24Hours(!is24Hours)} className="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-[10px] font-bold mb-1 border border-slate-500 block w-full">{is24Hours ? '24 HORAS' : '12 HORAS'}</button><div className="text-xs font-bold text-green-400">{daysLeft} días ({hoursLeft}h)</div></div></div>
-                    <div className="pkg-list space-y-1">{pendingPackages.length === 0 && <div className="text-center text-slate-500 text-xs py-4">Máquina Libre</div>}{pendingPackages.map((p, i) => (<div key={i} className="bg-slate-800 p-2 rounded flex gap-2 items-center text-xs border border-slate-700"><div className="font-black text-white text-lg w-10 text-right shrink-0">{p.cantidad}</div><div className="w-24 shrink-0 overflow-hidden"><div className="font-bold text-slate-300 truncate text-[10px]" title={p.piezaNombre}>{p.piezaNombre}</div><div className="text-[9px] text-yellow-500 font-black truncate">{p.partida}</div></div><div className="flex-grow pl-2 border-l border-slate-600"><input className="obs-input placeholder-slate-600" placeholder="Observaciones..." defaultValue={p.observaciones || ''} onBlur={(e) => updateObs(p.id, p.parentOrderId, e.target.value)} onKeyDown={(e) => { if(e.key === 'Enter') e.target.blur(); }}/></div></div>))}</div>
-                </div>
-            );
-        };
-
-        const DashboardBottom = ({ activeOrders }) => {
-            const machineGroups = useMemo(() => { const groups = {}; activeOrders.forEach(o => { if(!groups[o.maquina]) groups[o.maquina] = []; groups[o.maquina].push(o); }); return Object.keys(groups).sort((a,b) => parseInt(a)-parseInt(b)).map(k => ({ id: k, orders: groups[k] })); }, [activeOrders]);
-            return (<div className="bottom-pane shadow-inner">{machineGroups.map(g => <MachineCard key={g.id} maquina={g.id} orders={g.orders} />)}{machineGroups.length === 0 && <div className="text-slate-500 w-full flex items-center justify-center font-bold">No hay producción activa</div>}</div>);
-        };
-
-        const SmartImage = ({ repoUrls, codigo, className }) => {
-             const [imgSrc, setImgSrc] = useState(null);
-            const [attempt, setAttempt] = useState({ urlIndex: 0, extension: 'jpg' });
-            useEffect(() => {
-                if (!repoUrls || !repoUrls.length || !codigo) { setImgSrc(null); return; }
-                setAttempt({ urlIndex: 0, extension: 'jpg' });
-                const base = repoUrls[0].endsWith('/') ? repoUrls[0] : repoUrls[0] + '/';
-                setImgSrc(`${base}${codigo}.jpg`);
-            }, [repoUrls, codigo]);
-
-            const handleError = () => {
-                const { urlIndex, extension } = attempt;
-                if (extension === 'jpg') {
-                    const base = repoUrls[urlIndex].endsWith('/') ? repoUrls[urlIndex] : repoUrls[urlIndex] + '/';
-                    setImgSrc(`${base}${codigo}.png`);
-                    setAttempt({ ...attempt, extension: 'png' });
-                } else if (urlIndex < repoUrls.length - 1) {
-                    const nextIdx = urlIndex + 1;
-                    const base = repoUrls[nextIdx].endsWith('/') ? repoUrls[nextIdx] : repoUrls[nextIdx] + '/';
-                    setImgSrc(`${base}${codigo}.jpg`);
-                    setAttempt({ urlIndex: nextIdx, extension: 'jpg' });
+                // Lógica de registro para Edición (antes de actualizar la lista)
+                if (isEditing) {
+                    const changes = Object.keys(originalItem).some(key => originalItem[key] !== payload[key]);
+                    if (changes) {
+                        await logMovement(payload, "EDICION_DETALLE", 0, `Cambios en detalles del material.`);
+                    }
+                    updatedList = items.map(i => i.id === payload.id ? payload : i);
                 } else {
-                    setAttempt({ ...attempt, extension: 'fail' });
+                    updatedList = [...items, payload];
+                    // Log de ingreso inicial
+                    if (stockValue > 0) {
+                        await logMovement(payload, "ENTRADA", stockValue, `Ingreso inicial al crear la hilatura.`);
+                    } else {
+                        await logMovement(payload, "EDICION_DETALLE", 0, `Hilatura creada sin stock inicial.`);
+                    }
                 }
+
+                await db.collection('inventory').doc('main').set({ items: updatedList });
+                setNewItem({ material: '', color: '', hex: '#000000', calibre: '', estiraje: '', stock: '', proveedor: '', group: '', minStock: '10.00' });
+                setIsEditing(null);
+                setOriginalItem(null);
             };
-            if (attempt.extension === 'fail' || !imgSrc) return <div className={`bg-slate-100 flex flex-col items-center justify-center text-slate-300 ${className}`}><Icon name="image-off" size={32} className="mb-2"/><span className="text-[10px] text-center px-2">Sin img</span></div>;
-            return <img src={imgSrc} onError={handleError} className={className} />;
-        };
 
-        const OrderView = ({ order, config, onBack, onEdit }) => { 
-            const [entry, setEntry] = useState({ tejedor: '', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' });
-            const markPackage = async (pkgId) => { if(!entry.tejedor) return alert("Por favor selecciona un TEJEDOR"); const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: true, tejedor: entry.tejedor, fecha: entry.fecha, defectos: entry.defectos, agujas: entry.agujas} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
-            const unmarkPackage = async (pkgId) => { const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
-            const toggleArchive = async () => {
-                if (order.status === 'ARCHIVADO') { if(window.confirm("¿Desarchivar esta orden?")){ await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); onBack(); } return; }
-                const incompletePkgs = order.progreso.filter(p => !p.finished);
-                if (incompletePkgs.length === 0) { if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); onBack(); } 
-                else {
-                    const msg = `⚠️ ADVERTENCIA: Hay ${incompletePkgs.length} paquetes SIN TERMINAR.\n\nSi archiva ahora, el sistema asume que NO se tejieron y REGRESARÁ el material calculado al inventario.\n\n¿Está seguro?`;
-                    if(!window.confirm(msg)) return;
-                    try {
-                        const invRef = db.collection('inventory').doc('main');
-                        const invDoc = await invRef.get();
-                        let currentItems = invDoc.exists ? invDoc.data().items : [];
-                        let refundLog = [];
-                        let totalUnfinishedGrams = 0;
-                        incompletePkgs.forEach(pkg => { const pieceInfo = order.subPiecesData.find(sp => sp.pieza === pkg.piezaNombre); const weight = Number(pieceInfo?.peso || 0); totalUnfinishedGrams += (pkg.cantidad * weight); });
-                        order.threading.forEach(hilo => { if (hilo.materialId && hilo.porcentaje) { const kgToRefund = (totalUnfinishedGrams * (Number(hilo.porcentaje) / 100)) / 1000; const itemIndex = currentItems.findIndex(i => i.id === hilo.materialId); if (itemIndex > -1 && kgToRefund > 0) { const currentStock = parseFloat(currentItems[itemIndex].stock || 0); currentItems[itemIndex].stock = (currentStock + kgToRefund).toFixed(2); refundLog.push(`${hilo.material}: +${kgToRefund.toFixed(2)}kg`); } } });
-                        const batch = db.batch(); batch.update(invRef, { items: currentItems }); batch.update(db.collection('orders').doc(String(order.id)), { status: 'ARCHIVADO' });
-                        if(refundLog.length > 0) { const moveRef = db.collection('inventory_movements').doc(); batch.set(moveRef, { type: 'DEVOLUCION_ARCHIVO', details: refundLog, orderId: order.displayId, timestamp: firebase.firestore.FieldValue.serverTimestamp() }); }
-                        await batch.commit(); alert(`Orden Archivada.\n\nMaterial devuelto al inventario:\n${refundLog.join('\n')}`); onBack();
-                    } catch (e) { console.error(e); alert("Error al actualizar inventario. Revise la consola."); }
-                }
-            };
-            const minutosPorPrenda = order.subPiecesData.reduce((acc, curr) => acc + (Number(curr.tiempo) || 0), 0);
-            const piezasPorHora = minutosPorPrenda > 0 ? (60 / minutosPorPrenda).toFixed(0) : 0;
-            const piezasPorTurno = minutosPorPrenda > 0 ? ((60 / minutosPorPrenda) * 12).toFixed(0) : 0;
-
-            return (
-                <div className="bg-white min-h-screen relative">
-                    <div className="no-print p-4 border-b flex justify-between bg-slate-50 sticky top-0 z-10 shadow-sm">
-                        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 font-bold"><Icon name="arrow-left"/> Volver</button>
-                        <div className="flex gap-2">
-                             <button onClick={toggleArchive} className={`px-3 py-1 rounded font-bold text-xs flex items-center gap-1 text-white ${order.status === 'ARCHIVADO' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}><Icon name={order.status === 'ARCHIVADO' ? "refresh-ccw" : "archive"}/> {order.status === 'ARCHIVADO' ? 'DESARCHIVAR' : 'ARCHIVAR ORDEN'}</button>
-                             <button onClick={() => window.location.href='papeletas.html'} className="bg-purple-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-purple-700 shadow"><Icon name="tags"/> PAPELETAS (4x6)</button>
-                             <button onClick={() => onEdit(order)} className="bg-indigo-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-indigo-700"><Icon name="file-edit"/> EDITAR</button>
-                             <button onClick={() => window.print()} className="bg-slate-900 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-slate-700"><Icon name="printer"/> IMPRIMIR CARTA</button>
-                        </div>
-                    </div>
-                    <div className="p-8 print:p-0">
-                        {order.status === 'ARCHIVADO' && <div className="bg-orange-100 border-l-4 border-orange-500 text-orange-700 p-4 mb-4 font-bold text-center no-print">ESTA ORDEN ESTÁ ARCHIVADA / TERMINADA</div>}
-                        {order.progreso?.map((p) => (<PackageTicket key={p.id} order={order} pkg={p} />))}
-                        <div className="print-visible-wrapper">
-                             <div className="flex justify-between items-start mb-4 border-b-4 border-black pb-2">
-                                <div className="w-8/12"><h1 className="font-black uppercase tracking-tighter">{order.cliente}</h1><div className="flex gap-6 items-baseline header-info"><div className="uppercase">PARTIDA: {order.partida}</div><div className="text-slate-700 uppercase">MOD: {order.codigo}</div></div></div>
-                                <div className="w-3/12 text-right"><div className="machine-number-box">MÁQUINA</div><div className="machine-number-val">{order.maquina}</div></div>
-                             </div>
-                             <div className="flex gap-4">
-                                <div className="w-7/12 flex flex-col gap-2">
-                                    <table className="mb-0"><thead><tr><th className="text-left">PIEZA</th><th className="w-20">TALLA</th><th className="w-20">TOTAL</th></tr></thead><tbody>{order.subPiecesData.map((p,i)=>(<tr key={i}><td className="truncate">{p.pieza}</td><td className="text-center">{p.talla}</td><td className="text-center font-black">{p.totalPedido}</td></tr>))}</tbody></table>
-                                    <table className="mb-0"><thead><tr><th colSpan="3" className="bg-black text-white py-1 text-sm">ENHEBRADO</th></tr><tr><th className="w-12">#</th><th className="text-left">Material</th><th className="w-16">%</th></tr></thead><tbody>{order.threading && order.threading.map((row, i) => (<tr key={i}><td className="text-center font-bold">{row.guia}</td><td className="truncate">{row.material}</td><td className="text-center font-bold">{row.porcentaje}</td></tr>))}</tbody></table>
-                                    <div className="flex gap-2 mt-1"><div className="w-1/2 border-2 border-black flex flex-col justify-center items-center p-2"><span className="text-sm font-bold uppercase w-full text-center border-b-2 border-black mb-1">PZS/HR</span><span className="text-3xl font-black">{piezasPorHora}</span></div><div className="w-1/2 border-2 border-black flex flex-col justify-center items-center p-2"><span className="text-sm font-bold uppercase w-full text-center border-b-2 border-black mb-1">PZS/12H</span><span className="text-3xl font-black">{piezasPorTurno}</span></div></div>
-                                </div>
-                                <div className="w-5/12 border-2 border-black flex items-center justify-center relative bg-white overflow-hidden p-2 h-auto"><SmartImage repoUrls={config.repoUrls} codigo={order.codigo} className="max-h-64 w-full object-contain"/></div>
-                            </div>
-                            <div className="print-section-bottom print-only mt-4">
-                                <div className="border-b-4 border-black font-bold mb-1 text-sm flex justify-between items-end"><span>CONTROL DE TEJIDO</span><span>{new Date().toLocaleDateString('es-MX')}</span></div>
-                                <table className="package-table-print"><colgroup><col style={{width: '6%'}} /><col style={{width: '24%'}} /><col style={{width: '10%'}} /><col style={{width: '12%'}} /><col style={{width: '12%'}} /><col style={{width: '8%'}} /><col style={{width: '8%'}} /><col style={{width: '20%'}} /></colgroup><thead><tr><th>#</th><th>CÓDIGO</th><th>Cant</th><th>Tej</th><th>Fec</th><th>Def</th><th>Agj</th><th>OBS</th></tr></thead><tbody>{order.progreso?.map((p, idx) => (<tr key={p.id}><td className="text-center font-bold">{idx+1}</td><td className="pl-1 font-mono truncate" title={p.codigoUnico || p.piezaNombre}>{p.codigoUnico || p.piezaNombre}</td><td className="text-center font-bold">{p.cantidad}</td><td className="manual-input">{p.finished ? p.tejedor : '_'}</td><td className="manual-input">{p.finished ? p.fecha : '_'}</td><td className="manual-input">{p.finished ? p.defectos : '_'}</td><td className="manual-input">{p.finished ? p.agujas : '_'}</td><td className="manual-input">{p.observaciones || '_'}</td> </tr>))}</tbody></table>
-                             </div>
-                        </div>
-                        <div className="no-print mt-4">
-                            <div className="bg-slate-100 p-4 rounded border mb-6">
-                                <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-lg text-slate-700">Registro Digital</h3><div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded font-bold border border-green-300 flex items-center gap-1"><Icon name="scan-barcode" size={14}/> MODO ESCÁNER ACTIVO</div></div>
-                                <div className="flex gap-4 items-end mb-4 bg-white p-3 rounded shadow-sm border"><div><label className="block text-xs font-bold text-slate-500 mb-1">TEJEDOR (MANUAL)</label><select value={entry.tejedor} onChange={e=>setEntry({...entry, tejedor: e.target.value})} className="border-2 border-slate-300 p-2 rounded w-40 font-bold text-indigo-700 focus:border-indigo-500 outline-none"><option value="">Seleccionar...</option><option value="BALTA">BALTA</option><option value="ANDRÉS">ANDRÉS</option></select></div><div><label className="block text-xs font-bold text-slate-500 mb-1">FECHA</label><input type="date" value={entry.fecha} onChange={e=>setEntry({...entry, fecha: e.target.value})} className="border-2 border-slate-300 p-2 rounded font-mono cursor-pointer hover:bg-slate-50"/></div></div>
-                                <div className="max-h-80 overflow-y-auto bg-white border rounded shadow-inner"><table className="w-full text-xs text-left"><thead className="bg-slate-200 sticky top-0 shadow-sm z-0"><tr><th className="p-3">CÓDIGO/PIEZA</th><th className="p-3">Pzs</th><th className="p-3">Estado</th><th className="p-3">Acción</th></tr></thead><tbody>{order.progreso.map(p=>(<tr key={p.id} className="border-b hover:bg-slate-50 transition-colors"><td className="p-3 font-mono" title={p.codigoUnico || p.piezaNombre}>{p.codigoUnico || p.piezaNombre}</td><td className="p-3 font-bold">{p.cantidad}</td><td className="p-3">{p.finished ? <span className="text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full text-[10px]">LISTO ({p.tejedor})</span> : <span className="text-slate-400 font-medium">PENDIENTE</span>}</td><td className="p-3">{!p.finished ? <button onClick={()=>markPackage(p.id)} disabled={!entry.tejedor} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded font-bold hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed transition">Registrar</button> : <button onClick={()=>unmarkPackage(p.id)} className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200 transition">Deshacer</button>}</td></tr>))}</tbody></table></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        const SettingsModal = ({ config, onClose }) => {
-            const [localUrls, setLocalUrls] = useState(config.repoUrls || []);
-            const [newUrl, setNewUrl] = useState('');
-            const save = async () => { await db.collection('settings').doc('config').set({ ...config, repoUrls: localUrls }); onClose(); };
-            return (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"><div className="bg-white p-6 rounded w-96"><h3 className="font-bold mb-4">Configuración Imágenes</h3><div className="mb-2 max-h-40 overflow-y-auto">{localUrls.map((u,i)=><div key={i} className="text-xs truncate mb-1 border p-1 flex justify-between"><span>{u}</span><button onClick={()=>setLocalUrls(localUrls.filter((_,x)=>x!==i))} className="text-red-500 font-bold">X</button></div>)}</div><div className="flex gap-2 mb-4"><input value={newUrl} onChange={e=>setNewUrl(e.target.value)} className="border p-1 flex-1 text-xs" placeholder="URL GitHub Raw"/><button onClick={()=>{if(newUrl)setLocalUrls([...localUrls,newUrl]);setNewUrl('')}} className="bg-blue-100 text-blue-700 px-2 font-bold">+</button></div><button onClick={save} className="bg-slate-900 text-white w-full py-2 rounded font-bold">Guardar</button></div></div>);
-        };
-
-        const App = () => {
-            const [view, setView] = useState('dashboard');
-            const [orders, setOrders] = useState([]);
-            const [config, setConfig] = useState({});
-            const [selectedOrder, setSelectedOrder] = useState(null);
-            const [showSettings, setShowSettings] = useState(false);
-            const [showGenerator, setShowGenerator] = useState(false); 
-            // const [showGallery, setShowGallery] = useState(false); // REMOVIDO PARA USAR ENLACE EXTERNO
-            const [viewMode, setViewMode] = useState('active'); 
-            
-            useEffect(() => {
-                const u1 = db.collection('orders').onSnapshot(s => setOrders(s.docs.map(d=>d.data())));
-                const u2 = db.collection('settings').doc('config').onSnapshot(d => setConfig(d.data() || {}));
-                setTimeout(()=>lucide.createIcons(), 500);
-                return () => { u1(); u2(); };
-            }, []);
-            useEffect(()=>lucide.createIcons(), [view, orders, viewMode]);
-
-            // --- ESCÁNER GLOBAL ---
-            const handleGlobalScan = async (scannedCode) => {
-                if (!scannedCode.includes('-')) return;
-                const [orderId, pkgIdString] = scannedCode.split('-');
-                const pkgId = parseFloat(pkgIdString);
-                const targetOrder = orders.find(o => String(o.id) === orderId);
-                if (targetOrder) {
-                    const targetPkg = targetOrder.progreso.find(p => p.id === pkgId);
-                    if (targetPkg) {
-                        if (targetPkg.finished) {
-                            alert(`El paquete ${targetPkg.codigoUnico} ya estaba terminado.`);
-                            return;
-                        }
-                        const newProgreso = targetOrder.progreso.map(p => 
-                            p.id === pkgId 
-                                ? { ...p, finished: true, tejedor: 'ESCÁNER', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' } 
-                                : p
-                        );
-                        await db.collection('orders').doc(String(targetOrder.id)).update({ progreso: newProgreso });
+            const handleDelete = async (id) => {
+                if (window.confirm("¿Eliminar esta hilatura? ¡Se recomienda solo archivar, esta acción es permanente y puede afectar logs!")) {
+                    const itemToDelete = items.find(i => i.id === id);
+                    const updatedList = items.filter(i => i.id !== id);
+                    await db.collection('inventory').doc('main').set({ items: updatedList });
+                    if(itemToDelete) {
+                         await logMovement({...itemToDelete, stock: '0.00'}, "EDICION_DETALLE", 0, `Hilatura ELIMINADA del sistema.`);
                     }
                 }
             };
-            useBarcodeScanner(handleGlobalScan);
 
-            // --- AGRUPACIÓN ---
-            const displayedGroups = useMemo(() => {
-                const filtered = viewMode === 'active' 
-                    ? orders.filter(o => o.status !== 'ARCHIVADO') 
-                    : orders.filter(o => o.status === 'ARCHIVADO');
-                const groups = {};
-                filtered.forEach(o => {
-                    const key = o.partida || 'SIN_PARTIDA';
-                    if (!groups[key]) { groups[key] = { partida: key, cliente: o.cliente, codigo: o.codigo, orders: [] }; }
-                    groups[key].orders.push(o);
-                });
-                return Object.values(groups).sort((a,b) => b.partida.localeCompare(a.partida));
-            }, [orders, viewMode]);
-
-            const handleGeneratorSuccess = () => {
-                setShowGenerator(false);
-                setViewMode('active'); // Ir a la vista principal para ver lo nuevo
+            const startEdit = (item) => {
+                // Guardar una copia del item original para la función de log
+                setOriginalItem({...item}); 
+                setNewItem(item);
+                setIsEditing(true);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
             };
+            
+            const openLog = (item) => {
+                setSelectedItemForLog(item);
+                setShowItemLogModal(true);
+            }
 
             return (
-                <div className="h-screen bg-slate-100 overflow-hidden relative">
-                    {/* AQUÍ ESTÁ EL NUEVO MODAL GENERADOR CON STAGING */}
-                    {showGenerator && <OrderGeneratorModal onClose={()=>setShowGenerator(false)} onProcess={handleGeneratorSuccess} />}
-                    
-                    {view === 'detail' && selectedOrder && <div className="absolute inset-0 z-40 bg-white overflow-y-auto print-visible-wrapper"><OrderView order={orders.find(o=>o.id===selectedOrder.id) || selectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
-                    
-                    {showSettings && <SettingsModal config={config} onClose={()=>setShowSettings(false)} />}
-                    {/* {showGallery && <ImageGallery config={config} onClose={()=>setShowGallery(false)} orders={orders} />} -- REMOVIDO */}
+                // Contenedor principal responsive: max-w-7xl en pantallas grandes
+                <div className="container mx-auto p-4 md:p-8 lg:max-w-7xl"> 
+                    {showReceptionModal && <ReceptionModal items={items} onClose={() => setShowReceptionModal(false)} onUpdate={fetchInventory} />}
+                    {showReportModal && <ReportModal onClose={() => setShowReportModal(false)} />}
+                    {showPaletteModal && <ColorPaletteModal onClose={() => setShowPaletteModal(false)} />}
+                    {showItemLogModal && <ItemLogModal item={selectedItemForLog} onClose={() => setShowItemLogModal(false)} />}
 
-                    <div className="dashboard-grid">
-                        <div className="top-pane bg-slate-100 p-4">
-                            <div className="flex justify-between items-center mb-4">
-                                <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
-                                    <Icon name="layout-dashboard"/> 
-                                    <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
-                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v3.9.6 NAV-CHECK</span>
-                                </h1>
-                                <div className="flex gap-2 items-center">
-                                    <InstallButton />
 
-                                    {/* --- NUEVOS BOTONES DE NAVEGACIÓN PRINCIPAL --- */}
-                                    <button onClick={() => window.location.href='post-tejido-check.html'} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
-                                        <Icon name="list-checks"/> CONSOLIDADOR
-                                    </button>
+                    <header className="mb-8 border-b pb-4 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+                        {/* 1. Título */}
+                        <div>
+                            <h1 className="text-3xl font-black text-slate-800 flex gap-2 items-center">
+                                <Icon name="package-search" size={32}/> INVENTARIO HILATURAS
+                            </h1>
+                            <p className="text-slate-500">Gestión de almacén de materia prima</p>
+                        </div>
+                        
+                        {/* 2. Botones de Acción y Selector de Vista (Distribuidos en escritorio) */}
+                        <div className="flex flex-col md:flex-row md:items-center md:gap-4 w-full md:w-auto">
+                            
+                            {/* Estado de Conexión (Oculto en móvil, visible en desktop) */}
+                            <div className="hidden md:block text-xs font-bold text-green-600 bg-green-100 px-3 py-1 rounded-full shrink-0">CONECTADO A DB</div>
 
-                                    <button onClick={() => window.location.href='inventario.html'} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
-                                        <Icon name="package-search"/> INVENTARIO
-                                    </button>
-                                    
-                                    <button onClick={()=>setViewMode(viewMode === 'active' ? 'history' : 'active')} className={`px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs transition ${viewMode === 'active' ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-slate-700 text-white'}`}>
-                                        <Icon name={viewMode === 'active' ? 'history' : 'activity'}/> 
-                                        {viewMode === 'active' ? 'HISTORIAL' : 'VER PLANTA'}
-                                    </button>
+                            {/* Selector de Vista (Siempre visible) */}
+                            <div className="flex gap-2 justify-center md:justify-start order-1 md:order-none mb-2 md:mb-0">
+                                <button 
+                                    onClick={() => setViewMode('grid')} 
+                                    className={`px-3 py-1 rounded font-bold text-xs flex items-center justify-center gap-1 ${viewMode === 'grid' ? 'bg-blue-600 text-white shadow' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                                    title="Vista en Cuadrícula (Miniatura)"
+                                >
+                                    <Icon name="layout-grid"/> Cuadrícula
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode('table')} 
+                                    className={`px-3 py-1 rounded font-bold text-xs flex items-center justify-center gap-1 ${viewMode === 'table' ? 'bg-blue-600 text-white shadow' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                                    title="Vista en Tabla Detallada"
+                                >
+                                    <Icon name="table"/> Tabla
+                                </button>
+                            </div>
 
-                                    {/* BOTÓN ACTUALIZADO PARA ABRIR LA GALERÍA EXTERNA */}
-                                    <button onClick={()=>window.location.href='galeria_de_modelos.html'} className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
-                                        <Icon name="image-search"/> GALERÍA DE MODELOS
-                                    </button>
+                            {/* Botones de Modales (Flex horizontal y ajustados en escritorio) */}
+                            <div className="flex flex-wrap gap-2 justify-center md:justify-end mt-2 md:mt-0 order-2 md:order-none">
+                                <button 
+                                    onClick={() => setShowPaletteModal(true)} 
+                                    className="bg-indigo-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center justify-center gap-1 hover:bg-indigo-700 shadow"
+                                    title="Ver Paleta de Colores SPUN"
+                                >
+                                    <Icon name="palette"/> SPUN
+                                </button>
+                                <button 
+                                    onClick={() => setShowReceptionModal(true)} 
+                                    className="bg-yellow-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center justify-center gap-1 hover:bg-yellow-700 shadow"
+                                    title="Registrar una entrada de stock"
+                                >
+                                    <Icon name="archive-box"/> ENTRADA
+                                </button>
+                                <button 
+                                    onClick={() => setShowReportModal(true)} 
+                                    className="bg-slate-700 text-white px-3 py-1 rounded font-bold text-xs flex items-center justify-center gap-1 hover:bg-slate-800 shadow"
+                                    title="Ver el informe de movimientos"
+                                >
+                                    <Icon name="file-text"/> INFORME
+                                </button>
+                            </div>
+                        </div>
+                    </header>
 
-                                    <button onClick={()=>setShowSettings(true)} className="bg-slate-300 hover:bg-slate-400 text-slate-800 p-2 rounded shadow"><Icon name="settings"/></button>
-                                    
-                                    {/* BOTÓN PRINCIPAL GENERADOR */}
-                                    {viewMode === 'active' && (
-                                        <button onClick={()=>setShowGenerator(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 animate-bounce">
-                                            <Icon name="wand-2"/> GENERAR ORDEN AUTOMÁTICA
-                                        </button>
-                                    )}
+                    {/* FORMULARIO */}
+                    <div className="bg-white p-6 rounded-lg shadow-lg border border-slate-200 mb-8">
+                        <h2 className="font-bold text-lg mb-4 flex gap-2 items-center text-indigo-700">
+                            <Icon name={isEditing ? "edit" : "plus-circle"}/> 
+                            {isEditing ? "Editar Hilatura" : "Agregar Nueva Hilatura"}
+                        </h2>
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
+                            
+                            {/* CAMPO GRUPO */}
+                            <div className="col-span-2 lg:col-span-1">
+                                <label className="block text-xs font-bold mb-1 text-indigo-700">GRUPO / CATEGORÍA</label>
+                                <input 
+                                    list="groups" 
+                                    placeholder="Ej. NYLON" 
+                                    className="w-full border-2 border-indigo-300 p-2 rounded uppercase font-bold text-indigo-700" 
+                                    value={newItem.group} 
+                                    onChange={e => setNewItem({...newItem, group: e.target.value.toUpperCase()})} 
+                                />
+                                <datalist id="groups">
+                                    <option value="NYLON" />
+                                    <option value="POLIESTER SPUN" />
+                                    <option value="POLIESTER SANTONI" />
+                                    <option value="ALGODÓN" />
+                                    <option value="OTRO" />
+                                </datalist>
+                            </div>
+
+                            <div className="col-span-2 lg:col-span-1">
+                                <label className="block text-xs font-bold mb-1">MATERIAL / NOMBRE <span className="text-red-500">*</span></label>
+                                <input placeholder="Ej. NYLON 40/2" className="w-full border-2 border-slate-300 p-2 rounded uppercase font-bold" value={newItem.material} onChange={e => setNewItem({...newItem, material: e.target.value.toUpperCase()})} />
+                            </div>
+                            
+                            <div className="col-span-2 md:col-span-1 lg:col-span-1">
+                                <label className="block text-xs font-bold mb-1">NOMBRE COLOR</label>
+                                <input placeholder="Ej. ROJO FUEGO" className="w-full border p-2 rounded uppercase mb-2" value={newItem.color} onChange={e => setNewItem({...newItem, color: e.target.value.toUpperCase()})} />
+                            </div>
+                            <div className="col-span-2 md:col-span-1 lg:col-span-1">
+                                <label className="block text-xs font-bold mb-1">COLOR (HEX)</label>
+                                <div className="flex items-center gap-1">
+                                    <input 
+                                        type="color" 
+                                        className="h-10 w-12 p-0 border-0 rounded cursor-pointer shrink-0"
+                                        value={newItem.hex || '#000000'}
+                                        onChange={e => setNewItem({...newItem, hex: e.target.value})} 
+                                    />
+                                    <input 
+                                        type="text" 
+                                        placeholder="#000000" 
+                                        className="w-full border p-2 rounded font-mono text-xs uppercase"
+                                        value={newItem.hex || ''}
+                                        onChange={e => setNewItem({...newItem, hex: e.target.value})} 
+                                    />
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
-                                {displayedGroups.map(group => (
-                                    <div key={group.partida} className="bg-white rounded-lg shadow-md border-t-4 border-indigo-600 overflow-hidden flex flex-col">
-                                        <div className="bg-slate-50 p-3 border-b flex justify-between items-start">
-                                            <div>
-                                                <div className="text-xs font-bold text-slate-400 uppercase tracking-wide">PARTIDA</div>
-                                                <div className="text-xl font-black text-slate-800">{group.partida}</div>
-                                                <div className="text-sm font-bold text-indigo-700 mt-1">{group.codigo}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                 <div className="text-[10px] font-bold bg-slate-200 px-2 py-1 rounded text-slate-600 truncate max-w-[100px]">{group.cliente}</div>
-                                            </div>
-                                        </div>
-                                        <div className="flex-grow p-2 space-y-2 bg-slate-100/50">
-                                            {group.orders.map(o => {
-                                                const pct = Math.round((o.progreso.filter(p=>p.finished).length / o.progreso.length)*100);
-                                                const piezasStr = o.subPiecesData.map(sp => sp.pieza).join(' + ');
+                            <div className="col-span-2 md:col-span-1 lg:col-span-1">
+                                <label className="block text-xs font-bold mb-1">CALIBRE</label>
+                                <input placeholder="Ej. 150/48" className="w-full border p-2 rounded" value={newItem.calibre} onChange={e => setNewItem({...newItem, calibre: e.target.value})} />
+                            </div>
+                            <div className="col-span-2 md:col-span-1 lg:col-span-1">
+                                <label className="block text-xs font-bold mb-1">ESTIRAJE / TÍTULO</label>
+                                <input placeholder="Opcional" className="w-full border p-2 rounded" value={newItem.estiraje} onChange={e => setNewItem({...newItem, estiraje: e.target.value})} />
+                            </div>
+                            
+                            <div className="col-span-2 md:col-span-2 lg:col-span-2">
+                                <label className="block text-xs font-bold mb-1 text-green-700">STOCK INICIAL (KG)</label>
+                                <input type="number" step="0.01" placeholder="0.00 (Opcional)" className="w-full border-2 border-green-200 bg-green-50 p-2 rounded font-black text-xl text-green-800" value={newItem.stock} onChange={e => setNewItem({...newItem, stock: e.target.value})} />
+                            </div>
+                            
+                            <div className="col-span-2 md:col-span-1 lg:col-span-2">
+                                <label className="block text-xs font-bold mb-1 text-red-700">STOCK MÍNIMO (KG)</label>
+                                <input type="number" step="0.01" placeholder="10.00" className="w-full border-2 border-red-200 bg-red-50 p-2 rounded font-bold text-base text-red-800" value={newItem.minStock} onChange={e => setNewItem({...newItem, minStock: e.target.value})} />
+                            </div>
+                            
+                             <div className="col-span-2 md:col-span-1 lg:col-span-2">
+                                <label className="block text-xs font-bold mb-1">PROVEEDOR</label>
+                                <input placeholder="Nombre Proveedor" className="w-full border p-2 rounded uppercase" value={newItem.proveedor} onChange={e => setNewItem({...newItem, proveedor: e.target.value.toUpperCase()})} />
+                            </div>
+
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                            {isEditing && <button onClick={() => { setIsEditing(null); setNewItem({ material: '', color: '', hex: '#000000', calibre: '', estiraje: '', stock: '', proveedor: '', group: '', minStock: '10.00' }); setOriginalItem(null);}} className="bg-slate-500 text-white px-4 py-2 rounded font-bold">CANCELAR</button>}
+                            <button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded font-bold shadow flex gap-2 items-center">
+                                <Icon name="save"/> GUARDAR DATOS
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* LISTA AGRUPADA CON DESPLEGABLES */}
+                    <div className="bg-white rounded-lg shadow overflow-hidden">
+                        
+                        {/* -------------------- VISTA DE TABLA -------------------- */}
+                        {viewMode === 'table' && (
+                            <table className="inventory-table w-full text-left border-collapse">
+                                <thead className="bg-slate-800 text-white text-sm uppercase">
+                                    <tr>
+                                        <th className="p-4">Material / Color</th>
+                                        <th className="p-4">Detalles Técnicos</th>
+                                        <th className="p-4 text-center">Stock (Kg)</th>
+                                        <th className="p-4 w-16 text-center">Bitácora</th>
+                                        <th className="p-4 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="text-sm">
+                                    {Object.keys(groupedItems).length === 0 && <tr><td colSpan="5" className="p-8 text-center text-slate-400">No hay hilaturas registradas.</td></tr>}
+                                    
+                                    {Object.keys(groupedItems).map(groupName => (
+                                        <React.Fragment key={groupName}>
+                                            {/* ENCABEZADO DE GRUPO (BOTÓN DESPLEGABLE) */}
+                                            <tr className="group-header-row">
+                                                <td colSpan="5" className="p-0 border-t-2 border-b-2 border-slate-300">
+                                                    <button 
+                                                        onClick={() => toggleGroup(groupName)}
+                                                        className="w-full flex justify-between items-center p-3 bg-slate-200 hover:bg-slate-300 font-black text-sm text-indigo-800 transition"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <Icon name={collapsedGroups[groupName] ? "chevron-right" : "chevron-down"} size={20}/> 
+                                                            <span>GRUPO: {groupName} ({groupedItems[groupName].length})</span>
+                                                        </div>
+                                                        <span className="text-xs font-normal text-slate-500">Haga click para {collapsedGroups[groupName] ? 'expandir' : 'colapsar'}</span>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                            
+                                            {/* ITEMS DENTRO DEL GRUPO (MOSTRAR/OCULTAR) - TABLE ROWS */}
+                                            {!collapsedGroups[groupName] && groupedItems[groupName].map((item) => {
+                                                const stockFloat = parseFloat(item.stock) || 0;
+                                                const minStockFloat = parseFloat(item.minStock) || 10;
+                                                const isLow = stockFloat > 0 && stockFloat < minStockFloat;
+                                                const isZero = stockFloat === 0;
+
                                                 return (
-                                                    <div key={o.id} onClick={()=>{setSelectedOrder(o); setView('detail')}} className="bg-white p-2 rounded border border-slate-200 hover:border-indigo-400 hover:shadow-md cursor-pointer transition-all flex items-center gap-3">
-                                                        <div className="flex flex-col items-center justify-center bg-slate-800 text-white w-12 h-12 rounded shrink-0">
-                                                            <span className="text-[9px] font-bold opacity-70">MQ</span>
-                                                            <span className="text-lg font-black leading-none">{o.maquina}</span>
-                                                        </div>
-                                                        <div className="flex-grow overflow-hidden">
-                                                            <div className="font-bold text-sm text-slate-700 truncate" title={piezasStr}>{piezasStr}</div>
-                                                            <div className="flex justify-between items-end mt-1">
-                                                                <div className="text-[10px] text-slate-400 font-bold">{o.totalPedido} Pzs</div>
-                                                                <div className="text-[10px] font-bold text-green-600">{pct}%</div>
+                                                    <tr key={item.id} className="border-b hover:bg-slate-50 transition">
+                                                        <td className="p-4">
+                                                            <div className="font-bold text-lg text-slate-800">{item.material}</div>
+                                                            <div className="flex flex-col gap-1 mt-2">
+                                                                {/* RECUADRO DE COLOR GRANDE Y PEGADO */}
+                                                                <div 
+                                                                    className="w-full h-8 shadow-sm border border-slate-300 shrink-0" 
+                                                                    style={{ backgroundColor: item.hex || '#eee' }}
+                                                                    title={`Código HEX: ${item.hex}`}
+                                                                ></div>
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="text-xs text-slate-500 font-bold">{item.color}</div>
+                                                                    <div className="text-[10px] text-slate-400 font-mono">{item.hex}</div>
+                                                                </div>
+                                                                <div className="text-[10px] text-slate-400">{item.proveedor}</div>
                                                             </div>
-                                                            <div className="w-full bg-slate-200 h-1.5 rounded-full mt-1 overflow-hidden">
-                                                                <div className={`h-full ${o.status === 'ARCHIVADO' ? 'bg-slate-400' : 'bg-green-50'}`} style={{width:`${pct}%`}}></div>
+                                                        </td>
+                                                        <td className="p-4">
+                                                            {item.calibre && <div className="text-xs"><span className="font-bold">Calibre:</span> {item.calibre}</div>}
+                                                            {item.estiraje && <div className="text-xs"><span className="font-bold">Estiraje:</span> {item.estiraje}</div>}
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className={`inline-block px-3 py-1 rounded font-black text-lg 
+                                                                ${isZero ? 'bg-slate-200 text-slate-600' : isLow ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'}
+                                                            `}>
+                                                                {isZero ? '0.00' : stockFloat.toFixed(2)} Kg
+                                                            </span>
+                                                            {isZero && <div className="text-[9px] text-slate-500 font-bold mt-1">SIN EXISTENCIA</div>}
+                                                            {isLow && <div className="text-[9px] text-red-500 font-bold mt-1">STOCK BAJO ({minStockFloat.toFixed(2)} Kg)</div>}
+                                                        </td>
+                                                        {/* COLUMNA DE BITÁCORA */}
+                                                        <td className="p-4 text-center">
+                                                            <button 
+                                                                onClick={() => openLog(item)} 
+                                                                className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded border border-indigo-200" 
+                                                                title="Ver Bitácora de Movimientos"
+                                                            >
+                                                                <Icon name="history" size={16}/>
+                                                            </button>
+                                                        </td>
+                                                        <td className="p-4 text-right">
+                                                            <div className="flex gap-2 justify-end">
+                                                                <button onClick={() => startEdit(item)} className="p-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded border border-blue-200" title="Editar detalles"><Icon name="pencil" size={16}/></button>
+                                                                <button onClick={() => handleDelete(item.id)} className="p-2 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200" title="Eliminar"><Icon name="trash-2" size={16}/></button>
                                                             </div>
-                                                        </div>
-                                                        <Icon name="chevron-right" size={16} className="text-slate-300 shrink-0"/>
-                                                    </div>
+                                                        </td>
+                                                    </tr>
                                                 );
                                             })}
+                                        </React.Fragment>
+                                    ))}
+                                </tbody>
+                            </table>
+                        )}
+                        
+                        {/* -------------------- VISTA DE CUADRÍCULA -------------------- */}
+                        {viewMode === 'grid' && (
+                            <div className="w-full text-left">
+                                {Object.keys(groupedItems).length === 0 && <div className="p-8 text-center text-slate-400">No hay hilaturas registradas.</div>}
+
+                                {Object.keys(groupedItems).map(groupName => (
+                                    <div key={groupName}>
+                                        {/* ENCABEZADO DE GRUPO (BOTÓN DESPLEGABLE) */}
+                                        <div className="group-header-row border-t-2 border-b-2 border-slate-300">
+                                            <button 
+                                                onClick={() => toggleGroup(groupName)}
+                                                className="w-full flex justify-between items-center p-3 bg-slate-200 hover:bg-slate-300 font-black text-sm text-indigo-800 transition"
+                                            >
+                                                <div className="flex items-center gap-2">
+                                                    <Icon name={collapsedGroups[groupName] ? "chevron-right" : "chevron-down"} size={20}/> 
+                                                    <span>GRUPO: {groupName} ({groupedItems[groupName].length})</span>
+                                                </div>
+                                                <span className="text-xs font-normal text-slate-500">Haga click para {collapsedGroups[groupName] ? 'expandir' : 'colapsar'}</span>
+                                            </button>
                                         </div>
+
+                                        {/* ITEMS DENTRO DEL GRUPO (MOSTRAR/OCULTAR) - GRID CARDS */}
+                                        {!collapsedGroups[groupName] && (
+                                            <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                                {groupedItems[groupName].map((item) => {
+                                                    const stockFloat = parseFloat(item.stock) || 0;
+                                                    const minStockFloat = parseFloat(item.minStock) || 10;
+                                                    const isLow = stockFloat > 0 && stockFloat < minStockFloat;
+                                                    const isZero = stockFloat === 0;
+
+                                                    return (
+                                                        <div key={item.id} className="bg-white border border-slate-200 rounded-lg shadow-md p-3 flex flex-col hover:shadow-lg transition">
+                                                            
+                                                            {/* COLOR THUMBNAIL */}
+                                                            <div 
+                                                                className="h-10 rounded-t-lg shadow-inner border border-slate-300 shrink-0 mb-2 -mt-3 -mx-3" 
+                                                                style={{ backgroundColor: item.hex || '#eee' }}
+                                                                title={`Código HEX: ${item.hex}`}
+                                                            ></div>
+
+                                                            {/* HEADER */}
+                                                            <div className="font-bold text-base text-slate-800 truncate" title={item.material}>{item.material}</div>
+                                                            <div className="text-xs text-slate-500 font-bold mb-2 truncate" title={item.color}>{item.color}</div>
+
+                                                            {/* STOCK */}
+                                                            <div className="flex flex-col items-center justify-center p-2 rounded-lg my-2 border">
+                                                                <span className={`font-black text-xl 
+                                                                    ${isZero ? 'text-slate-600' : isLow ? 'text-red-600' : 'text-green-700'}
+                                                                `}>
+                                                                    {stockFloat.toFixed(2)} Kg
+                                                                </span>
+                                                                {isZero && <div className="text-[9px] text-slate-500 font-bold mt-1">SIN EXISTENCIA</div>}
+                                                                {isLow && <div className="text-[9px] text-red-500 font-bold mt-1">STOCK BAJO ({minStockFloat.toFixed(2)} Kg)</div>}
+                                                            </div>
+
+                                                            {/* DETAILS / ACTIONS */}
+                                                            <div className="text-xs text-slate-400 mt-auto pt-2 border-t">
+                                                                {item.calibre && <div><span className="font-bold">Calibre:</span> {item.calibre}</div>}
+                                                                {item.proveedor && <div className="truncate"><span className="font-bold">Prov:</span> {item.proveedor}</div>}
+                                                            </div>
+
+                                                            <div className="flex gap-2 justify-between mt-3">
+                                                                <button 
+                                                                    onClick={() => openLog(item)} 
+                                                                    className="p-1.5 w-full bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded border border-indigo-200 text-xs flex items-center justify-center gap-1" 
+                                                                    title="Ver Bitácora de Movimientos"
+                                                                >
+                                                                    <Icon name="history" size={14}/> Bitácora
+                                                                </button>
+                                                                <button onClick={() => startEdit(item)} className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded border border-blue-200" title="Editar detalles"><Icon name="pencil" size={14}/></button>
+                                                                <button onClick={() => handleDelete(item.id)} className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded border border-red-200" title="Eliminar"><Icon name="trash-2" size={14}/></button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
-                                {displayedGroups.length === 0 && <div className="col-span-full text-center text-slate-400 py-10 font-bold">No hay órdenes en esta vista.</div>}
                             </div>
-                        </div>
-                        
-                        {viewMode === 'active' && <DashboardBottom activeOrders={orders.filter(o => o.status !== 'ARCHIVADO')} />}
-                        {viewMode === 'history' && <div className="bg-slate-800 text-white flex items-center justify-center p-10 font-bold text-xl opacity-50">MODO HISTORIAL - SOLO LECTURA</div>}
+                        )}
                     </div>
                 </div>
             );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<InventoryApp />);
     </script>
 </body>
 </html>
