@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Generador Cirineo v6.1 (Fix PDF Blanco)</title>
+    <title>Generador Cirineo v6.2 (Sin Bordes/Texto)</title>
     
     <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     
@@ -28,30 +28,27 @@
         
         #reader a, #reader-hidden a { display: none !important; }
 
-        /* --- ESTILOS PARA PDF (IMPORTANTE) --- */
-        /* Contenedor que saca del viewport los elementos pero los mantiene renderizables */
+        /* --- PDF OFF-SCREEN (Fix Páginas Blancas) --- */
         #offscreen-pdf-container {
             position: absolute;
-            left: -10000px;
+            left: -10000px; /* Oculto a la vista, pero renderizable */
             top: 0;
-            width: 6in; /* Ancho fijo papel */
-            /* NO usar display:none ni opacity:0 */
+            width: 6in;
         }
 
         .pdf-page {
             width: 6in;
             height: 4in;
             background: white;
-            page-break-after: always; /* Corte de página estricto */
+            page-break-after: always;
             overflow: hidden;
             position: relative;
             box-sizing: border-box;
-            display: block; /* Asegura bloque */
+            display: block;
             margin: 0;
             padding: 0;
         }
 
-        /* Vista previa en pantalla (escalada) */
         .preview-wrapper {
             width: 100%;
             max-width: 600px; 
@@ -67,7 +64,7 @@
             width: 6in;
             height: 4in;
             display: flex;
-            border: 2px solid #000; 
+            border: none; /* CAMBIO: Eliminado el contorno exterior */
             padding: 0.15in; 
             box-sizing: border-box;
             background: white;
@@ -112,7 +109,6 @@
         
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
-        const FieldValue = firebase.firestore.FieldValue; 
 
         const Icon = ({ name, size = 18, className }) => {
             const containerRef = useRef(null);
@@ -124,7 +120,6 @@
             return <div ref={containerRef} className="inline-block" style={{ width: size, height: size }}></div>;
         };
 
-        // --- COMPONENTE ETIQUETA ---
         const ProductionLabel = ({ labelData, shiftHours, imageSources }) => {
             const svgRef = useRef(null);
             const order = labelData; 
@@ -143,7 +138,6 @@
             const rawPieza = order.piezaNombre || 'ESTANDAR';
             const piezaVisual = rawPieza.split(' ')[0]; 
 
-            // Lógica Fuente Pieza
             let piezaFontSize = '28px';
             const len = piezaVisual.length;
             if (len <= 4) piezaFontSize = '72px';
@@ -191,7 +185,7 @@
                         JsBarcode(svgRef.current, barcodeValue, { 
                             format: "CODE128", 
                             lineColor: "#000", 
-                            width: 2.5, // Más grueso para mejor lectura
+                            width: 2.5, 
                             height: 80, 
                             displayValue: false, 
                             margin: 0
@@ -304,7 +298,7 @@
                         </div>
                     </div>
 
-                    {/* COL 3: BARCODE */}
+                    {/* COL 3: BARCODE SIN TEXTO */}
                     <div className="col-barcode">
                         <div style={{
                             transform: 'rotate(90deg)', 
@@ -318,15 +312,12 @@
                             position: 'absolute'
                         }}>
                              <svg ref={svgRef} style={{width: '100%', height: 'auto', maxHeight:'80px'}}></svg>
-                             <div style={{fontSize: '11px', fontFamily: 'monospace', fontWeight:'bold', marginTop: '2px', letterSpacing:'1px'}}>{barcodeValue}</div>
+                             {/* CAMBIO: Se eliminó el div que mostraba el texto del código */}
                         </div>
                     </div>
                 </div>
             );
         };
-
-        // --- APPS PRINCIPALES (Omitiendo Modales de Config/Scanner para brevedad, son los mismos) ---
-        // (Reutiliza ImageConfigModal y QuickScannerModal del código anterior si los necesitas, aquí pongo el App directo)
 
         const App = () => {
             const [orders, setOrders] = useState([]);
@@ -337,7 +328,6 @@
             const [shiftHours, setShiftHours] = useState(12);
             const [imageSources, setImageSources] = useState([]);
             
-            // Referencias
             const pdfContainerRef = useRef(null);
 
             useEffect(() => {
@@ -380,26 +370,23 @@
                 if (packageLabels.length === 0) return;
                 setIsGeneratingPdf(true);
                 
-                // Forzar scroll arriba para evitar cortes en canvas
                 window.scrollTo(0, 0);
 
-                // Esperamos un tick para asegurar renderizado en el div offscreen
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
                 const element = pdfContainerRef.current;
                 
-                // OPCIONES CRÍTICAS PARA EVITAR PÁGINAS BLANCAS
                 const opt = {
                     margin:       0,
                     filename:     `${selectedOrder.codigo}_${packageLabels.length}pqts.pdf`,
                     image:        { type: 'jpeg', quality: 0.98 },
                     html2canvas:  { 
-                        scale: 3, // Buena calidad sin matar la memoria
+                        scale: 3, 
                         useCORS: true, 
                         logging: false,
-                        scrollY: 0, // CRÍTICO: Forza a empezar desde arriba del elemento
+                        scrollY: 0, 
                         scrollX: 0,
-                        windowWidth: 576, // 6 pulgadas a 96DPI
+                        windowWidth: 576, 
                         width: 576
                     },
                     jsPDF:        { unit: 'in', format: [6, 4], orientation: 'landscape' }
@@ -410,7 +397,7 @@
                 }).catch(err => {
                     console.error("PDF Error:", err);
                     setIsGeneratingPdf(false);
-                    alert("Error al generar PDF. Intente con menos paquetes.");
+                    alert("Error al generar PDF.");
                 });
             };
 
@@ -419,7 +406,7 @@
                     {/* SIDEBAR */}
                     <div className="w-full lg:w-72 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-xl shrink-0 h-64 lg:h-auto">
                         <div className="p-4 bg-slate-900 border-b border-slate-700">
-                            <h1 className="text-xl font-bold text-yellow-400 tracking-tighter">CIRINEO v6.1</h1>
+                            <h1 className="text-xl font-bold text-yellow-400 tracking-tighter">CIRINEO v6.2</h1>
                             <input type="text" placeholder="Buscar orden..." value={filterText} onChange={e => setFilterText(e.target.value)} className="w-full mt-2 bg-slate-800 border border-slate-600 rounded p-2 text-sm" />
                              <div className="mt-4">
                                 <label className="text-[10px] text-slate-400">HORAS TURNO</label>
@@ -466,8 +453,7 @@
                         </div>
                     </div>
 
-                    {/* --- CONTENEDOR PDF OFF-SCREEN (SOLUCIÓN PÁGINAS BLANCAS) --- */}
-                    {/* Se renderiza fuera de la pantalla (left: -10000px) pero VISIBLE (opacity: 1) */}
+                    {/* CONTENEDOR PDF OFF-SCREEN */}
                     <div id="offscreen-pdf-container">
                         <div ref={pdfContainerRef}>
                             {packageLabels.map((labelData, index) => (
