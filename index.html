@@ -2,8 +2,8 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v3.9.6 (Hub Central)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema Textil Cloud - Cirineo v3.9.7 (Dark Modal)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#1e293b">
@@ -74,6 +74,29 @@
         .pkg-list::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
         .obs-input { background: transparent; border: none; color: #cbd5e1; width: 100%; font-size: 10px; border-bottom: 1px solid #475569; }
         .obs-input:focus { outline: none; border-bottom: 1px solid #94a3b8; color: white; }
+        
+        /* Mobile Helper Styles */
+        .safe-scroll-zone {
+            position: fixed;
+            right: 0;
+            top: 20%;
+            bottom: 20%;
+            width: 40px;
+            background: rgba(255,255,255,0.1);
+            border-top-left-radius: 20px;
+            border-bottom-left-radius: 20px;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            transition: opacity 0.3s;
+        }
+        .safe-scroll-zone:active { background: rgba(255,255,255,0.2); }
+        .safe-scroll-zone i { color: rgba(255,255,255,0.5); font-size: 24px; }
+        
+        /* Smooth scrolling */
+        .smooth-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
@@ -240,7 +263,7 @@
             );
         };
 
-        // --- ORDER GENERATOR ---
+        // --- ORDER GENERATOR (MOBILE OPTIMIZED & DARK MODE) ---
         const OrderGeneratorModal = ({ onClose, onProcess }) => {
             const [step, setStep] = useState('input');
             const [drafts, setDrafts] = useState([]);
@@ -248,6 +271,34 @@
             const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
             const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
             
+            // Mobile UI Helpers
+            const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
+            const contentRef = useRef(null);
+
+            // Handle Input Focus for Mobile (Hides Scroll Bar & Selects Text)
+            const handleInputFocus = (e) => {
+                setIsKeyboardOpen(true);
+                // "THE FIX": Auto-select content so you can type over '0' without deleting
+                if (e.target.type === 'number' || e.target.type === 'tel' || e.target.inputMode === 'numeric') {
+                    e.target.select();
+                }
+            };
+            const handleInputBlur = () => {
+                setIsKeyboardOpen(false);
+            };
+
+            // Custom Mobile Scroll Logic (The "Bar")
+            const handleScrollZoneMove = (e) => {
+                if (contentRef.current) {
+                    const touch = e.touches[0];
+                    const height = window.innerHeight;
+                    const percentage = touch.clientY / height;
+                    const scrollHeight = contentRef.current.scrollHeight;
+                    contentRef.current.scrollTop = percentage * scrollHeight - (height/2);
+                    e.preventDefault(); 
+                }
+            };
+
             useEffect(() => {
                 if (!form.fecha) return;
                 const fechaObj = new Date(form.fecha + 'T00:00:00');
@@ -321,30 +372,162 @@
             if (step === 'staging') return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[80vh] overflow-hidden flex flex-col"><div className="bg-orange-600 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="layers"/> Órdenes Preparadas</h1></div><button onClick={() => setStep('input')} className="text-white bg-orange-700 px-3 py-1 rounded text-xs font-bold">Volver</button></div><div className="p-6 overflow-y-auto bg-slate-100 flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">{drafts.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-gray-400 py-10"><Icon name="check-circle" size={48} className="mb-2"/><button onClick={onClose} className="mt-4 text-blue-600 font-bold hover:underline">Cerrar</button></div>}{drafts.map((draft, idx) => (<div key={idx} className="bg-white rounded shadow border-l-4 border-indigo-500 p-4 flex flex-col justify-between"><div><div className="flex justify-between items-start mb-2"><h3 className="font-black text-xl text-slate-700">MÁQUINA {draft.maquina}</h3><span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded">BORRADOR</span></div><div className="text-sm text-gray-600 mb-2"><p><strong>Cliente:</strong> {draft.cliente}</p><p><strong>Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p></div></div><button onClick={() => { setCurrentDraftIndex(idx); setStep('editing'); }} className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded flex items-center justify-center gap-2"><Icon name="edit"/> REVISAR, PESOS E INVENTARIO</button></div>))}</div></div></div>);
 
             return (
-                <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[90vh] overflow-y-auto flex flex-col">
-                        <div className="bg-blue-800 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><i className="fas fa-magic"></i> Generador Automático</h1></div><button onClick={onClose} className="text-white font-bold"><Icon name="x"/></button></div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
-                            <div className="space-y-4">
-                                <h2 className="text-lg font-semibold text-gray-700 border-b pb-1">1. Datos Generales</h2>
-                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Modelo</label><input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div><div><label className="block text-xs font-bold text-gray-700">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div></div>
-                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Fecha Entrega</label><input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="w-full p-2 border rounded"/></div><div><label className="block text-xs font-bold text-gray-700">Cód. Partida</label><input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full p-2 border bg-gray-100 rounded font-black"/></div></div>
-                                <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
-                                <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
-                                    {components.map((comp, idx) => (
-                                        <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
-                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><Icon name="x" size={14}/></button>
-                                            <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-[10px] font-bold text-gray-500">Descripción</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase"/></div><div><label className="text-[10px] font-bold text-gray-500">Sufijo Cód.</label><input value={comp.sufijo} onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-indigo-50"/></div></div>
-                                            <div className="grid grid-cols-3 gap-2"><div><label className="text-[10px] font-bold text-gray-500">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-black text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Pzs x Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs bg-blue-50 text-center"/></div></div>
+                <div className="fixed inset-0 bg-black/95 z-[60] flex items-center justify-center p-0 md:p-4">
+                    {/* Safe Scroll Zone (Mobile Only) */}
+                    {!isKeyboardOpen && (
+                        <div 
+                            className="safe-scroll-zone md:hidden"
+                            onTouchMove={handleScrollZoneMove}
+                        >
+                            <Icon name="chevrons-up-down" />
+                        </div>
+                    )}
+
+                    <div className="bg-slate-900 rounded-none md:rounded-lg shadow-2xl w-full max-w-5xl h-full md:h-[90vh] flex flex-col border border-slate-700">
+                        {/* HEADER DARK */}
+                        <div className="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center shrink-0 shadow-md z-10">
+                            <div><h1 className="text-xl font-bold flex items-center gap-2 text-white"><i className="fas fa-magic text-blue-400"></i> Generador</h1></div>
+                            {/* RED CLOSE BUTTON */}
+                            <button onClick={onClose} className="bg-red-600 hover:bg-red-700 text-white font-bold p-2 rounded shadow-lg flex items-center justify-center w-10 h-10 transition">
+                                <Icon name="x" size={24}/>
+                            </button>
+                        </div>
+                        
+                        {/* Main Content Area - Scrollable */}
+                        <div ref={contentRef} className="flex-grow overflow-y-auto smooth-scroll bg-slate-950">
+                            <div className="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                                
+                                {/* Section 1 */}
+                                <div className="space-y-4 bg-slate-800 p-4 rounded shadow-sm border border-slate-700">
+                                    <h2 className="text-lg font-black text-blue-400 border-b border-slate-600 pb-2 flex items-center gap-2"><Icon name="file-text"/> 1. Datos Generales</h2>
+                                    
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 mb-1">Modelo</label>
+                                            <input 
+                                                value={form.modelo} 
+                                                onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} 
+                                                className="w-full p-3 bg-slate-900 border border-slate-600 rounded font-bold uppercase text-lg text-white focus:border-blue-500 outline-none placeholder-slate-600" placeholder="EJ: F450"
+                                            />
                                         </div>
-                                    ))}
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 mb-1">Cliente</label>
+                                            <input 
+                                                value={form.cliente} 
+                                                onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} 
+                                                className="w-full p-3 bg-slate-900 border border-slate-600 rounded font-bold uppercase text-lg text-white focus:border-blue-500 outline-none placeholder-slate-600" placeholder="EJ: ZARA"
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 mb-1">Fecha Entrega</label>
+                                            <input type="date" value={form.fecha} onFocus={handleInputFocus} onBlur={handleInputBlur} onChange={e => setForm({...form, fecha: e.target.value})} className="w-full p-2 bg-slate-900 border border-slate-600 text-white rounded outline-none"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-400 mb-1">Cód. Partida</label>
+                                            <input value={form.partidaCodigo} onFocus={handleInputFocus} onBlur={handleInputBlur} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full p-2 bg-slate-900 border border-slate-600 text-gray-300 rounded font-black outline-none"/>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1">Cantidad TOTAL Pedido</label>
+                                        <input 
+                                            type="tel" inputMode="numeric"
+                                            value={form.totalPrendas} 
+                                            onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                            onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} 
+                                            className="w-full p-3 border border-slate-600 rounded bg-slate-900 text-3xl font-black text-center text-blue-300 focus:bg-slate-800 focus:border-blue-500 outline-none"
+                                        />
+                                        <p className="text-[10px] text-center text-slate-500 mt-1">Toca para editar cantidad total</p>
+                                    </div>
+                                </div>
+
+                                {/* Section 2 */}
+                                <div className="space-y-4">
+                                    <div className="flex justify-between items-center bg-slate-800 p-3 rounded shadow-sm border border-slate-700">
+                                        <h2 className="text-lg font-black text-green-400 flex items-center gap-2"><Icon name="scissors"/> 2. Componentes</h2>
+                                        <button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full font-bold shadow flex gap-1 items-center transform active:scale-95 transition"><Icon name="plus" size={16}/> AGREGAR</button>
+                                    </div>
+                                    
+                                    {/* Component List */}
+                                    <div className="space-y-4 md:h-80 md:overflow-y-auto pr-1 pb-10 md:pb-0">
+                                        {components.map((comp, idx) => (
+                                            <div key={idx} className="bg-slate-800 p-4 rounded-xl shadow-md border-l-4 border-indigo-500 relative animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                                <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-red-400 hover:text-red-300 p-2"><Icon name="trash-2" size={18}/></button>
+                                                
+                                                <div className="mb-3 pr-8">
+                                                    <label className="text-[10px] font-bold text-slate-400 uppercase">Nombre de la Pieza</label>
+                                                    <input 
+                                                        value={comp.descripcion} 
+                                                        onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                        onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} 
+                                                        className="w-full p-2 bg-slate-800 border-b-2 border-slate-600 focus:border-indigo-500 outline-none text-base font-bold uppercase text-white placeholder-slate-600"
+                                                        placeholder="EJ: DELANTERO"
+                                                    />
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-400">Sufijo Cód.</label>
+                                                        <input 
+                                                            value={comp.sufijo} 
+                                                            onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                            onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} 
+                                                            className="w-full p-2 bg-slate-900 rounded border border-slate-600 text-xs font-bold uppercase text-center text-white" placeholder="EJ: A"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-400">Máquina #</label>
+                                                        <input 
+                                                            type="tel" inputMode="numeric"
+                                                            value={comp.maquina} 
+                                                            onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                            onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} 
+                                                            className="w-full p-2 border border-slate-600 rounded font-black text-xl text-center text-white bg-slate-900"
+                                                        />
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-2 gap-3 bg-slate-900 p-2 rounded border border-slate-700">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500">Multiplicador</label>
+                                                        <input 
+                                                            type="tel" inputMode="numeric"
+                                                            value={comp.multiplicador} 
+                                                            onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                            onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} 
+                                                            className="w-full p-2 bg-slate-800 border border-slate-600 rounded text-center font-bold text-white"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-500">Pzs por Paquete</label>
+                                                        <input 
+                                                            type="tel" inputMode="numeric"
+                                                            value={comp.piezasPorPaquete} 
+                                                            onFocus={handleInputFocus} onBlur={handleInputBlur}
+                                                            onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} 
+                                                            className="w-full p-2 border border-slate-600 bg-slate-800 rounded text-center font-bold text-blue-300"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div className="h-24 md:hidden"></div> {/* Spacer for mobile Fab */}
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-gray-800 text-white p-4 shrink-0 mt-auto flex justify-end"><button onClick={handleGenerateDrafts} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded font-bold shadow-lg transform hover:scale-105 transition flex items-center gap-2"><Icon name="arrow-right"/> SIGUIENTE</button></div>
+
+                        {/* Sticky Footer DARK */}
+                        <div className="bg-slate-900 p-4 shrink-0 flex justify-end shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.5)] z-20 border-t border-slate-700">
+                            <button onClick={handleGenerateDrafts} className="bg-blue-600 hover:bg-blue-500 text-white w-full md:w-auto px-8 py-3 rounded-lg font-bold shadow-lg transform active:scale-95 transition flex items-center justify-center gap-2 text-lg">
+                                <span>SIGUIENTE</span> <Icon name="arrow-right"/>
+                            </button>
+                        </div>
                     </div>
                 </div>
             );
@@ -570,7 +753,7 @@
                                 <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
                                     <Icon name="layout-dashboard"/> 
                                     <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
-                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v3.9.6 NAV-CHECK</span>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v3.9.7 NAV-CHECK</span>
                                 </h1>
                                 <div className="flex gap-2 items-center">
                                     <InstallButton />
