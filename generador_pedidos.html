@@ -20,9 +20,29 @@
     <style>
         body { background-color: #0f172a; color: white; -webkit-tap-highlight-color: transparent; }
         .smooth-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
-        /* Animaciones de acordeón */
-        .accordion-content { transition: max-height 0.3s ease-out, opacity 0.3s ease-out; max-height: 0; opacity: 0; overflow: hidden; }
-        .accordion-content.open { max-height: 1000px; opacity: 1; }
+        
+        /* MODIFICACIÓN: Animaciones de acordeón con Scroll Interno */
+        .accordion-content { 
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out; 
+            max-height: 0; 
+            opacity: 0; 
+            overflow: hidden; 
+        }
+
+        .accordion-content.open { 
+            max-height: 500px; /* Altura máxima antes de activar scroll */
+            opacity: 1; 
+            overflow-y: auto; /* Activa el desplazamiento interno */
+        }
+
+        /* Estilo para la barra de scroll (opcional, para que se vea mejor) */
+        .accordion-content::-webkit-scrollbar {
+            width: 6px;
+        }
+        .accordion-content::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 10px;
+        }
         
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .modal-enter { animation: slideUp 0.3s ease-out forwards; }
@@ -34,7 +54,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
         
-        // --- CONFIGURACIÓN FIREBASE (Original) ---
+        // --- CONFIGURACIÓN FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyCngQL1pdqghv2vbjkPycT1Xf0C46f7jYs",
             authDomain: "cirineo-cec21.firebaseapp.com",
@@ -52,7 +72,6 @@
         
         // --- COMPONENTE: GENERADOR / EDITOR ---
         const GeneratorModal = ({ initialData, mode, onClose, onSaveSuccess }) => {
-            // Mode: 'create', 'edit_draft', 'edit_active', 'edit_archived'
             const [form, setForm] = useState({ 
                 modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 
             });
@@ -60,7 +79,6 @@
                 { descripcion: '', sufijo: '', maquina: '', totalLienzos: 0, piezasPorPaquete: 0 }
             ]);
             
-            // Cargar datos si es edición
             useEffect(() => {
                 if (initialData) {
                     setForm({
@@ -71,28 +89,23 @@
                         totalPrendas: initialData.totalPedidoGlobal || 0
                     });
                     
-                    // Reconstruir componentes desde la estructura de orden
-                    // Esto es un poco complejo porque la orden guarda paquetes, no la estructura original.
-                    // Intentaremos recuperar la estructura si existe guardada (en borradores) o inferirla.
                     if (initialData.componentsSource) {
                         setComponents(initialData.componentsSource);
                     } else if (initialData.subPiecesData) {
-                        // Inferencia básica para órdenes activas/archivadas antiguas
                         const comps = initialData.subPiecesData.map(p => ({
                             descripcion: p.pieza,
-                            sufijo: '', // Dato perdido al generar
+                            sufijo: '', 
                             maquina: initialData.maquina,
                             totalLienzos: p.totalPedido,
-                            piezasPorPaquete: 0 // Se pierde, poner 0 o calcular
+                            piezasPorPaquete: 0 
                         }));
                         setComponents(comps);
                     }
                 }
             }, [initialData]);
 
-            // Auto-generar código de partida
             useEffect(() => {
-                if (!form.fecha || (initialData && mode !== 'create')) return; // No cambiar partida si editamos
+                if (!form.fecha || (initialData && mode !== 'create')) return;
                 const fechaObj = new Date(form.fecha + 'T00:00:00');
                 const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
                 const mes = meses[fechaObj.getMonth()];
@@ -100,9 +113,7 @@
                 setForm(prev => ({ ...prev, partidaCodigo: `${mes}${year}_01` }));
             }, [form.fecha]);
 
-            // --- LÓGICA DE GUARDADO ---
             const handleClose = () => {
-                // AUTO-GUARDADO A BORRADORES si es nuevo y tiene datos
                 if (mode === 'create' && (form.modelo || form.cliente) && components.length > 0) {
                     const draftData = {
                         ...form,
@@ -112,9 +123,6 @@
                         previewTitle: `${form.modelo} - ${form.cliente}`
                     };
                     db.collection('drafts').add(draftData);
-                    // alert("Se ha guardado un borrador automáticamente.");
-                } else if (mode === 'edit_draft') {
-                    // Actualizar borrador al cerrar? Opcional. Mejor dejar que el botón guardar lo haga.
                 }
                 onClose();
             };
@@ -141,14 +149,12 @@
                             predefinedPackages: [],
                             createdAt: new Date().toLocaleString('es-MX'),
                             threading: initialData?.threading || [{ guia: 1, material: '', porcentaje: '', materialId: null }],
-                            status: 'EN PROCESO', // Default para activos
+                            status: 'EN PROCESO',
                             totalPedidoGlobal: form.totalPrendas,
-                            componentsSource: components // Guardamos la fuente para poder editar luego
+                            componentsSource: components
                         };
                     }
 
-                    // Agregar Pieza (Data General)
-                    // LÓGICA: totalLienzos es la cantidad a producir
                     ordersByMachine[maquinaKey].subPiecesData.push({
                         id: Date.now() + Math.random(),
                         pieza: comp.descripcion.toUpperCase(),
@@ -158,9 +164,8 @@
                         tiempo: ''
                     });
 
-                    // Generar Paquetes
                     const totalPzs = Number(comp.totalLienzos);
-                    const pzsPorPaq = Number(comp.piezasPorPaquete) || totalPzs; // Si es 0, todo en 1 paquete
+                    const pzsPorPaq = Number(comp.piezasPorPaquete) || totalPzs;
                     const numPaquetes = Math.ceil(totalPzs / pzsPorPaq);
 
                     for (let i = 1; i <= numPaquetes; i++) {
@@ -191,21 +196,15 @@
                     const newId = mode === 'edit_active' && initialData ? String(initialData.id) : String(Date.now() + Math.random());
                     const orderRef = db.collection('orders').doc(newId);
                     
-                    // Si estamos editando activo, tratamos de preservar el progreso si es posible
                     if (mode === 'edit_active' && initialData) {
-                         // Lógica compleja: si cambiamos cantidades, el progreso podría invalidarse. 
-                         // Por simplicidad en este ejemplo, sobreescribimos estructura pero mantenemos ID.
-                         // ADVERTENCIA: Esto reinicia el progreso de los paquetes generados.
-                         if(!confirm("⚠️ Editar una orden activa REGENERARÁ los paquetes y reiniciará el progreso de tejido. ¿Continuar?")) return;
+                         if(!confirm("⚠️ Editar una orden activa REGENERARÁ los paquetes. ¿Continuar?")) return;
                          batch.set(orderRef, { ...order, id: Number(newId), progreso: order.predefinedPackages });
                     } else {
-                        // Nueva orden
                         const displayId = `${order.partida}-${order.codigo}-M${order.maquina}`;
                         batch.set(orderRef, { ...order, id: Number(newId), displayId, progreso: order.predefinedPackages });
                     }
                 });
 
-                // Si venía de un borrador, borrar el borrador
                 if (mode === 'edit_draft' && initialData?.id) {
                     batch.delete(db.collection('drafts').doc(initialData.id));
                 }
@@ -244,10 +243,8 @@
                 onSaveSuccess("Copia guardada en BORRADORES.");
             };
 
-            // --- RENDER MODAL ---
             return (
                 <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col modal-enter">
-                    {/* Header Modal */}
                     <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shrink-0">
                         <h2 className="text-white font-bold text-lg flex items-center gap-2">
                             {mode === 'create' && <span className="text-green-400">NUEVO PEDIDO</span>}
@@ -258,9 +255,7 @@
                         <button onClick={handleClose} className="bg-red-600 w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-red-700"><Icon name="x"/></button>
                     </div>
 
-                    {/* Contenido Scrollable */}
                     <div className="flex-grow overflow-y-auto p-4 space-y-6">
-                        {/* Datos Generales */}
                         <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
                             <h3 className="text-blue-400 font-bold border-b border-slate-700 pb-2 mb-4">1. Datos Generales</h3>
                             <div className="grid grid-cols-2 gap-4">
@@ -287,7 +282,6 @@
                             </div>
                         </div>
 
-                        {/* Componentes */}
                         <div className="space-y-4">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-green-400 font-bold">2. Componentes / Lienzos</h3>
@@ -327,24 +321,17 @@
                         <div className="h-20"></div>
                     </div>
 
-                    {/* Footer Botones */}
                     <div className="bg-slate-800 p-4 border-t border-slate-700 shrink-0 flex gap-2 overflow-x-auto">
-                        
-                        {/* Botón Guardar Principal (Solo Activos y Borradores) */}
                         {mode !== 'edit_archived' && (
-                            <button onClick={mode === 'create' || mode === 'edit_draft' ? saveAsActive : saveAsActive} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 min-w-[150px]">
+                            <button onClick={saveAsActive} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 min-w-[150px]">
                                 <Icon name="check-circle"/> {mode === 'create' || mode === 'edit_draft' ? 'GENERAR PEDIDO' : 'GUARDAR CAMBIOS'}
                             </button>
                         )}
-
-                        {/* Botón Guardar en Borrador (Solo Nuevos y Borradores) */}
                         {(mode === 'create' || mode === 'edit_draft') && (
                             <button onClick={saveAsDraft} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-3 rounded-lg font-bold shadow flex items-center justify-center gap-2">
                                 <Icon name="save"/> BORRADOR
                             </button>
                         )}
-
-                        {/* Botón Guardar Copia (Todos) */}
                         <button onClick={saveCopy} className="bg-slate-600 hover:bg-slate-500 text-white px-4 py-3 rounded-lg font-bold shadow flex items-center justify-center gap-2 whitespace-nowrap">
                             <Icon name="copy"/> GUARDAR COPIA
                         </button>
@@ -359,18 +346,16 @@
             const [drafts, setDrafts] = useState([]);
             const [archivedOrders, setArchivedOrders] = useState([]);
             
-            const [openSection, setOpenSection] = useState('active'); // active, drafts, archived
+            const [openSection, setOpenSection] = useState('active'); 
             const [editor, setEditor] = useState({ isOpen: false, mode: 'create', data: null });
 
             useEffect(() => {
-                // Leer Pedidos
                 const unsubOrders = db.collection('orders').onSnapshot(snapshot => {
-                    const all = snapshot.docs.map(d => ({...d.data(), id: d.id})); // Usar doc ID string
+                    const all = snapshot.docs.map(d => ({...d.data(), id: d.id}));
                     setActiveOrders(all.filter(o => o.status !== 'ARCHIVADO'));
                     setArchivedOrders(all.filter(o => o.status === 'ARCHIVADO'));
                 });
 
-                // Leer Borradores
                 const unsubDrafts = db.collection('drafts').orderBy('updatedAt', 'desc').onSnapshot(snapshot => {
                     setDrafts(snapshot.docs.map(d => ({...d.data(), id: d.id})));
                 });
@@ -389,7 +374,6 @@
 
             const handleSaveSuccess = (msg) => {
                 setEditor({ isOpen: false, mode: 'create', data: null });
-                // Simple toast alert
                 const div = document.createElement('div');
                 div.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded shadow-2xl z-[100] font-bold animate-bounce';
                 div.innerText = msg;
@@ -400,7 +384,6 @@
             return (
                 <div className="min-h-screen bg-slate-900 p-4 pb-20 flex flex-col items-center">
                     
-                    {/* BOTÓN GIGANTE SUPERIOR */}
                     <button 
                         onClick={() => handleOpenEditor('create')}
                         className="w-full max-w-2xl bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white h-24 rounded-2xl shadow-xl flex items-center justify-center gap-4 transform active:scale-95 transition-all mb-8 border-b-4 border-green-800"
@@ -409,10 +392,9 @@
                         <span className="text-3xl font-black tracking-tighter">GENERAR PEDIDO</span>
                     </button>
 
-                    {/* ZONA DE LISTAS (ACORDEONES) */}
                     <div className="w-full max-w-2xl space-y-4">
                         
-                        {/* 1. PEDIDOS ACTIVOS (AZUL) */}
+                        {/* 1. PEDIDOS ACTIVOS */}
                         <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg">
                             <button onClick={() => toggleSection('active')} className="w-full p-4 flex justify-between items-center bg-blue-700 text-white">
                                 <div className="flex items-center gap-3">
@@ -440,7 +422,7 @@
                             </div>
                         </div>
 
-                        {/* 2. BORRADORES (NARANJA) */}
+                        {/* 2. BORRADORES */}
                         <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg">
                             <button onClick={() => toggleSection('drafts')} className="w-full p-4 flex justify-between items-center bg-orange-600 text-white">
                                 <div className="flex items-center gap-3">
@@ -469,7 +451,7 @@
                             </div>
                         </div>
 
-                        {/* 3. PEDIDOS ARCHIVADOS (GRIS) */}
+                        {/* 3. PEDIDOS ARCHIVADOS */}
                         <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg opacity-90">
                             <button onClick={() => toggleSection('archived')} className="w-full p-4 flex justify-between items-center bg-slate-600 text-white">
                                 <div className="flex items-center gap-3">
@@ -498,7 +480,6 @@
 
                     </div>
 
-                    {/* MODAL EDITOR */}
                     {editor.isOpen && (
                         <GeneratorModal 
                             initialData={editor.data} 
