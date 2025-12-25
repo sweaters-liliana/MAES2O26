@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Generador de Pedidos Avanzado</title>
+    <title>Sistema Integral de Pedidos - Cirineo</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -12,16 +12,14 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-        body { background-color: #0f172a; color: white; -webkit-tap-highlight-color: transparent; }
-        .smooth-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
+        body { background-color: #0f172a; color: white; -webkit-tap-highlight-color: transparent; font-family: sans-serif; }
         
-        /* MODIFICACIÓN: Animaciones de acordeón con Scroll Interno */
+        /* SOLUCIÓN AL SCROLL DE MENÚS DESPLEGABLES */
         .accordion-content { 
             transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out; 
             max-height: 0; 
@@ -30,29 +28,30 @@
         }
 
         .accordion-content.open { 
-            max-height: 500px; /* Altura máxima antes de activar scroll */
+            max-height: 550px; /* Altura ideal para ver muchos archivos sin perderse */
             opacity: 1; 
-            overflow-y: auto; /* Activa el desplazamiento interno */
+            overflow-y: auto; /* Activa el scroll interno */
         }
 
-        /* Estilo para la barra de scroll (opcional, para que se vea mejor) */
-        .accordion-content::-webkit-scrollbar {
-            width: 6px;
-        }
-        .accordion-content::-webkit-scrollbar-thumb {
-            background: #475569;
-            border-radius: 10px;
-        }
+        /* Personalización de la barra de scroll para que se vea moderna */
+        .accordion-content::-webkit-scrollbar { width: 6px; }
+        .accordion-content::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
         
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         .modal-enter { animation: slideUp 0.3s ease-out forwards; }
+
+        .suggestions-box {
+            position: absolute; z-index: 100; background: #1e293b; 
+            border: 1px solid #475569; width: 100%; max-height: 150px; 
+            overflow-y: auto; border-radius: 0.5rem;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useRef } = React;
         
         // --- CONFIGURACIÓN FIREBASE ---
         const firebaseConfig = {
@@ -61,431 +60,367 @@
             projectId: "cirineo-cec21",
             storageBucket: "cirineo-cec21.firebasestorage.app",
             messagingSenderId: "620210618284",
-            appId: "1:620210618284:web:482bab9bf74650fff18409",
-            measurementId: "G-B7YLM78RVW"
+            appId: "1:620210618284:web:482bab9bf74650fff18409"
         };
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
         const Icon = ({ name, size = 18, className }) => <i data-lucide={name} width={size} height={size} className={className}></i>;
-        
-        // --- COMPONENTE: GENERADOR / EDITOR ---
-        const GeneratorModal = ({ initialData, mode, onClose, onSaveSuccess }) => {
-            const [form, setForm] = useState({ 
-                modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 
-            });
-            const [components, setComponents] = useState([
-                { descripcion: '', sufijo: '', maquina: '', totalLienzos: 0, piezasPorPaquete: 0 }
-            ]);
+
+        // --- COMPONENTE: REVISIÓN DE INVENTARIO (TU FOTO) ---
+        const InventoryReview = ({ draft, onSave, onCancel }) => {
+            const [localDraft, setLocalDraft] = useState(draft);
+            const [inventory, setInventory] = useState([]);
+            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
             
             useEffect(() => {
-                if (initialData) {
-                    setForm({
-                        modelo: initialData.modelo || initialData.codigo || '',
-                        cliente: initialData.cliente || '',
-                        fecha: initialData.fecha || new Date().toISOString().split('T')[0],
-                        partidaCodigo: initialData.partida || '',
-                        totalPrendas: initialData.totalPedidoGlobal || 0
-                    });
-                    
-                    if (initialData.componentsSource) {
-                        setComponents(initialData.componentsSource);
-                    } else if (initialData.subPiecesData) {
-                        const comps = initialData.subPiecesData.map(p => ({
-                            descripcion: p.pieza,
-                            sufijo: '', 
-                            maquina: initialData.maquina,
-                            totalLienzos: p.totalPedido,
-                            piezasPorPaquete: 0 
-                        }));
-                        setComponents(comps);
-                    }
-                }
-            }, [initialData]);
-
-            useEffect(() => {
-                if (!form.fecha || (initialData && mode !== 'create')) return;
-                const fechaObj = new Date(form.fecha + 'T00:00:00');
-                const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-                const mes = meses[fechaObj.getMonth()];
-                const year = fechaObj.getFullYear().toString().slice(-2);
-                setForm(prev => ({ ...prev, partidaCodigo: `${mes}${year}_01` }));
-            }, [form.fecha]);
-
-            const handleClose = () => {
-                if (mode === 'create' && (form.modelo || form.cliente) && components.length > 0) {
-                    const draftData = {
-                        ...form,
-                        componentsSource: components,
-                        status: 'BORRADOR',
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        previewTitle: `${form.modelo} - ${form.cliente}`
-                    };
-                    db.collection('drafts').add(draftData);
-                }
-                onClose();
-            };
-
-            const buildOrderObjects = () => {
-                if (!form.partidaCodigo || !form.cliente || !form.modelo) { alert("Faltan datos generales"); return null; }
-                
-                const ordersByMachine = {};
-                let hasValidComponent = false;
-
-                components.forEach(comp => {
-                    if(!comp.descripcion || !comp.maquina || !comp.totalLienzos) return;
-                    hasValidComponent = true;
-                    const maquinaKey = String(comp.maquina);
-                    
-                    if (!ordersByMachine[maquinaKey]) {
-                        ordersByMachine[maquinaKey] = {
-                            codigo: form.modelo.toUpperCase(),
-                            cliente: form.cliente.toUpperCase(),
-                            maquina: maquinaKey,
-                            partida: form.partidaCodigo.toUpperCase(),
-                            fecha: form.fecha,
-                            subPiecesData: [],
-                            predefinedPackages: [],
-                            createdAt: new Date().toLocaleString('es-MX'),
-                            threading: initialData?.threading || [{ guia: 1, material: '', porcentaje: '', materialId: null }],
-                            status: 'EN PROCESO',
-                            totalPedidoGlobal: form.totalPrendas,
-                            componentsSource: components
-                        };
-                    }
-
-                    ordersByMachine[maquinaKey].subPiecesData.push({
-                        id: Date.now() + Math.random(),
-                        pieza: comp.descripcion.toUpperCase(),
-                        talla: 'UNI',
-                        totalPedido: Number(comp.totalLienzos),
-                        peso: '', 
-                        tiempo: ''
-                    });
-
-                    const totalPzs = Number(comp.totalLienzos);
-                    const pzsPorPaq = Number(comp.piezasPorPaquete) || totalPzs;
-                    const numPaquetes = Math.ceil(totalPzs / pzsPorPaq);
-
-                    for (let i = 1; i <= numPaquetes; i++) {
-                        const cantidad = (i === numPaquetes && totalPzs % pzsPorPaq !== 0) ? totalPzs % pzsPorPaq : pzsPorPaq;
-                        ordersByMachine[maquinaKey].predefinedPackages.push({
-                            id: Date.now() + Math.random() + i,
-                            piezaNombre: comp.descripcion.toUpperCase(),
-                            cantidad: cantidad,
-                            paqueteNum: i,
-                            paquetesDePieza: numPaquetes,
-                            codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}_${numPaquetes}`,
-                            finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''
-                        });
-                    }
+                db.collection('inventory').doc('main').get().then(doc => {
+                    if (doc.exists) setInventory(doc.data().items || []);
                 });
+            }, []);
 
-                if(!hasValidComponent) { alert("Agrega al menos un componente válido con cantidad"); return null; }
-                return Object.values(ordersByMachine);
-            };
-
-            const saveAsActive = async () => {
-                const orders = buildOrderObjects();
-                if (!orders) return;
-                
-                const batch = db.batch();
-                
-                orders.forEach(order => {
-                    const newId = mode === 'edit_active' && initialData ? String(initialData.id) : String(Date.now() + Math.random());
-                    const orderRef = db.collection('orders').doc(newId);
-                    
-                    if (mode === 'edit_active' && initialData) {
-                         if(!confirm("⚠️ Editar una orden activa REGENERARÁ los paquetes. ¿Continuar?")) return;
-                         batch.set(orderRef, { ...order, id: Number(newId), progreso: order.predefinedPackages });
-                    } else {
-                        const displayId = `${order.partida}-${order.codigo}-M${order.maquina}`;
-                        batch.set(orderRef, { ...order, id: Number(newId), displayId, progreso: order.predefinedPackages });
-                    }
-                });
-
-                if (mode === 'edit_draft' && initialData?.id) {
-                    batch.delete(db.collection('drafts').doc(initialData.id));
-                }
-
-                await batch.commit();
-                onSaveSuccess("¡Orden guardada en PEDIDOS ACTIVOS!");
-            };
-
-            const saveAsDraft = async () => {
-                const draftData = {
-                    ...form,
-                    componentsSource: components,
-                    status: 'BORRADOR',
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    previewTitle: `${form.modelo} - ${form.cliente}`
-                };
-
-                if (mode === 'edit_draft' && initialData?.id) {
-                    await db.collection('drafts').doc(initialData.id).update(draftData);
-                    onSaveSuccess("Borrador actualizado.");
-                } else {
-                    await db.collection('drafts').add(draftData);
-                    onSaveSuccess("Guardado en BORRADORES.");
-                }
-            };
-
-            const saveCopy = async () => {
-                const draftData = {
-                    ...form,
-                    componentsSource: components,
-                    status: 'BORRADOR',
-                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-                    previewTitle: `${form.modelo} - ${form.cliente} (COPIA)`
-                };
-                await db.collection('drafts').add(draftData);
-                onSaveSuccess("Copia guardada en BORRADORES.");
+            const calculateConsumption = (hilo) => {
+                if (!hilo.materialId || !hilo.porcentaje) return 0;
+                const totalGramos = localDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0);
+                return ((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2);
             };
 
             return (
-                <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col modal-enter">
-                    <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shrink-0">
-                        <h2 className="text-white font-bold text-lg flex items-center gap-2">
-                            {mode === 'create' && <span className="text-green-400">NUEVO PEDIDO</span>}
-                            {mode === 'edit_draft' && <span className="text-orange-400">EDITAR BORRADOR</span>}
-                            {mode === 'edit_active' && <span className="text-blue-400">EDITAR ACTIVO</span>}
-                            {mode === 'edit_archived' && <span className="text-gray-400">VER ARCHIVADO</span>}
-                        </h2>
-                        <button onClick={handleClose} className="bg-red-600 w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-red-700"><Icon name="x"/></button>
+                <div className="fixed inset-0 bg-slate-900 z-[80] flex flex-col">
+                    <div className="bg-indigo-700 p-4 flex justify-between items-center shrink-0 shadow-lg">
+                        <h2 className="font-bold text-lg flex items-center gap-2"><Icon name="database"/> REVISAR M{localDraft.maquina}</h2>
+                        <button onClick={onCancel} className="bg-white/20 p-2 rounded-full"><Icon name="x"/></button>
                     </div>
-
-                    <div className="flex-grow overflow-y-auto p-4 space-y-6">
-                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                            <h3 className="text-blue-400 font-bold border-b border-slate-700 pb-2 mb-4">1. Datos Generales</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-xs text-slate-400 font-bold">MODELO</label>
-                                    <input value={form.modelo} onChange={e=>setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white font-bold uppercase"/>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-400 font-bold">CLIENTE</label>
-                                    <input value={form.cliente} onChange={e=>setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white font-bold uppercase"/>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-400 font-bold">FECHA</label>
-                                    <input type="date" value={form.fecha} onChange={e=>setForm({...form, fecha: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white"/>
-                                </div>
-                                <div>
-                                    <label className="text-xs text-slate-400 font-bold">PARTIDA</label>
-                                    <input value={form.partidaCodigo} onChange={e=>setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-yellow-500 font-bold uppercase"/>
-                                </div>
-                                <div className="col-span-2">
-                                    <label className="text-xs text-slate-400 font-bold">TOTAL DE PRENDAS (REFERENCIA)</label>
-                                    <input type="number" value={form.totalPrendas} onChange={e=>setForm({...form, totalPrendas: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white text-center font-bold"/>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-green-400 font-bold">2. Componentes / Lienzos</h3>
-                                <button onClick={()=>setComponents([...components, {descripcion:'', sufijo:'', maquina:'', totalLienzos:0, piezasPorPaquete:0}])} className="bg-green-600 px-3 py-1 rounded text-sm font-bold flex items-center gap-1">+ Agregar</button>
-                            </div>
-                            
-                            {components.map((comp, idx) => (
-                                <div key={idx} className="bg-slate-800 p-4 rounded-lg border-l-4 border-indigo-500 relative">
-                                    <button onClick={()=>setComponents(components.filter((_,i)=>i!==idx))} className="absolute top-2 right-2 text-red-400"><Icon name="trash-2" size={16}/></button>
-                                    <div className="mb-2">
-                                        <label className="text-[10px] text-slate-400 uppercase">Pieza</label>
-                                        <input value={comp.descripcion} onChange={e=>{const n=[...components];n[idx].descripcion=e.target.value.toUpperCase();setComponents(n)}} className="w-full bg-transparent border-b border-slate-600 text-white font-bold uppercase focus:border-indigo-500 outline-none" placeholder="EJ: DELANTERO"/>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 mb-2">
-                                        <div>
-                                            <label className="text-[10px] text-slate-400">Sufijo</label>
-                                            <input value={comp.sufijo} onChange={e=>{const n=[...components];n[idx].sufijo=e.target.value.toUpperCase();setComponents(n)}} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-center text-sm" placeholder="A"/>
+                    
+                    <div className="p-4 overflow-y-auto flex-grow space-y-4">
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-blue-400 font-bold text-xs uppercase mb-4 tracking-widest">Hilos e Inventario</h3>
+                            {localDraft.threading.map((h, i) => (
+                                <div key={i} className="mb-4 relative border-b border-slate-700 pb-4 last:border-0">
+                                    <div className="grid grid-cols-6 gap-2 items-end">
+                                        <div className="col-span-3">
+                                            <label className="text-[10px] text-slate-500 font-bold uppercase">Guía {h.guia}</label>
+                                            <input value={h.material} onChange={e => {
+                                                const val = e.target.value;
+                                                const n = [...localDraft.threading]; n[i].material = val;
+                                                setLocalDraft({...localDraft, threading: n});
+                                                if(val.length > 1) {
+                                                    setSuggestions({index: i, items: inventory.filter(inv => `${inv.material} ${inv.color}`.toLowerCase().includes(val.toLowerCase()))});
+                                                } else setSuggestions({index: null, items: []});
+                                            }} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm" placeholder="Buscar material..."/>
                                         </div>
-                                        <div>
-                                            <label className="text-[10px] text-slate-400">Máquina</label>
-                                            <input type="number" value={comp.maquina} onChange={e=>{const n=[...components];n[idx].maquina=e.target.value;setComponents(n)}} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-center font-bold text-yellow-400 text-lg"/>
+                                        <div className="col-span-1">
+                                            <label className="text-[10px] text-slate-500 font-bold">%</label>
+                                            <input type="number" value={h.porcentaje} onChange={e => {
+                                                const n = [...localDraft.threading]; n[i].porcentaje = e.target.value;
+                                                setLocalDraft({...localDraft, threading: n});
+                                            }} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-center font-bold"/>
+                                        </div>
+                                        <div className="col-span-2 text-right">
+                                            <span className="text-[10px] text-red-400 font-bold block">CONSUMO</span>
+                                            <span className="text-lg font-black text-white">{calculateConsumption(h)} <small className="text-[10px]">kg</small></span>
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3 bg-slate-900 p-2 rounded">
-                                        <div>
-                                            <label className="text-[10px] text-indigo-300 font-bold block mb-1">TOTAL LIENZOS</label>
-                                            <input type="number" value={comp.totalLienzos} onChange={e=>{const n=[...components];n[idx].totalLienzos=e.target.value;setComponents(n)}} className="w-full bg-slate-700 border border-slate-500 rounded p-1 text-center text-white font-bold"/>
+                                    {suggestions.index === i && suggestions.items.length > 0 && (
+                                        <div className="suggestions-box">
+                                            {suggestions.items.map(item => (
+                                                <div key={item.id} onClick={() => {
+                                                    const n = [...localDraft.threading]; 
+                                                    n[i].material = `${item.material} - ${item.color}`;
+                                                    n[i].materialId = item.id;
+                                                    setLocalDraft({...localDraft, threading: n});
+                                                    setSuggestions({index: null, items: []});
+                                                }} className="p-3 hover:bg-indigo-600 border-b border-slate-700 text-xs">
+                                                    {item.material} - {item.color} <span className="text-green-400 font-bold">({item.stock}kg)</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                        <div>
-                                            <label className="text-[10px] text-slate-400 block mb-1">Pzs x Paquete</label>
-                                            <input type="number" value={comp.piezasPorPaquete} onChange={e=>{const n=[...components];n[idx].piezasPorPaquete=e.target.value;setComponents(n)}} className="w-full bg-slate-700 border border-slate-500 rounded p-1 text-center text-blue-300 font-bold"/>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
-                        <div className="h-20"></div>
+
+                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-green-400 font-bold text-xs uppercase mb-4 tracking-widest">Pesos de Piezas (Gramos)</h3>
+                            {localDraft.subPiecesData.map((p, idx) => (
+                                <div key={idx} className="flex gap-4 items-center mb-4 bg-slate-900/50 p-2 rounded-lg">
+                                    <div className="flex-grow font-bold text-sm text-slate-300 uppercase">{p.pieza}</div>
+                                    <div className="w-24">
+                                        <input type="number" placeholder="Gramos" value={p.peso} onChange={e => {
+                                            const n = [...localDraft.subPiecesData]; n[idx].peso = e.target.value;
+                                            setLocalDraft({...localDraft, subPiecesData: n});
+                                        }} className="w-full bg-slate-800 border-2 border-slate-600 rounded p-2 text-center text-white font-bold focus:border-green-500 outline-none"/>
+                                    </div>
+                                    <div className="text-xs text-slate-500 font-bold">{p.totalPedido} Pzs</div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
 
-                    <div className="bg-slate-800 p-4 border-t border-slate-700 shrink-0 flex gap-2 overflow-x-auto">
-                        {mode !== 'edit_archived' && (
-                            <button onClick={saveAsActive} className="flex-1 bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 min-w-[150px]">
-                                <Icon name="check-circle"/> {mode === 'create' || mode === 'edit_draft' ? 'GENERAR PEDIDO' : 'GUARDAR CAMBIOS'}
-                            </button>
-                        )}
-                        {(mode === 'create' || mode === 'edit_draft') && (
-                            <button onClick={saveAsDraft} className="bg-orange-600 hover:bg-orange-500 text-white px-4 py-3 rounded-lg font-bold shadow flex items-center justify-center gap-2">
-                                <Icon name="save"/> BORRADOR
-                            </button>
-                        )}
-                        <button onClick={saveCopy} className="bg-slate-600 hover:bg-slate-500 text-white px-4 py-3 rounded-lg font-bold shadow flex items-center justify-center gap-2 whitespace-nowrap">
-                            <Icon name="copy"/> GUARDAR COPIA
+                    <div className="p-4 bg-slate-800 border-t border-slate-700 flex gap-3">
+                        <button onClick={() => onSave(localDraft)} className="flex-1 bg-green-600 py-4 rounded-xl font-black text-white shadow-xl flex items-center justify-center gap-2">
+                            <Icon name="check-circle"/> ACTIVAR PEDIDO
                         </button>
                     </div>
                 </div>
             );
         };
 
-        // --- COMPONENTE PRINCIPAL ---
-        const App = () => {
-            const [activeOrders, setActiveOrders] = useState([]);
-            const [drafts, setDrafts] = useState([]);
-            const [archivedOrders, setArchivedOrders] = useState([]);
-            
-            const [openSection, setOpenSection] = useState('active'); 
-            const [editor, setEditor] = useState({ isOpen: false, mode: 'create', data: null });
+        // --- COMPONENTE: GENERADOR PRINCIPAL ---
+        const OrderGeneratorModal = ({ initialData, mode, onClose, onSaveSuccess }) => {
+            const [step, setStep] = useState('form'); // form, staging, review
+            const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partida: '', totalGlobal: 0 });
+            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', totalLienzos: 0, piezasPorPaquete: 0 }]);
+            const [preparedDrafts, setPreparedDrafts] = useState([]);
+            const [currentReviewIdx, setCurrentReviewIdx] = useState(null);
 
             useEffect(() => {
-                const unsubOrders = db.collection('orders').onSnapshot(snapshot => {
-                    const all = snapshot.docs.map(d => ({...d.data(), id: d.id}));
-                    setActiveOrders(all.filter(o => o.status !== 'ARCHIVADO'));
-                    setArchivedOrders(all.filter(o => o.status === 'ARCHIVADO'));
-                });
+                if (initialData) {
+                    setForm({
+                        modelo: initialData.modelo || initialData.codigo || '',
+                        cliente: initialData.cliente || '',
+                        fecha: initialData.fecha || new Date().toISOString().split('T')[0],
+                        partida: initialData.partida || '',
+                        totalGlobal: initialData.totalPedidoGlobal || 0
+                    });
+                    if (initialData.componentsSource) setComponents(initialData.componentsSource);
+                }
+            }, [initialData]);
 
-                const unsubDrafts = db.collection('drafts').orderBy('updatedAt', 'desc').onSnapshot(snapshot => {
-                    setDrafts(snapshot.docs.map(d => ({...d.data(), id: d.id})));
-                });
+            // Generador de código de partida automático
+            useEffect(() => {
+                if (mode === 'create' && form.fecha) {
+                    const d = new Date(form.fecha + 'T00:00:00');
+                    const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+                    setForm(prev => ({ ...prev, partida: `${meses[d.getMonth()]}${d.getFullYear().toString().slice(-2)}_01` }));
+                }
+            }, [form.fecha]);
+
+            const handleProcess = () => {
+                if(!form.modelo || !form.cliente || !form.partida) return alert("Completa los datos generales");
                 
-                lucide.createIcons();
+                const grouped = {};
+                components.forEach(c => {
+                    if(!c.maquina || !c.totalLienzos) return;
+                    const mq = c.maquina;
+                    if(!grouped[mq]) grouped[mq] = { 
+                        codigo: form.modelo, cliente: form.cliente, maquina: mq, partida: form.partida, 
+                        fecha: form.fecha, totalPedidoGlobal: form.totalGlobal, subPiecesData: [], 
+                        predefinedPackages: [], threading: [{guia:1, material:'', porcentaje:''}, {guia:2, material:'', porcentaje:''}],
+                        componentsSource: components
+                    };
+                    
+                    grouped[mq].subPiecesData.push({ pieza: c.descripcion.toUpperCase(), totalPedido: Number(c.totalLienzos), peso: '', talla: 'UNI' });
+                    
+                    const numPaq = Math.ceil(c.totalLienzos / (c.piezasPorPaquete || c.totalLienzos));
+                    for(let i=1; i<=numPaq; i++){
+                        grouped[mq].predefinedPackages.push({
+                            piezaNombre: c.descripcion.toUpperCase(), cantidad: (i===numPaq && c.totalLienzos%c.piezasPorPaquete!==0) ? c.totalLienzos%c.piezasPorPaquete : (c.piezasPorPaquete || c.totalLienzos),
+                            paqueteNum: i, paquetesDePieza: numPaq, codigoUnico: `${form.partida}${c.sufijo}_${i}_${numPaq}`, finished: false
+                        });
+                    }
+                });
+                setPreparedDrafts(Object.values(grouped));
+                setStep('staging');
+            };
+
+            const handleFinalSave = async (finalOrder) => {
+                const batch = db.batch();
+                const id = String(Date.now() + Math.random());
+                batch.set(db.collection('orders').doc(id), { ...finalOrder, id: Number(id), status: 'EN PROCESO', progreso: finalOrder.predefinedPackages });
+                
+                // Si venía de un borrador, borrarlo
+                if (mode === 'edit_draft' && initialData?.id) batch.delete(db.collection('drafts').doc(initialData.id));
+                
+                await batch.commit();
+                const remaining = preparedDrafts.filter((_, i) => i !== currentReviewIdx);
+                setPreparedDrafts(remaining);
+                setStep('staging');
+                if (remaining.length === 0) onSaveSuccess("¡Pedidos activados!");
+            };
+
+            const saveAsDraft = async () => {
+                const draftData = { ...form, componentsSource: components, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), status: 'BORRADOR' };
+                if (mode === 'edit_draft' && initialData?.id) await db.collection('drafts').doc(initialData.id).set(draftData);
+                else await db.collection('drafts').add(draftData);
+                onSaveSuccess("Guardado en Borradores");
+            };
+
+            if (step === 'review') return <InventoryReview draft={preparedDrafts[currentReviewIdx]} onCancel={() => setStep('staging')} onSave={handleFinalSave} />;
+
+            if (step === 'staging') return (
+                <div className="fixed inset-0 bg-slate-900 z-[70] flex flex-col">
+                    <div className="bg-orange-600 p-4 flex justify-between items-center text-white">
+                        <h2 className="font-bold">Órdenes Preparadas</h2>
+                        <button onClick={() => setStep('form')} className="text-xs bg-orange-800 px-3 py-1 rounded">Atrás</button>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {preparedDrafts.map((d, i) => (
+                            <div key={i} className="bg-slate-800 p-4 rounded-xl border-l-4 border-indigo-500">
+                                <div className="text-xl font-black mb-2">MÁQUINA {d.maquina}</div>
+                                <div className="text-xs text-slate-400 mb-4">{d.subPiecesData.length} Componentes listos</div>
+                                <button onClick={() => { setCurrentReviewIdx(i); setStep('review'); }} className="w-full bg-indigo-600 py-3 rounded-lg font-bold">REVISAR E INVENTARIAR</button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col modal-enter">
+                    <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shrink-0">
+                        <h2 className="text-green-400 font-black tracking-tighter text-xl uppercase">{mode}</h2>
+                        <button onClick={onClose} className="bg-red-600 w-8 h-8 rounded-full flex items-center justify-center text-white"><Icon name="x"/></button>
+                    </div>
+                    <div className="flex-grow overflow-y-auto p-4 space-y-6">
+                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
+                            <h3 className="text-blue-400 font-bold text-xs uppercase mb-4 tracking-tighter">1. Información de Producción</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="text-[10px] text-slate-500 font-bold">MODELO</label><input value={form.modelo} onChange={e=>setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 font-bold"/></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold">CLIENTE</label><input value={form.cliente} onChange={e=>setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 font-bold"/></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold">FECHA ENTREGA</label><input type="date" value={form.fecha} onChange={e=>setForm({...form, fecha: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs"/></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold">PARTIDA</label><input value={form.partida} onChange={e=>setForm({...form, partida: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-yellow-500 font-bold"/></div>
+                                <div className="col-span-2"><label className="text-[10px] text-slate-500 font-bold">PEDIDO TOTAL (PRENDAS)</label><input type="number" value={form.totalGlobal} onChange={e=>setForm({...form, totalGlobal: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-center text-xl font-black"/></div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center"><h3 className="text-green-400 font-bold text-xs uppercase">2. Configurar Piezas</h3>
+                            <button onClick={()=>setComponents([...components, {descripcion:'', sufijo:'', maquina:'', totalLienzos:0, piezasPorPaquete:0}])} className="bg-green-600 px-3 py-1 rounded text-xs font-bold">+ PIEZA</button></div>
+                            {components.map((c, idx) => (
+                                <div key={idx} className="bg-slate-800 p-4 rounded-xl border-l-4 border-indigo-500 relative shadow-lg">
+                                    <button onClick={()=>setComponents(components.filter((_,i)=>i!==idx))} className="absolute top-2 right-2 text-red-500"><Icon name="trash-2" size={16}/></button>
+                                    <input placeholder="NOMBRE DE PIEZA (EJ: ESPALDA)" value={c.descripcion} onChange={e=>{const n=[...components];n[idx].descripcion=e.target.value.toUpperCase();setComponents(n)}} className="w-full bg-transparent border-b border-slate-600 text-white font-bold mb-4 outline-none"/>
+                                    <div className="grid grid-cols-2 gap-3 text-center">
+                                        <div><label className="text-[10px] text-slate-500 block">MÁQUINA</label><input type="number" value={c.maquina} onChange={e=>{const n=[...components];n[idx].maquina=e.target.value;setComponents(n)}} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-yellow-400 font-bold"/></div>
+                                        <div><label className="text-[10px] text-slate-500 block">SUFIJO</label><input value={c.sufijo} onChange={e=>{const n=[...components];n[idx].sufijo=e.target.value.toUpperCase();setComponents(n)}} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-xs text-center"/></div>
+                                        <div><label className="text-[10px] text-slate-500 block">TOTAL LIENZOS</label><input type="number" value={c.totalLienzos} onChange={e=>{const n=[...components];n[idx].totalLienzos=e.target.value;setComponents(n)}} className="w-full bg-slate-700 rounded p-1 font-bold"/></div>
+                                        <div><label className="text-[10px] text-slate-500 block">PZS X PAQUETE</label><input type="number" value={c.piezasPorPaquete} onChange={e=>{const n=[...components];n[idx].piezasPorPaquete=e.target.value;setComponents(n)}} className="w-full bg-slate-700 rounded p-1 font-bold"/></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="h-24"></div>
+                    </div>
+                    <div className="bg-slate-800 p-4 border-t border-slate-700 flex gap-2">
+                        <button onClick={handleProcess} className="flex-1 bg-blue-600 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2">PROCESAR <Icon name="arrow-right"/></button>
+                        <button onClick={saveAsDraft} className="bg-orange-600 px-4 rounded-xl"><Icon name="save"/></button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- COMPONENTE RAÍZ ---
+        const App = () => {
+            const [data, setData] = useState({ active: [], drafts: [], archived: [] });
+            const [openSection, setOpenSection] = useState('active'); 
+            const [editor, setEditor] = useState({ isOpen: false, mode: 'CREAR', data: null });
+
+            useEffect(() => {
+                const unsubOrders = db.collection('orders').onSnapshot(snap => {
+                    const all = snap.docs.map(d => ({...d.data(), id: d.id}));
+                    setData(prev => ({ 
+                        ...prev, 
+                        active: all.filter(o => o.status !== 'ARCHIVADO'),
+                        archived: all.filter(o => o.status === 'ARCHIVADO')
+                    }));
+                });
+                const unsubDrafts = db.collection('drafts').onSnapshot(snap => {
+                    setData(prev => ({ ...prev, drafts: snap.docs.map(d => ({...d.data(), id: d.id})) }));
+                });
                 return () => { unsubOrders(); unsubDrafts(); };
             }, []);
 
-            useEffect(() => { lucide.createIcons(); }, [activeOrders, drafts, archivedOrders, openSection]);
+            useEffect(() => { lucide.createIcons(); }, [data, openSection]);
 
-            const toggleSection = (sec) => setOpenSection(openSection === sec ? null : sec);
-
-            const handleOpenEditor = (mode, data = null) => {
-                setEditor({ isOpen: true, mode, data });
+            const handleSuccess = (m) => {
+                setEditor({ isOpen: false, mode: 'CREAR', data: null });
+                alert(m);
             };
 
-            const handleSaveSuccess = (msg) => {
-                setEditor({ isOpen: false, mode: 'create', data: null });
-                const div = document.createElement('div');
-                div.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded shadow-2xl z-[100] font-bold animate-bounce';
-                div.innerText = msg;
-                document.body.appendChild(div);
-                setTimeout(() => div.remove(), 3000);
+            const toggleArchive = async (order) => {
+                const newStatus = order.status === 'ARCHIVADO' ? 'EN PROCESO' : 'ARCHIVADO';
+                await db.collection('orders').doc(order.id).update({ status: newStatus });
             };
 
             return (
-                <div className="min-h-screen bg-slate-900 p-4 pb-20 flex flex-col items-center">
-                    
-                    <button 
-                        onClick={() => handleOpenEditor('create')}
-                        className="w-full max-w-2xl bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white h-24 rounded-2xl shadow-xl flex items-center justify-center gap-4 transform active:scale-95 transition-all mb-8 border-b-4 border-green-800"
-                    >
-                        <Icon name="wand-2" size={32} />
-                        <span className="text-3xl font-black tracking-tighter">GENERAR PEDIDO</span>
+                <div className="min-h-screen bg-slate-900 p-4 pb-24 flex flex-col items-center">
+                    <button onClick={() => setEditor({ isOpen: true, mode: 'CREAR', data: null })} className="w-full max-w-2xl bg-gradient-to-r from-green-600 to-green-500 text-white h-24 rounded-2xl shadow-xl flex items-center justify-center gap-4 mb-8 transform active:scale-95 transition">
+                        <Icon name="plus-circle" size={32}/><span className="text-2xl font-black">NUEVO PEDIDO</span>
                     </button>
 
                     <div className="w-full max-w-2xl space-y-4">
-                        
-                        {/* 1. PEDIDOS ACTIVOS */}
-                        <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg">
-                            <button onClick={() => toggleSection('active')} className="w-full p-4 flex justify-between items-center bg-blue-700 text-white">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-white/20 p-2 rounded"><Icon name="activity"/></div>
-                                    <div className="text-left">
-                                        <h3 className="font-bold text-lg leading-none">PEDIDOS ACTIVOS</h3>
-                                        <span className="text-xs opacity-75">{activeOrders.length} en proceso</span>
-                                    </div>
-                                </div>
+                        {/* ACTIVOS */}
+                        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
+                            <button onClick={() => setOpenSection(openSection==='active'?null:'active')} className="w-full p-5 flex justify-between items-center bg-blue-600 text-white font-black">
+                                <div className="flex items-center gap-3"><Icon name="play-circle"/> ACTIVOS ({data.active.length})</div>
                                 <Icon name={openSection === 'active' ? "chevron-up" : "chevron-down"} />
                             </button>
                             <div className={`accordion-content bg-slate-900 ${openSection === 'active' ? 'open' : ''}`}>
                                 <div className="p-2 space-y-2">
-                                    {activeOrders.map(order => (
-                                        <div key={order.id} onClick={() => handleOpenEditor('edit_active', order)} className="p-3 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 cursor-pointer flex justify-between items-center">
-                                            <div>
-                                                <div className="font-bold text-white">{order.codigo} <span className="text-slate-400 text-sm">- {order.cliente}</span></div>
-                                                <div className="text-xs text-blue-400">MQ: {order.maquina} | Partida: {order.partida}</div>
+                                    {data.active.map(o => (
+                                        <div key={o.id} className="p-4 bg-slate-800 rounded-xl border border-slate-700 flex justify-between items-center">
+                                            <div><div className="font-black text-white">{o.codigo}</div><div className="text-xs text-blue-400">MQ{o.maquina} | {o.partida}</div></div>
+                                            <div className="flex gap-2">
+                                                <button onClick={()=>setEditor({isOpen:true, mode:'EDITAR', data:o})} className="p-2 bg-slate-700 rounded-lg text-blue-400"><Icon name="edit"/></button>
+                                                <button onClick={()=>toggleArchive(o)} className="p-2 bg-slate-700 rounded-lg text-orange-400"><Icon name="archive"/></button>
                                             </div>
-                                            <Icon name="edit-3" className="text-slate-500"/>
                                         </div>
                                     ))}
-                                    {activeOrders.length === 0 && <div className="p-4 text-center text-slate-500 text-sm">No hay pedidos activos.</div>}
                                 </div>
                             </div>
                         </div>
 
-                        {/* 2. BORRADORES */}
-                        <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg">
-                            <button onClick={() => toggleSection('drafts')} className="w-full p-4 flex justify-between items-center bg-orange-600 text-white">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-white/20 p-2 rounded"><Icon name="file-dashed"/></div>
-                                    <div className="text-left">
-                                        <h3 className="font-bold text-lg leading-none">BORRADORES</h3>
-                                        <span className="text-xs opacity-75">{drafts.length} guardados</span>
-                                    </div>
-                                </div>
+                        {/* BORRADORES */}
+                        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
+                            <button onClick={() => setOpenSection(openSection==='drafts'?null:'drafts')} className="w-full p-5 flex justify-between items-center bg-orange-600 text-white font-black">
+                                <div className="flex items-center gap-3"><Icon name="file-text"/> BORRADORES ({data.drafts.length})</div>
                                 <Icon name={openSection === 'drafts' ? "chevron-up" : "chevron-down"} />
                             </button>
                             <div className={`accordion-content bg-slate-900 ${openSection === 'drafts' ? 'open' : ''}`}>
                                 <div className="p-2 space-y-2">
-                                    {drafts.map(draft => (
-                                        <div key={draft.id} onClick={() => handleOpenEditor('edit_draft', draft)} className="p-3 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 cursor-pointer flex justify-between items-center relative overflow-hidden">
-                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500"></div>
-                                            <div className="pl-2">
-                                                <div className="font-bold text-white">{draft.previewTitle || 'Sin Título'}</div>
-                                                <div className="text-xs text-orange-300">Modificado: {draft.updatedAt ? new Date(draft.updatedAt.seconds * 1000).toLocaleDateString() : 'Hoy'}</div>
+                                    {data.drafts.map(d => (
+                                        <div key={d.id} className="p-4 bg-slate-800 rounded-xl border border-slate-700 flex justify-between items-center">
+                                            <div><div className="font-bold text-white uppercase">{d.modelo} - {d.cliente}</div><div className="text-[10px] text-orange-400">Pzs: {d.totalGlobal}</div></div>
+                                            <div className="flex gap-2">
+                                                <button onClick={()=>setEditor({isOpen:true, mode:'EDITAR BORRADOR', data:d})} className="p-2 bg-slate-700 rounded-lg text-white"><Icon name="external-link"/></button>
+                                                <button onClick={()=>db.collection('drafts').doc(d.id).delete()} className="p-2 bg-red-900/30 rounded-lg text-red-500"><Icon name="trash"/></button>
                                             </div>
-                                            <Icon name="arrow-right-circle" className="text-orange-500"/>
                                         </div>
                                     ))}
-                                    {drafts.length === 0 && <div className="p-4 text-center text-slate-500 text-sm">No hay borradores.</div>}
                                 </div>
                             </div>
                         </div>
 
-                        {/* 3. PEDIDOS ARCHIVADOS */}
-                        <div className="bg-slate-800 rounded-xl overflow-hidden border border-slate-700 shadow-lg opacity-90">
-                            <button onClick={() => toggleSection('archived')} className="w-full p-4 flex justify-between items-center bg-slate-600 text-white">
-                                <div className="flex items-center gap-3">
-                                    <div className="bg-white/20 p-2 rounded"><Icon name="archive"/></div>
-                                    <div className="text-left">
-                                        <h3 className="font-bold text-lg leading-none">ARCHIVADOS</h3>
-                                        <span className="text-xs opacity-75">{archivedOrders.length} históricos</span>
-                                    </div>
-                                </div>
+                        {/* ARCHIVADOS */}
+                        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
+                            <button onClick={() => setOpenSection(openSection==='archived'?null:'archived')} className="w-full p-5 flex justify-between items-center bg-slate-700 text-white font-black">
+                                <div className="flex items-center gap-3"><Icon name="archive"/> ARCHIVADOS ({data.archived.length})</div>
                                 <Icon name={openSection === 'archived' ? "chevron-up" : "chevron-down"} />
                             </button>
                             <div className={`accordion-content bg-slate-900 ${openSection === 'archived' ? 'open' : ''}`}>
                                 <div className="p-2 space-y-2">
-                                    {archivedOrders.map(order => (
-                                        <div key={order.id} onClick={() => handleOpenEditor('edit_archived', order)} className="p-3 bg-slate-800 hover:bg-slate-700 rounded border border-slate-700 cursor-pointer flex justify-between items-center grayscale">
-                                            <div>
-                                                <div className="font-bold text-slate-300">{order.codigo}</div>
-                                                <div className="text-xs text-slate-500">{order.partida}</div>
+                                    {data.archived.map(o => (
+                                        <div key={o.id} className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 flex justify-between items-center grayscale">
+                                            <div><div className="font-bold text-slate-400">{o.codigo}</div><div className="text-[10px]">{o.partida}</div></div>
+                                            <div className="flex gap-2">
+                                                <button onClick={()=>setEditor({isOpen:true, mode:'COPIAR', data:o})} className="p-2 bg-slate-700 rounded-lg text-blue-400"><Icon name="copy"/></button>
+                                                <button onClick={()=>toggleArchive(o)} className="p-2 bg-slate-700 rounded-lg text-green-400"><Icon name="rotate-ccw"/></button>
                                             </div>
-                                            <Icon name="eye" className="text-slate-500"/>
                                         </div>
                                     ))}
                                 </div>
                             </div>
                         </div>
-
                     </div>
 
                     {editor.isOpen && (
-                        <GeneratorModal 
+                        <OrderGeneratorModal 
+                            mode={editor.mode} 
                             initialData={editor.data} 
-                            mode={editor.mode}
-                            onClose={() => setEditor({ ...editor, isOpen: false })}
-                            onSaveSuccess={handleSaveSuccess}
+                            onClose={()=>setEditor({isOpen:false, mode:'CREAR', data:null})} 
+                            onSaveSuccess={handleSuccess} 
                         />
                     )}
                 </div>
