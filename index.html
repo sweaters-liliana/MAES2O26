@@ -2,11 +2,11 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistema VIVA ROUSS v3.9.8</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema Textil Cloud - Cirineo v3.9.5 (Hub Central)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
-    <meta name="theme-color" content="#334155">
+    <meta name="theme-color" content="#1e293b">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -20,7 +20,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-        /* --- ESTILOS DE IMPRESIÓN (ORIGINALES) --- */
+        /* --- ESTILOS DE IMPRESIÓN --- */
         @media print {
             body, html, #root { 
                 background: white;
@@ -64,8 +64,7 @@
         }
         .print-only { display: none; }
         .ticket-container { display: none; }
-        
-        /* Dashboard Styles ORIGINALES RESTAURADOS */
+        /* Dashboard Styles */
         .dashboard-grid { display: grid; grid-template-rows: 60vh 1fr; height: 100vh; overflow: hidden; }
         .top-pane { overflow-y: auto; border-bottom: 4px solid #334155; }
         .bottom-pane { overflow-x: auto; background: #1e293b; color: white; display: flex; padding: 10px; gap: 10px; }
@@ -75,9 +74,6 @@
         .pkg-list::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
         .obs-input { background: transparent; border: none; color: #cbd5e1; width: 100%; font-size: 10px; border-bottom: 1px solid #475569; }
         .obs-input:focus { outline: none; border-bottom: 1px solid #94a3b8; color: white; }
-        
-        /* Smooth scrolling */
-        .smooth-scroll { -webkit-overflow-scrolling: touch; scroll-behavior: smooth; }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
@@ -87,7 +83,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
         
         const firebaseConfig = {
-            apiKey: "AIzaSyCngQL1pdqghv2vbjkPycT1Xf0C46f7jYs",
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
             authDomain: "cirineo-cec21.firebaseapp.com",
             projectId: "cirineo-cec21",
             storageBucket: "cirineo-cec21.firebasestorage.app",
@@ -178,18 +174,193 @@
             );
         };
 
+        // --- DRAFT EDITOR ---
+        const DraftEditor = ({ draft, onSave, onCancel }) => {
+            const [localDraft, setLocalDraft] = useState(draft);
+            const [inventory, setInventory] = useState([]);
+            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+            useEffect(() => {
+                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => { if (doc.exists && doc.data().items) setInventory(doc.data().items); });
+                return () => unsubscribe();
+            }, []);
+            const addThread = () => setLocalDraft({ ...localDraft, threading: [...(localDraft.threading || []), { guia: (localDraft.threading?.length || 0) + 1, material: '', porcentaje: '', materialId: null }] });
+            const removeThread = (idx) => setLocalDraft({ ...localDraft, threading: localDraft.threading.filter((_, i) => i !== idx) });
+            const updateThread = (idx, field, val) => { const newThreads = [...localDraft.threading]; newThreads[idx] = { ...newThreads[idx], [field]: val }; setLocalDraft({ ...localDraft, threading: newThreads }); };
+            const handleMaterialInput = (idx, val) => { updateThread(idx, 'material', val); if (val.length > 1) { const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); setSuggestions({ index: idx, items: filtered }); } else { setSuggestions({ index: null, items: [] }); } };
+            const selectSuggestion = (idx, item) => { const newThreads = [...localDraft.threading]; newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id, stockDisponible: item.stock || '0' }; setLocalDraft({ ...localDraft, threading: newThreads }); setSuggestions({ index: null, items: [] }); };
+            const calculateConsumption = (hilo) => { if (!hilo.materialId || !hilo.porcentaje) return 0; const totalGramos = localDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0); return ((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2); };
+            const updatePiece = (idx, field, val) => { const newPieces = [...localDraft.subPiecesData]; newPieces[idx] = { ...newPieces[idx], [field]: val }; setLocalDraft({ ...localDraft, subPiecesData: newPieces }); };
+            
+            return (
+                <div className="flex flex-col h-full">
+                    <div className="bg-indigo-600 p-4 text-white flex justify-between items-center shrink-0"><h2 className="font-bold text-lg"><Icon name="edit-3" className="inline mr-2"/> Editando Orden Máquina {localDraft.maquina}</h2></div>
+                    <div className="p-6 overflow-y-auto flex-grow space-y-6">
+                        <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded border">
+                            <div><label className="block text-xs font-bold text-gray-500">Máquina</label><input type="number" value={localDraft.maquina} onChange={e=>setLocalDraft({...localDraft, maquina: e.target.value})} className="w-full border p-1 rounded font-black text-xl"/></div>
+                            <div><label className="block text-xs font-bold text-gray-500">Cliente</label><input value={localDraft.cliente} disabled className="w-full border p-1 rounded bg-gray-200 text-gray-500"/></div>
+                             <div><label className="block text-xs font-bold text-gray-500">Partida</label><input value={localDraft.partida} disabled className="w-full border p-1 rounded bg-gray-200 text-gray-500"/></div>
+                        </div>
+                        <div>
+                            <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-sm text-slate-700">Enhebrado e Inventario</h3><button onClick={addThread} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold hover:bg-blue-200">+ Hilo</button></div>
+                            <table className="w-full text-xs border">
+                                <thead className="bg-slate-200"><tr><th className="p-1 w-10">Guía</th><th className="p-1">Material</th><th className="p-1 w-16">%</th><th className="p-1 w-24">Consumo</th><th className="p-1 w-8"></th></tr></thead>
+                                <tbody>
+                                    {(localDraft.threading || []).map((h, i) => (
+                                        <tr key={i} className="relative">
+                                            <td><input value={h.guia} onChange={e=>updateThread(i,'guia',e.target.value)} className="w-full text-center border-none bg-transparent"/></td>
+                                            <td className="p-1"><input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full border p-1 rounded outline-none"/>{suggestions.index === i && suggestions.items.length > 0 && (<div className="absolute z-50 bg-white border shadow-lg w-full max-w-md max-h-40 overflow-y-auto left-0 mt-1 rounded">{suggestions.items.map(item => (<div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b flex justify-between items-center"><div><span className="font-bold text-slate-700">{item.material}</span><span className="text-slate-500 ml-1">- {item.color}</span></div><span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-[10px] font-bold">Stock: {item.stock || 0}kg</span></div>))}</div>)}</td>
+                                            <td><input value={h.porcentaje} onChange={e=>updateThread(i,'porcentaje',e.target.value)} className="w-full text-center border p-1" placeholder="%"/></td>
+                                            <td className="text-center font-bold text-red-600 bg-red-50">{calculateConsumption(h)} Kg</td>
+                                            <td className="text-center"><button onClick={()=>removeThread(i)} className="text-red-500 font-bold">x</button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-sm text-slate-700 mb-2">Detalles Técnicos (Piezas)</h3>
+                            {localDraft.subPiecesData.map((p, idx) => (
+                                <div key={idx} className="bg-white border rounded p-3 mb-2 shadow-sm">
+                                    <div className="font-bold text-indigo-700 mb-2 border-b pb-1">{p.pieza}</div>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        <div><label className="text-[10px] font-bold text-gray-400">Talla</label><input value={p.talla} onChange={e=>updatePiece(idx,'talla',e.target.value)} className="w-full border p-1 rounded text-xs font-bold"/></div>
+                                         <div><label className="text-[10px] font-bold text-gray-400">Peso (g)</label><input value={p.peso} onChange={e=>updatePiece(idx,'peso',e.target.value)} className="w-full border p-1 rounded text-xs"/></div>
+                                         <div><label className="text-[10px] font-bold text-gray-400">Tiempo (min)</label><input value={p.tiempo} onChange={e=>updatePiece(idx,'tiempo',e.target.value)} className="w-full border p-1 rounded text-xs"/></div>
+                                        <div><label className="text-[10px] font-bold text-gray-400">Cant.</label><input value={p.totalPedido} disabled className="w-full border p-1 rounded text-xs bg-gray-100 text-center"/></div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="p-4 bg-gray-100 border-t flex justify-end gap-3">
+                        <button onClick={onCancel} className="px-4 py-2 rounded text-slate-600 font-bold hover:bg-slate-200">Cancelar</button>
+                        <button onClick={() => onSave(localDraft)} className="px-6 py-2 rounded bg-green-600 text-white font-bold hover:bg-green-700 shadow flex items-center gap-2"><Icon name="check-circle"/> CONFIRMAR</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ORDER GENERATOR ---
+        const OrderGeneratorModal = ({ onClose, onProcess }) => {
+            const [step, setStep] = useState('input');
+            const [drafts, setDrafts] = useState([]);
+            const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
+            const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
+            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
+            
+            useEffect(() => {
+                if (!form.fecha) return;
+                const fechaObj = new Date(form.fecha + 'T00:00:00');
+                const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+                const mes = meses[fechaObj.getMonth()];
+                const year = fechaObj.getFullYear().toString().slice(-2);
+                setForm(prev => ({ ...prev, partidaCodigo: `${mes}${year}_01` }));
+            }, [form.fecha]);
+
+            const handleGenerateDrafts = () => {
+                if (!form.partidaCodigo || !form.cliente || !form.modelo) return alert("Faltan datos generales");
+                const ordersByMachine = {};
+                let hasValidComponent = false;
+                components.forEach(comp => {
+                    if(!comp.descripcion || !comp.maquina) return;
+                    hasValidComponent = true;
+                    const maquinaKey = String(comp.maquina);
+                    if (!ordersByMachine[maquinaKey]) {
+                        ordersByMachine[maquinaKey] = {
+                            codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(), maquina: maquinaKey, partida: form.partidaCodigo.toUpperCase(),
+                            subPiecesData: [], predefinedPackages: [], createdAt: new Date().toLocaleString('es-MX'),
+                            threading: [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }]
+                        };
+                    }
+                    const totalPiezasComp = form.totalPrendas * comp.multiplicador;
+                    ordersByMachine[maquinaKey].subPiecesData.push({ id: Date.now() + Math.random(), pieza: comp.descripcion.toUpperCase(), talla: 'UNI', totalPedido: totalPiezasComp, peso: '', tiempo: '' });
+                    const numPaquetes = comp.piezasPorPaquete > 0 ? Math.ceil(totalPiezasComp / comp.piezasPorPaquete) : 0;
+                    for (let i = 1; i <= numPaquetes; i++) {
+                        const cantidad = (i === numPaquetes && totalPiezasComp % comp.piezasPorPaquete !== 0) ? totalPiezasComp % comp.piezasPorPaquete : comp.piezasPorPaquete;
+                        ordersByMachine[maquinaKey].predefinedPackages.push({
+                            id: Date.now() + Math.random() + i, piezaNombre: comp.descripcion.toUpperCase(), cantidad: cantidad, paqueteNum: i, paquetesDePieza: numPaquetes,
+                            codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}_${numPaquetes}`, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''
+                        });
+                    }
+                });
+                if(!hasValidComponent) return alert("Agrega al menos un componente válido");
+                setDrafts(Object.values(ordersByMachine));
+                setStep('staging');
+            };
+
+            const handleSaveOne = async (finalDraft) => {
+                try {
+                    const invDoc = await db.collection('inventory').doc('main').get();
+                    let currentItems = invDoc.exists && invDoc.data().items ? invDoc.data().items : [];
+                    const batch = db.batch();
+                    const newId = String(Date.now() + Math.random());
+                    const orderRef = db.collection('orders').doc(newId);
+                    const displayId = generateSmartID(finalDraft.partida, finalDraft.subPiecesData, finalDraft.maquina);
+                    batch.set(orderRef, { ...finalDraft, id: Number(newId), displayId: displayId, progreso: finalDraft.predefinedPackages, status: 'EN PROCESO', totalPedido: finalDraft.subPiecesData.reduce((a,b)=>a+Number(b.totalPedido),0) });
+                    const totalGramos = finalDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0);
+                    (finalDraft.threading || []).forEach(hilo => {
+                        if (hilo.materialId) {
+                            const cantADescontar = Number(((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2));
+                            const itemIndex = currentItems.findIndex(i => i.id === hilo.materialId);
+                            if(itemIndex !== -1) {
+                                currentItems[itemIndex].stock = (parseFloat(currentItems[itemIndex].stock || 0) - cantADescontar).toFixed(2);
+                                const moveRef = db.collection('inventory_movements').doc();
+                                batch.set(moveRef, { materialId: hilo.materialId, type: 'SALIDA_ORDEN', quantityKg: cantADescontar, orderId: displayId, model: finalDraft.codigo, partida: finalDraft.partida, timestamp: firebase.firestore.FieldValue.serverTimestamp(), note: `Consumo automático` });
+                            }
+                        }
+                    });
+                    batch.set(db.collection('inventory').doc('main'), { items: currentItems });
+                    await batch.commit();
+                    const remaining = drafts.filter((_, i) => i !== currentDraftIndex);
+                    setDrafts(remaining); setStep('staging'); setCurrentDraftIndex(null);
+                    if (remaining.length === 0) { alert("¡Órdenes creadas!"); onProcess(); }
+                } catch (e) { console.error("Error save:", e); alert("Error al guardar."); }
+            };
+
+            if (step === 'editing' && currentDraftIndex !== null) return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl h-[90vh] overflow-hidden relative"><DraftEditor draft={drafts[currentDraftIndex]} onSave={handleSaveOne} onCancel={() => setStep('staging')} /></div></div>);
+            if (step === 'staging') return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[80vh] overflow-hidden flex flex-col"><div className="bg-orange-600 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="layers"/> Órdenes Preparadas</h1></div><button onClick={() => setStep('input')} className="text-white bg-orange-700 px-3 py-1 rounded text-xs font-bold">Volver</button></div><div className="p-6 overflow-y-auto bg-slate-100 flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">{drafts.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-gray-400 py-10"><Icon name="check-circle" size={48} className="mb-2"/><button onClick={onClose} className="mt-4 text-blue-600 font-bold hover:underline">Cerrar</button></div>}{drafts.map((draft, idx) => (<div key={idx} className="bg-white rounded shadow border-l-4 border-indigo-500 p-4 flex flex-col justify-between"><div><div className="flex justify-between items-start mb-2"><h3 className="font-black text-xl text-slate-700">MÁQUINA {draft.maquina}</h3><span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded">BORRADOR</span></div><div className="text-sm text-gray-600 mb-2"><p><strong>Cliente:</strong> {draft.cliente}</p><p><strong>Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p></div></div><button onClick={() => { setCurrentDraftIndex(idx); setStep('editing'); }} className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded flex items-center justify-center gap-2"><Icon name="edit"/> REVISAR, PESOS E INVENTARIO</button></div>))}</div></div></div>);
+
+            return (
+                <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[90vh] overflow-y-auto flex flex-col">
+                        <div className="bg-blue-800 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><i className="fas fa-magic"></i> Generador Automático</h1></div><button onClick={onClose} className="text-white font-bold"><Icon name="x"/></button></div>
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
+                            <div className="space-y-4">
+                                <h2 className="text-lg font-semibold text-gray-700 border-b pb-1">1. Datos Generales</h2>
+                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Modelo</label><input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div><div><label className="block text-xs font-bold text-gray-700">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div></div>
+                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Fecha Entrega</label><input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="w-full p-2 border rounded"/></div><div><label className="block text-xs font-bold text-gray-700">Cód. Partida</label><input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full p-2 border bg-gray-100 rounded font-black"/></div></div>
+                                <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
+                                <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
+                                    {components.map((comp, idx) => (
+                                        <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
+                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><Icon name="x" size={14}/></button>
+                                            <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-[10px] font-bold text-gray-500">Descripción</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase"/></div><div><label className="text-[10px] font-bold text-gray-500">Sufijo Cód.</label><input value={comp.sufijo} onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-indigo-50"/></div></div>
+                                            <div className="grid grid-cols-3 gap-2"><div><label className="text-[10px] font-bold text-gray-500">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-black text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Pzs x Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs bg-blue-50 text-center"/></div></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-gray-800 text-white p-4 shrink-0 mt-auto flex justify-end"><button onClick={handleGenerateDrafts} className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded font-bold shadow-lg transform hover:scale-105 transition flex items-center gap-2"><Icon name="arrow-right"/> SIGUIENTE</button></div>
+                    </div>
+                </div>
+            );
+        };
+
         const InstallButton = () => {
              const [deferredPrompt, setDeferredPrompt] = useState(null);
             useEffect(() => { const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
             const handleInstall = async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') setDeferredPrompt(null); };
             if (!deferredPrompt) return null;
-            return (<button onClick={handleInstall} className="w-10 h-10 bg-yellow-500 hover:bg-yellow-600 text-black rounded font-bold shadow flex items-center justify-center animate-pulse" title="Instalar App"><Icon name="download-cloud" size={20}/></button>);
+            return (<button onClick={handleInstall} className="bg-yellow-500 hover:bg-yellow-600 text-black px-3 py-2 rounded font-bold shadow flex items-center gap-2 text-xs animate-pulse"><Icon name="download-cloud" size={16}/> INSTALAR APP</button>);
         };
 
         const MachineCard = ({ maquina, orders }) => {
             const [is24Hours, setIs24Hours] = useState(true);
             const pendingPackages = useMemo(() => {
-                if(!orders) return [];
                 let pkgs = [];
                 orders.forEach(o => { const incomplete = o.progreso?.filter(p => !p.finished) || []; incomplete.forEach(p => { const pieceData = o.subPiecesData?.find(sp => sp.pieza === p.piezaNombre) || o; const timePerPiece = Number(pieceData.tiempo) || 0; pkgs.push({ ...p, parentOrderId: o.id, orderCode: o.codigo, partida: o.partida, timeTotal: (p.cantidad * timePerPiece) }); }); });
                 return pkgs; 
@@ -242,37 +413,15 @@
             return <img src={imgSrc} onError={handleError} className={className} />;
         };
 
-        // --- VISOR DE ORDEN (MODIFICADO PARA ELIMINAR) ---
         const OrderView = ({ order, config, onBack, onEdit }) => { 
             const [entry, setEntry] = useState({ tejedor: '', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' });
-            const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Estado para la alerta personalizada
-            
-            // Protección contra orden inexistente
-            if (!order) {
-                return (
-                    <div className="h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
-                        <Icon name="alert-circle" size={48} className="text-slate-400 mb-4"/>
-                        <h2 className="text-xl font-bold text-slate-700 mb-2">Orden no encontrada</h2>
-                        <p className="text-slate-500 mb-6">Esta orden fue eliminada o no existe.</p>
-                        <button onClick={onBack} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 transition">Regresar al Tablero</button>
-                    </div>
-                );
-            }
-
             const markPackage = async (pkgId) => { if(!entry.tejedor) return alert("Por favor selecciona un TEJEDOR"); const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: true, tejedor: entry.tejedor, fecha: entry.fecha, defectos: entry.defectos, agujas: entry.agujas} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
             const unmarkPackage = async (pkgId) => { const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
-            
             const toggleArchive = async () => {
-                if (order.status === 'ARCHIVADO') { 
-                    // Usamos confirm normal para archivar/desarchivar (menos crítico) o podrías hacer modal
-                    if(window.confirm("¿Desarchivar esta orden?")){ await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); onBack(); } 
-                    return; 
-                }
+                if (order.status === 'ARCHIVADO') { if(window.confirm("¿Desarchivar esta orden?")){ await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); onBack(); } return; }
                 const incompletePkgs = order.progreso.filter(p => !p.finished);
-                if (incompletePkgs.length === 0) { 
-                    if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; 
-                    await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); onBack(); 
-                } else {
+                if (incompletePkgs.length === 0) { if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); onBack(); } 
+                else {
                     const msg = `⚠️ ADVERTENCIA: Hay ${incompletePkgs.length} paquetes SIN TERMINAR.\n\nSi archiva ahora, el sistema asume que NO se tejieron y REGRESARÁ el material calculado al inventario.\n\n¿Está seguro?`;
                     if(!window.confirm(msg)) return;
                     try {
@@ -289,54 +438,15 @@
                     } catch (e) { console.error(e); alert("Error al actualizar inventario. Revise la consola."); }
                 }
             };
-
-            const handleDelete = async () => {
-                try {
-                    await db.collection('orders').doc(String(order.id)).delete();
-                    setShowDeleteConfirm(false);
-                    onBack(); // Regresar inmediatamente para evitar errores
-                } catch (e) {
-                    alert("Error al eliminar: " + e.message);
-                }
-            };
-
             const minutosPorPrenda = order.subPiecesData.reduce((acc, curr) => acc + (Number(curr.tiempo) || 0), 0);
             const piezasPorHora = minutosPorPrenda > 0 ? (60 / minutosPorPrenda).toFixed(0) : 0;
             const piezasPorTurno = minutosPorPrenda > 0 ? ((60 / minutosPorPrenda) * 12).toFixed(0) : 0;
 
             return (
                 <div className="bg-white min-h-screen relative">
-                    
-                    {/* --- MODAL DE ADVERTENCIA PERSONALIZADO (NO BROWSER ALERT) --- */}
-                    {showDeleteConfirm && (
-                        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-                            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-slate-200 text-center transform scale-100 transition-transform">
-                                <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
-                                    <Icon name="trash-2" size={24} className="text-red-600"/>
-                                </div>
-                                <h3 className="text-lg font-black text-slate-800 mb-2">¿ELIMINAR ORDEN?</h3>
-                                <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-                                    Esta acción eliminará permanentemente la orden <strong>{order.codigo}</strong> de la base de datos.<br/><br/>
-                                    <span className="font-bold text-red-500">Esta acción no se puede deshacer.</span>
-                                </p>
-                                <div className="flex gap-3">
-                                    <button onClick={()=>setShowDeleteConfirm(false)} className="flex-1 bg-slate-200 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-300 transition">
-                                        CANCELAR
-                                    </button>
-                                    <button onClick={handleDelete} className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200 transition">
-                                        SÍ, ELIMINAR
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="no-print p-4 border-b flex flex-wrap gap-2 justify-between bg-slate-50 sticky top-0 z-10 shadow-sm">
-                        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 font-bold hover:text-slate-900"><Icon name="arrow-left"/> Volver</button>
-                        <div className="flex gap-2 flex-wrap">
-                             {/* BOTÓN ELIMINAR NUEVO */}
-                             <button onClick={() => setShowDeleteConfirm(true)} className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-red-200 transition"><Icon name="trash-2" size={14}/> ELIMINAR</button>
-                             
+                    <div className="no-print p-4 border-b flex justify-between bg-slate-50 sticky top-0 z-10 shadow-sm">
+                        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 font-bold"><Icon name="arrow-left"/> Volver</button>
+                        <div className="flex gap-2">
                              <button onClick={toggleArchive} className={`px-3 py-1 rounded font-bold text-xs flex items-center gap-1 text-white ${order.status === 'ARCHIVADO' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}><Icon name={order.status === 'ARCHIVADO' ? "refresh-ccw" : "archive"}/> {order.status === 'ARCHIVADO' ? 'DESARCHIVAR' : 'ARCHIVAR ORDEN'}</button>
                              <button onClick={() => window.location.href='papeletas.html'} className="bg-purple-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-purple-700 shadow"><Icon name="tags"/> PAPELETAS (4x6)</button>
                              <button onClick={() => onEdit(order)} className="bg-indigo-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-indigo-700"><Icon name="file-edit"/> EDITAR</button>
@@ -383,12 +493,158 @@
             return (<div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center"><div className="bg-white p-6 rounded w-96"><h3 className="font-bold mb-4">Configuración Imágenes</h3><div className="mb-2 max-h-40 overflow-y-auto">{localUrls.map((u,i)=><div key={i} className="text-xs truncate mb-1 border p-1 flex justify-between"><span>{u}</span><button onClick={()=>setLocalUrls(localUrls.filter((_,x)=>x!==i))} className="text-red-500 font-bold">X</button></div>)}</div><div className="flex gap-2 mb-4"><input value={newUrl} onChange={e=>setNewUrl(e.target.value)} className="border p-1 flex-1 text-xs" placeholder="URL GitHub Raw"/><button onClick={()=>{if(newUrl)setLocalUrls([...localUrls,newUrl]);setNewUrl('')}} className="bg-blue-100 text-blue-700 px-2 font-bold">+</button></div><button onClick={save} className="bg-slate-900 text-white w-full py-2 rounded font-bold">Guardar</button></div></div>);
         };
 
+        const ImageGallery = ({ config, onClose, orders }) => {
+            const [filter, setFilter] = useState('');
+            const [mode, setMode] = useState('active'); // 'active' (ordenes) o 'explorer' (api github)
+            const [apiFiles, setApiFiles] = useState([]);
+            const [isLoadingApi, setIsLoadingApi] = useState(false);
+            const [apiError, setApiError] = useState(null);
+
+            // Lista de modelos activos (Lógica original)
+            const allCodes = useMemo(() => {
+                const uniqueCodes = new Set(orders.map(o => o.codigo).filter(c => c));
+                return Array.from(uniqueCodes).sort();
+            }, [orders]);
+            
+            const filteredCodes = useMemo(() => {
+                if (!filter) return allCodes;
+                return allCodes.filter(c => c.toUpperCase().includes(filter.toUpperCase()));
+            }, [allCodes, filter]);
+
+            // LÓGICA DE EXPLORADOR GITHUB (NUEVA)
+            const fetchRepoFiles = async () => {
+                if (!config.repoUrls || config.repoUrls.length === 0) return;
+                setIsLoadingApi(true);
+                setApiError(null);
+                
+                // Intento parsear la URL RAW para obtener datos de API
+                // Ejemplo Raw: https://raw.githubusercontent.com/USER/REPO/REF/PATH
+                // Ejemplo Api: https://api.github.com/repos/USER/REPO/contents/PATH?ref=REF
+                
+                try {
+                    const rawUrl = config.repoUrls[0];
+                    const regex = /https:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/([^/]+)\/(.*)/;
+                    const match = rawUrl.match(regex);
+                    
+                    if (!match) throw new Error("La URL configurada no es de GitHub Raw estándar.");
+                    
+                    const [_, user, repo, branch, path] = match;
+                    const apiUrl = `https://api.github.com/repos/${user}/${repo}/contents/${path}?ref=${branch}`;
+                    
+                    const response = await fetch(apiUrl);
+                    if (!response.ok) throw new Error(`Error GitHub API: ${response.status}`);
+                    
+                    const data = await response.json();
+                    if (!Array.isArray(data)) throw new Error("La respuesta no es una lista de archivos.");
+                    
+                    // Filtrar solo imágenes
+                    const images = data.filter(file => 
+                        file.type === 'file' && 
+                        (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.png') || file.name.toLowerCase().endsWith('.jpeg'))
+                    ).map(file => ({
+                        name: file.name,
+                        download_url: file.download_url
+                    }));
+                    
+                    setApiFiles(images);
+                } catch (e) {
+                    console.error(e);
+                    setApiError(e.message);
+                } finally {
+                    setIsLoadingApi(false);
+                }
+            };
+
+            const filteredApiFiles = useMemo(() => {
+                if (!filter) return apiFiles;
+                return apiFiles.filter(f => f.name.toUpperCase().includes(filter.toUpperCase()));
+            }, [apiFiles, filter]);
+
+
+            return (
+                <div className="fixed inset-0 bg-black/80 z-[60] flex flex-col items-center justify-center p-4">
+                    <div className="bg-white p-6 rounded-lg shadow-2xl w-full max-w-4xl h-full flex flex-col">
+                        <div className="flex justify-between items-center mb-4 border-b pb-2 shrink-0">
+                            <h3 className="font-bold text-xl text-indigo-700 flex items-center gap-2">
+                                <Icon name="images"/> {mode === 'active' ? 'Galería (Órdenes Activas)' : 'Explorador Repositorio (API)'}
+                            </h3>
+                            <button onClick={onClose} className="bg-red-500 hover:bg-red-600 text-white rounded-md p-2 shadow-lg flex items-center gap-1 font-bold text-xs transition-transform hover:scale-105">
+                                <Icon name="x" size={18}/> CERRAR
+                            </button>
+                        </div>
+                        
+                        <div className="flex gap-2 mb-4">
+                            <button onClick={() => setMode('active')} className={`flex-1 py-2 font-bold text-xs rounded ${mode === 'active' ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                                ÓRDENES ACTIVAS
+                            </button>
+                            <button onClick={() => { setMode('explorer'); if(apiFiles.length === 0) fetchRepoFiles(); }} className={`flex-1 py-2 font-bold text-xs rounded flex items-center justify-center gap-2 ${mode === 'explorer' ? 'bg-purple-600 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                                <Icon name="globe" size={14}/> EXPLORAR REPOSITORIO (API)
+                            </button>
+                        </div>
+
+                        <input type="text" placeholder={mode === 'active' ? "Filtrar por código de modelo..." : "Filtrar nombre de archivo..."} value={filter} onChange={(e) => setFilter(e.target.value)} className="w-full p-2 mb-4 border rounded shadow-sm" />
+                        
+                        <div className="flex-grow overflow-y-auto bg-slate-50 p-2 rounded border">
+                            
+                            {/* MODO 1: ORDENES ACTIVAS (Lógica Anterior) */}
+                            {mode === 'active' && (
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                    {config.repoUrls && config.repoUrls.map((repo, idx) => (
+                                        <React.Fragment key={idx}>
+                                            {filteredCodes.map(codigo => (
+                                                <div key={`${repo}-${codigo}`} className="aspect-square border rounded shadow overflow-hidden flex flex-col bg-white">
+                                                    <SmartImage repoUrls={[repo]} codigo={codigo} className="w-full h-2/3 object-contain bg-slate-100 p-1" />
+                                                    <div className="text-center text-xs font-bold p-1 bg-gray-100 h-1/3 flex items-center justify-center">{codigo}</div>
+                                                </div>
+                                            ))}
+                                        </React.Fragment>
+                                    ))}
+                                    {!config.repoUrls && <div className="text-center text-slate-500 col-span-full">Configura las URLs de los repositorios en Ajustes.</div>}
+                                </div>
+                            )}
+
+                            {/* MODO 2: EXPLORADOR API (Nueva Lógica) */}
+                            {mode === 'explorer' && (
+                                <div>
+                                    {isLoadingApi && <div className="text-center py-10 flex flex-col items-center text-indigo-600"><Icon name="loader-2" className="animate-spin mb-2" size={32}/>Cargando lista de archivos desde GitHub...</div>}
+                                    
+                                    {apiError && (
+                                        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4" role="alert">
+                                            <p className="font-bold">Error de Conexión</p>
+                                            <p className="text-xs">{apiError}</p>
+                                            <p className="text-[10px] mt-2 italic">Nota: La API de GitHub tiene límites de uso (60 peticiones/hora). Si ves esto, espera un poco o verifica tu URL.</p>
+                                        </div>
+                                    )}
+
+                                    {!isLoadingApi && !apiError && (
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                            {filteredApiFiles.map((file, i) => (
+                                                <div key={i} className="aspect-square border rounded shadow overflow-hidden flex flex-col bg-white hover:ring-2 hover:ring-purple-500 transition cursor-pointer" onClick={() => window.open(file.download_url, '_blank')}>
+                                                    <img src={file.download_url} loading="lazy" className="w-full h-2/3 object-contain bg-slate-100 p-1" />
+                                                    <div className="text-center text-[10px] font-bold p-1 bg-gray-100 h-1/3 flex items-center justify-center break-all leading-tight px-2">
+                                                        {file.name}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {filteredApiFiles.length === 0 && <div className="col-span-full text-center text-slate-400 py-10">No se encontraron imágenes en esta carpeta.</div>}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         const App = () => {
             const [view, setView] = useState('dashboard');
             const [orders, setOrders] = useState([]);
             const [config, setConfig] = useState({});
             const [selectedOrder, setSelectedOrder] = useState(null);
             const [showSettings, setShowSettings] = useState(false);
+            const [showGenerator, setShowGenerator] = useState(false); 
+            const [showGallery, setShowGallery] = useState(false);
             const [viewMode, setViewMode] = useState('active'); 
             
             useEffect(() => {
@@ -437,52 +693,55 @@
                 return Object.values(groups).sort((a,b) => b.partida.localeCompare(a.partida));
             }, [orders, viewMode]);
 
-            // Encontrar la orden actualizada del state para evitar ver datos viejos o borrados
-            const currentSelectedOrder = useMemo(() => {
-                if (!selectedOrder) return null;
-                return orders.find(o => o.id === selectedOrder.id);
-            }, [orders, selectedOrder]);
+            const handleGeneratorSuccess = () => {
+                setShowGenerator(false);
+                setViewMode('active'); // Ir a la vista principal para ver lo nuevo
+            };
 
             return (
                 <div className="h-screen bg-slate-100 overflow-hidden relative">
+                    {/* AQUÍ ESTÁ EL NUEVO MODAL GENERADOR CON STAGING */}
+                    {showGenerator && <OrderGeneratorModal onClose={()=>setShowGenerator(false)} onProcess={handleGeneratorSuccess} />}
                     
-                    {/* Pasamos currentSelectedOrder en lugar de selectedOrder para que detecte si fue borrada */}
-                    {view === 'detail' && <div className="absolute inset-0 z-40 bg-white overflow-y-auto print-visible-wrapper"><OrderView order={currentSelectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
+                    {view === 'detail' && selectedOrder && <div className="absolute inset-0 z-40 bg-white overflow-y-auto print-visible-wrapper"><OrderView order={orders.find(o=>o.id===selectedOrder.id) || selectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
                     
                     {showSettings && <SettingsModal config={config} onClose={()=>setShowSettings(false)} />}
+                    {showGallery && <ImageGallery config={config} onClose={()=>setShowGallery(false)} orders={orders} />}
 
                     <div className="dashboard-grid">
                         <div className="top-pane bg-slate-100 p-4">
-                            
-                            {/* --- HEADER --- */}
-                            <div className="flex flex-col md:flex-row justify-between items-center mb-4 bg-slate-700 p-3 rounded-lg shadow-md border-b-2 border-slate-500">
-                                <div className="border-b md:border-b-0 border-slate-500 w-full md:w-auto mb-2 md:mb-0 pb-1 md:pb-0 text-center md:text-left">
-                                    <h1 className="text-xl font-black text-white leading-none tracking-widest select-none">
-                                        VIVA<br/>ROUSS
-                                    </h1>
-                                </div>
-                                <div className="flex gap-2 items-center justify-center flex-wrap">
+                            <div className="flex justify-between items-center mb-4">
+                                <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
+                                    <Icon name="layout-dashboard"/> 
+                                    <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v3.9.5 NAV-CHECK</span>
+                                </h1>
+                                <div className="flex gap-2 items-center">
                                     <InstallButton />
+
+                                    {/* --- NUEVOS BOTONES DE NAVEGACIÓN PRINCIPAL --- */}
+                                    <button onClick={() => window.location.href='post-tejido-check.html'} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
+                                        <Icon name="list-checks"/> CONSOLIDADOR
+                                    </button>
+
+                                    <button onClick={() => window.location.href='inventario.html'} className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
+                                        <Icon name="package-search"/> INVENTARIO
+                                    </button>
+                                    
+                                    <button onClick={()=>setViewMode(viewMode === 'active' ? 'history' : 'active')} className={`px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs transition ${viewMode === 'active' ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-slate-700 text-white'}`}>
+                                        <Icon name={viewMode === 'active' ? 'history' : 'activity'}/> 
+                                        {viewMode === 'active' ? 'HISTORIAL' : 'VER PLANTA'}
+                                    </button>
+
+                                    <button onClick={()=>setShowGallery(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs"><Icon name="image-search"/> GALERÍA</button>
+                                    <button onClick={()=>setShowSettings(true)} className="bg-slate-300 hover:bg-slate-400 text-slate-800 p-2 rounded shadow"><Icon name="settings"/></button>
+                                    
+                                    {/* BOTÓN PRINCIPAL GENERADOR */}
                                     {viewMode === 'active' && (
-                                        <button onClick={()=>window.location.href='generador_pedidos.html'} className="w-10 h-10 bg-green-600 hover:bg-green-700 text-white rounded font-bold shadow flex items-center justify-center animate-bounce" title="Generar Orden">
-                                            <Icon name="plus" size={20}/>
+                                        <button onClick={()=>setShowGenerator(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 animate-bounce">
+                                            <Icon name="wand-2"/> GENERAR ORDEN AUTOMÁTICA
                                         </button>
                                     )}
-                                    <button onClick={() => window.location.href='post-tejido-check.html'} className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow flex items-center justify-center" title="Consolidador">
-                                        <Icon name="list-checks" size={20}/>
-                                    </button>
-                                    <button onClick={() => window.location.href='inventario.html'} className="w-10 h-10 bg-teal-600 hover:bg-teal-700 text-white rounded font-bold shadow flex items-center justify-center" title="Inventario">
-                                        <Icon name="package-search" size={20}/>
-                                    </button>
-                                    <button onClick={()=>setViewMode(viewMode === 'active' ? 'history' : 'active')} className={`w-10 h-10 rounded font-bold shadow flex items-center justify-center transition ${viewMode === 'active' ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-slate-500 text-white'}`} title={viewMode === 'active' ? 'Ir al Historial' : 'Ver Planta'}>
-                                        <Icon name={viewMode === 'active' ? 'history' : 'activity'} size={20}/>
-                                    </button>
-                                    <button onClick={()=>window.location.href='galeria_de_modelos.html'} className="w-10 h-10 bg-sky-500 hover:bg-sky-600 text-white rounded font-bold shadow flex items-center justify-center" title="Galería">
-                                        <Icon name="image-search" size={20}/>
-                                    </button>
-                                    <button onClick={()=>setShowSettings(true)} className="w-10 h-10 bg-slate-300 hover:bg-slate-400 text-slate-800 rounded shadow flex items-center justify-center" title="Configuración">
-                                        <Icon name="settings" size={20}/>
-                                    </button>
                                 </div>
                             </div>
                             
