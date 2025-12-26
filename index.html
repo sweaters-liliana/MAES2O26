@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistema VIVA ROUSS v3.9.7</title>
+    <title>Sistema VIVA ROUSS v3.9.8</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#334155">
@@ -183,13 +183,13 @@
             useEffect(() => { const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
             const handleInstall = async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') setDeferredPrompt(null); };
             if (!deferredPrompt) return null;
-            // Botón estilo icono para mantener uniformidad
             return (<button onClick={handleInstall} className="w-10 h-10 bg-yellow-500 hover:bg-yellow-600 text-black rounded font-bold shadow flex items-center justify-center animate-pulse" title="Instalar App"><Icon name="download-cloud" size={20}/></button>);
         };
 
         const MachineCard = ({ maquina, orders }) => {
             const [is24Hours, setIs24Hours] = useState(true);
             const pendingPackages = useMemo(() => {
+                if(!orders) return [];
                 let pkgs = [];
                 orders.forEach(o => { const incomplete = o.progreso?.filter(p => !p.finished) || []; incomplete.forEach(p => { const pieceData = o.subPiecesData?.find(sp => sp.pieza === p.piezaNombre) || o; const timePerPiece = Number(pieceData.tiempo) || 0; pkgs.push({ ...p, parentOrderId: o.id, orderCode: o.codigo, partida: o.partida, timeTotal: (p.cantidad * timePerPiece) }); }); });
                 return pkgs; 
@@ -242,16 +242,37 @@
             return <img src={imgSrc} onError={handleError} className={className} />;
         };
 
-        // --- VISOR DE ORDEN (MODAL DE IMPRESIÓN ETC) ---
+        // --- VISOR DE ORDEN (MODIFICADO PARA ELIMINAR) ---
         const OrderView = ({ order, config, onBack, onEdit }) => { 
             const [entry, setEntry] = useState({ tejedor: '', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' });
+            const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Estado para la alerta personalizada
+            
+            // Protección contra orden inexistente
+            if (!order) {
+                return (
+                    <div className="h-screen flex flex-col items-center justify-center bg-slate-100 p-4">
+                        <Icon name="alert-circle" size={48} className="text-slate-400 mb-4"/>
+                        <h2 className="text-xl font-bold text-slate-700 mb-2">Orden no encontrada</h2>
+                        <p className="text-slate-500 mb-6">Esta orden fue eliminada o no existe.</p>
+                        <button onClick={onBack} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow hover:bg-indigo-700 transition">Regresar al Tablero</button>
+                    </div>
+                );
+            }
+
             const markPackage = async (pkgId) => { if(!entry.tejedor) return alert("Por favor selecciona un TEJEDOR"); const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: true, tejedor: entry.tejedor, fecha: entry.fecha, defectos: entry.defectos, agujas: entry.agujas} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
             const unmarkPackage = async (pkgId) => { const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
+            
             const toggleArchive = async () => {
-                if (order.status === 'ARCHIVADO') { if(window.confirm("¿Desarchivar esta orden?")){ await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); onBack(); } return; }
+                if (order.status === 'ARCHIVADO') { 
+                    // Usamos confirm normal para archivar/desarchivar (menos crítico) o podrías hacer modal
+                    if(window.confirm("¿Desarchivar esta orden?")){ await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); onBack(); } 
+                    return; 
+                }
                 const incompletePkgs = order.progreso.filter(p => !p.finished);
-                if (incompletePkgs.length === 0) { if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); onBack(); } 
-                else {
+                if (incompletePkgs.length === 0) { 
+                    if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; 
+                    await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); onBack(); 
+                } else {
                     const msg = `⚠️ ADVERTENCIA: Hay ${incompletePkgs.length} paquetes SIN TERMINAR.\n\nSi archiva ahora, el sistema asume que NO se tejieron y REGRESARÁ el material calculado al inventario.\n\n¿Está seguro?`;
                     if(!window.confirm(msg)) return;
                     try {
@@ -268,15 +289,54 @@
                     } catch (e) { console.error(e); alert("Error al actualizar inventario. Revise la consola."); }
                 }
             };
+
+            const handleDelete = async () => {
+                try {
+                    await db.collection('orders').doc(String(order.id)).delete();
+                    setShowDeleteConfirm(false);
+                    onBack(); // Regresar inmediatamente para evitar errores
+                } catch (e) {
+                    alert("Error al eliminar: " + e.message);
+                }
+            };
+
             const minutosPorPrenda = order.subPiecesData.reduce((acc, curr) => acc + (Number(curr.tiempo) || 0), 0);
             const piezasPorHora = minutosPorPrenda > 0 ? (60 / minutosPorPrenda).toFixed(0) : 0;
             const piezasPorTurno = minutosPorPrenda > 0 ? ((60 / minutosPorPrenda) * 12).toFixed(0) : 0;
 
             return (
                 <div className="bg-white min-h-screen relative">
-                    <div className="no-print p-4 border-b flex justify-between bg-slate-50 sticky top-0 z-10 shadow-sm">
-                        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 font-bold"><Icon name="arrow-left"/> Volver</button>
-                        <div className="flex gap-2">
+                    
+                    {/* --- MODAL DE ADVERTENCIA PERSONALIZADO (NO BROWSER ALERT) --- */}
+                    {showDeleteConfirm && (
+                        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+                            <div className="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full border border-slate-200 text-center transform scale-100 transition-transform">
+                                <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                                    <Icon name="trash-2" size={24} className="text-red-600"/>
+                                </div>
+                                <h3 className="text-lg font-black text-slate-800 mb-2">¿ELIMINAR ORDEN?</h3>
+                                <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                                    Esta acción eliminará permanentemente la orden <strong>{order.codigo}</strong> de la base de datos.<br/><br/>
+                                    <span className="font-bold text-red-500">Esta acción no se puede deshacer.</span>
+                                </p>
+                                <div className="flex gap-3">
+                                    <button onClick={()=>setShowDeleteConfirm(false)} className="flex-1 bg-slate-200 text-slate-700 py-3 rounded-lg font-bold hover:bg-slate-300 transition">
+                                        CANCELAR
+                                    </button>
+                                    <button onClick={handleDelete} className="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 shadow-lg shadow-red-200 transition">
+                                        SÍ, ELIMINAR
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="no-print p-4 border-b flex flex-wrap gap-2 justify-between bg-slate-50 sticky top-0 z-10 shadow-sm">
+                        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 font-bold hover:text-slate-900"><Icon name="arrow-left"/> Volver</button>
+                        <div className="flex gap-2 flex-wrap">
+                             {/* BOTÓN ELIMINAR NUEVO */}
+                             <button onClick={() => setShowDeleteConfirm(true)} className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-red-200 transition"><Icon name="trash-2" size={14}/> ELIMINAR</button>
+                             
                              <button onClick={toggleArchive} className={`px-3 py-1 rounded font-bold text-xs flex items-center gap-1 text-white ${order.status === 'ARCHIVADO' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}><Icon name={order.status === 'ARCHIVADO' ? "refresh-ccw" : "archive"}/> {order.status === 'ARCHIVADO' ? 'DESARCHIVAR' : 'ARCHIVAR ORDEN'}</button>
                              <button onClick={() => window.location.href='papeletas.html'} className="bg-purple-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-purple-700 shadow"><Icon name="tags"/> PAPELETAS (4x6)</button>
                              <button onClick={() => onEdit(order)} className="bg-indigo-600 text-white px-3 py-1 rounded font-bold text-xs flex items-center gap-1 hover:bg-indigo-700"><Icon name="file-edit"/> EDITAR</button>
@@ -377,17 +437,24 @@
                 return Object.values(groups).sort((a,b) => b.partida.localeCompare(a.partida));
             }, [orders, viewMode]);
 
+            // Encontrar la orden actualizada del state para evitar ver datos viejos o borrados
+            const currentSelectedOrder = useMemo(() => {
+                if (!selectedOrder) return null;
+                return orders.find(o => o.id === selectedOrder.id);
+            }, [orders, selectedOrder]);
+
             return (
                 <div className="h-screen bg-slate-100 overflow-hidden relative">
                     
-                    {view === 'detail' && selectedOrder && <div className="absolute inset-0 z-40 bg-white overflow-y-auto print-visible-wrapper"><OrderView order={orders.find(o=>o.id===selectedOrder.id) || selectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
+                    {/* Pasamos currentSelectedOrder en lugar de selectedOrder para que detecte si fue borrada */}
+                    {view === 'detail' && <div className="absolute inset-0 z-40 bg-white overflow-y-auto print-visible-wrapper"><OrderView order={currentSelectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
                     
                     {showSettings && <SettingsModal config={config} onClose={()=>setShowSettings(false)} />}
 
                     <div className="dashboard-grid">
                         <div className="top-pane bg-slate-100 p-4">
                             
-                            {/* --- HEADER MODIFICADO (SOLO ICONOS, GRIS OXFORD, VIVA ROUSS) --- */}
+                            {/* --- HEADER --- */}
                             <div className="flex flex-col md:flex-row justify-between items-center mb-4 bg-slate-700 p-3 rounded-lg shadow-md border-b-2 border-slate-500">
                                 <div className="border-b md:border-b-0 border-slate-500 w-full md:w-auto mb-2 md:mb-0 pb-1 md:pb-0 text-center md:text-left">
                                     <h1 className="text-xl font-black text-white leading-none tracking-widest select-none">
@@ -395,43 +462,29 @@
                                     </h1>
                                 </div>
                                 <div className="flex gap-2 items-center justify-center flex-wrap">
-                                    {/* 1. INSTALAR */}
                                     <InstallButton />
-
-                                    {/* 2. GENERADOR (AHORA ES SOLO UN LINK) */}
                                     {viewMode === 'active' && (
                                         <button onClick={()=>window.location.href='generador_pedidos.html'} className="w-10 h-10 bg-green-600 hover:bg-green-700 text-white rounded font-bold shadow flex items-center justify-center animate-bounce" title="Generar Orden">
                                             <Icon name="plus" size={20}/>
                                         </button>
                                     )}
-
-                                    {/* 3. CONSOLIDADOR */}
                                     <button onClick={() => window.location.href='post-tejido-check.html'} className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow flex items-center justify-center" title="Consolidador">
                                         <Icon name="list-checks" size={20}/>
                                     </button>
-
-                                    {/* 4. INVENTARIO */}
                                     <button onClick={() => window.location.href='inventario.html'} className="w-10 h-10 bg-teal-600 hover:bg-teal-700 text-white rounded font-bold shadow flex items-center justify-center" title="Inventario">
                                         <Icon name="package-search" size={20}/>
                                     </button>
-                                    
-                                    {/* 5. HISTORIAL / PLANTA (TOGGLE) */}
                                     <button onClick={()=>setViewMode(viewMode === 'active' ? 'history' : 'active')} className={`w-10 h-10 rounded font-bold shadow flex items-center justify-center transition ${viewMode === 'active' ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-slate-500 text-white'}`} title={viewMode === 'active' ? 'Ir al Historial' : 'Ver Planta'}>
                                         <Icon name={viewMode === 'active' ? 'history' : 'activity'} size={20}/>
                                     </button>
-
-                                    {/* 6. GALERÍA */}
                                     <button onClick={()=>window.location.href='galeria_de_modelos.html'} className="w-10 h-10 bg-sky-500 hover:bg-sky-600 text-white rounded font-bold shadow flex items-center justify-center" title="Galería">
                                         <Icon name="image-search" size={20}/>
                                     </button>
-
-                                    {/* 7. CONFIGURACIÓN */}
                                     <button onClick={()=>setShowSettings(true)} className="w-10 h-10 bg-slate-300 hover:bg-slate-400 text-slate-800 rounded shadow flex items-center justify-center" title="Configuración">
                                         <Icon name="settings" size={20}/>
                                     </button>
                                 </div>
                             </div>
-                            {/* --- FIN HEADER MODIFICADO --- */}
                             
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-4">
                                 {displayedGroups.map(group => (
