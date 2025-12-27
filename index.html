@@ -458,13 +458,39 @@
                         {order.progreso?.map((p) => (<PackageTicket key={p.id} order={order} pkg={p} />))}
                         <div className="print-visible-wrapper">
                              <div className="flex justify-between items-start mb-4 border-b-4 border-black pb-2">
-                                <div className="w-8/12"><h1 className="font-black uppercase tracking-tighter">{order.cliente}</h1><div className="flex gap-6 items-baseline header-info"><div className="uppercase">PARTIDA: {order.partida}</div><div className="text-slate-700 uppercase">MOD: {order.codigo}</div></div></div>
+                                <div className="w-8/12">
+                                    <h1 className="font-black uppercase tracking-tighter text-4xl mb-1">{order.cliente}</h1>
+                                    {/* CAMBIO: AUMENTADO TAMAÑO DE PARTIDA Y MODELO */}
+                                    <div className="flex flex-col gap-1 header-info">
+                                        <div className="text-3xl font-black uppercase">PARTIDA: {order.partida}</div>
+                                        <div className="text-3xl font-black uppercase text-slate-800">MOD: {order.codigo}</div>
+                                    </div>
+                                </div>
                                 <div className="w-3/12 text-right"><div className="machine-number-box">MÁQUINA</div><div className="machine-number-val">{order.maquina}</div></div>
                              </div>
                              <div className="flex gap-4">
                                 <div className="w-7/12 flex flex-col gap-2">
                                     <table className="mb-0"><thead><tr><th className="text-left">PIEZA</th><th className="w-20">TALLA</th><th className="w-20">TOTAL</th></tr></thead><tbody>{order.subPiecesData.map((p,i)=>(<tr key={i}><td className="truncate">{p.pieza}</td><td className="text-center">{p.talla}</td><td className="text-center font-black">{p.totalPedido}</td></tr>))}</tbody></table>
-                                    <table className="mb-0"><thead><tr><th colSpan="3" className="bg-black text-white py-1 text-sm">ENHEBRADO</th></tr><tr><th className="w-12">#</th><th className="text-left">Material</th><th className="w-16">%</th></tr></thead><tbody>{order.threading && order.threading.map((row, i) => (<tr key={i}><td className="text-center font-bold">{row.guia}</td><td className="truncate">{row.material}</td><td className="text-center font-bold">{row.porcentaje}</td></tr>))}</tbody></table>
+                                    
+                                    {/* CAMBIO: TABLA DE ENHEBRADO SIN COLUMNA GUIA */}
+                                    <table className="mb-0">
+                                        <thead>
+                                            <tr><th colSpan="2" className="bg-black text-white py-1 text-sm">ENHEBRADO</th></tr>
+                                            <tr>
+                                                <th className="text-left">Material</th>
+                                                <th className="w-16">%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {order.threading && order.threading.map((row, i) => (
+                                                <tr key={i}>
+                                                    <td className="truncate font-bold text-sm">{row.material}</td>
+                                                    <td className="text-center font-bold">{row.porcentaje}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+
                                     <div className="flex gap-2 mt-1"><div className="w-1/2 border-2 border-black flex flex-col justify-center items-center p-2"><span className="text-sm font-bold uppercase w-full text-center border-b-2 border-black mb-1">PZS/HR</span><span className="text-3xl font-black">{piezasPorHora}</span></div><div className="w-1/2 border-2 border-black flex flex-col justify-center items-center p-2"><span className="text-sm font-bold uppercase w-full text-center border-b-2 border-black mb-1">PZS/12H</span><span className="text-3xl font-black">{piezasPorTurno}</span></div></div>
                                 </div>
                                 <div className="w-5/12 border-2 border-black flex items-center justify-center relative bg-white overflow-hidden p-2 h-auto"><SmartImage repoUrls={config.repoUrls} codigo={order.codigo} className="max-h-64 w-full object-contain"/></div>
