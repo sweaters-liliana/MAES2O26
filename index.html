@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v3.9.5 (Hub Central)</title>
+    <title>Sistema Textil Cloud - Cirineo v4.0 (AI Hub)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#1e293b">
@@ -74,6 +74,10 @@
         .pkg-list::-webkit-scrollbar-thumb { background: #64748b; border-radius: 4px; }
         .obs-input { background: transparent; border: none; color: #cbd5e1; width: 100%; font-size: 10px; border-bottom: 1px solid #475569; }
         .obs-input:focus { outline: none; border-bottom: 1px solid #94a3b8; color: white; }
+        
+        /* Chatbot Animation */
+        .chat-bubble { animation: popIn 0.3s ease-out forwards; opacity: 0; transform: translateY(10px); }
+        @keyframes popIn { to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans">
@@ -240,6 +244,115 @@
             );
         };
 
+        // --- MODEL TEMPLATE CREATOR (NUEVO) ---
+        const TemplateCreatorModal = ({ onClose }) => {
+            const [form, setForm] = useState({ modelo: '', cliente: '' });
+            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
+            
+            const handleSaveTemplate = async () => {
+                if(!form.modelo || !form.cliente || components.length === 0) return alert("Completa los campos básicos");
+                try {
+                    await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
+                        modelo: form.modelo.toUpperCase(),
+                        cliente: form.cliente.toUpperCase(),
+                        components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase()})),
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    alert("¡Plantilla Guardada en Memoria!");
+                    onClose();
+                } catch(e) { console.error(e); alert("Error al guardar plantilla"); }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl h-[80vh] flex flex-col">
+                        <div className="bg-purple-700 p-4 text-white flex justify-between items-center shrink-0">
+                            <div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="bot"/> Crear Plantilla Inteligente</h1><div className="text-xs text-purple-200">Esto entrenará al chatbot para futuros pedidos</div></div>
+                            <button onClick={onClose}><Icon name="x"/></button>
+                        </div>
+                        <div className="p-6 overflow-y-auto flex-grow space-y-4">
+                            <div className="grid grid-cols-2 gap-4 bg-purple-50 p-4 rounded border border-purple-100">
+                                <div><label className="block text-xs font-bold text-gray-700">Modelo</label><input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase" placeholder="EJ: POLO-2024"/></div>
+                                <div><label className="block text-xs font-bold text-gray-700">Cliente Habitual</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-sm font-bold text-gray-700">Configuración de Componentes</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">+ Agregar</button></div>
+                                {components.map((comp, idx) => (
+                                    <div key={idx} className="bg-gray-50 p-2 rounded border relative grid grid-cols-12 gap-2 items-end">
+                                        <div className="col-span-12 absolute top-0 right-0 p-1"><button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="text-red-400"><Icon name="x" size={14}/></button></div>
+                                        <div className="col-span-4"><label className="text-[10px] font-bold">Pieza</label><input value={comp.descripcion} onChange={e => { const n=[...components]; n[idx].descripcion=e.target.value.toUpperCase(); setComponents(n); }} className="w-full p-1 border rounded text-xs uppercase"/></div>
+                                        <div className="col-span-2"><label className="text-[10px] font-bold">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const n=[...components]; n[idx].maquina=e.target.value; setComponents(n); }} className="w-full p-1 border rounded text-xs text-center font-bold"/></div>
+                                        <div className="col-span-2"><label className="text-[10px] font-bold">Sufijo</label><input value={comp.sufijo} onChange={e => { const n=[...components]; n[idx].sufijo=e.target.value.toUpperCase(); setComponents(n); }} className="w-full p-1 border rounded text-xs uppercase"/></div>
+                                        <div className="col-span-2"><label className="text-[10px] font-bold">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const n=[...components]; n[idx].multiplicador=Number(e.target.value); setComponents(n); }} className="w-full p-1 border rounded text-xs text-center"/></div>
+                                        <div className="col-span-2"><label className="text-[10px] font-bold">Pzs/Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const n=[...components]; n[idx].piezasPorPaquete=Number(e.target.value); setComponents(n); }} className="w-full p-1 border rounded text-xs text-center bg-blue-50"/></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="p-4 border-t bg-gray-100 flex justify-end">
+                            <button onClick={handleSaveTemplate} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded font-bold shadow flex items-center gap-2"><Icon name="save"/> GUARDAR EN MEMORIA</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- ASISTENTE INTELIGENTE (CHATBOT) ---
+        const ModelAssistant = ({ onApply, onClose }) => {
+            const [query, setQuery] = useState('');
+            const [messages, setMessages] = useState([{ role: 'bot', text: 'Hola 👋, soy el asistente de Cirineo. Escribe un modelo y buscaré en mi memoria para ayudarte.' }]);
+            const [foundTemplate, setFoundTemplate] = useState(null);
+            const [loading, setLoading] = useState(false);
+
+            const searchModel = async () => {
+                if(!query) return;
+                setLoading(true);
+                setMessages(prev => [...prev, { role: 'user', text: query }]);
+                
+                try {
+                    // 1. Buscar en Templates
+                    const doc = await db.collection('model_templates').doc(query.toUpperCase()).get();
+                    if(doc.exists) {
+                        const data = doc.data();
+                        setFoundTemplate(data);
+                        setMessages(prev => [...prev, { role: 'bot', text: `¡Encontré el modelo **${data.modelo}**! Cliente: ${data.cliente}. Tiene ${data.components.length} componentes configurados. ¿Quieres usar estos datos?` }]);
+                    } else {
+                        setMessages(prev => [...prev, { role: 'bot', text: `No encontré una plantilla exacta para "${query}". Intenta crear una plantilla primero en el menú principal.` }]);
+                        setFoundTemplate(null);
+                    }
+                } catch(e) {
+                    setMessages(prev => [...prev, { role: 'bot', text: 'Tuve un error al buscar en la base de datos.' }]);
+                }
+                setLoading(false);
+                setQuery('');
+            };
+
+            return (
+                <div className="absolute top-12 left-0 z-50 w-80 bg-white rounded-lg shadow-2xl border border-indigo-200 flex flex-col overflow-hidden" style={{height: '400px'}}>
+                    <div className="bg-indigo-600 text-white p-2 text-xs font-bold flex justify-between items-center"><span>🤖 Asistente de Producción</span><button onClick={onClose}><Icon name="x" size={14}/></button></div>
+                    <div className="flex-grow p-2 overflow-y-auto bg-slate-50 space-y-2">
+                        {messages.map((m, i) => (
+                            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] p-2 rounded-lg text-xs chat-bubble ${m.role === 'user' ? 'bg-blue-100 text-blue-900' : 'bg-white border text-gray-700 shadow-sm'}`}>
+                                    {m.text}
+                                </div>
+                            </div>
+                        ))}
+                        {loading && <div className="text-center text-xs text-gray-400 italic">Pensando...</div>}
+                    </div>
+                    {foundTemplate && (
+                        <div className="p-2 bg-green-50 border-t border-green-100">
+                            <button onClick={() => onApply(foundTemplate)} className="w-full bg-green-600 hover:bg-green-700 text-white py-1 rounded text-xs font-bold shadow animate-pulse">APLICAR DATOS AL FORMULARIO</button>
+                        </div>
+                    )}
+                    <div className="p-2 border-t bg-white flex gap-1">
+                        <input value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter' && searchModel()} className="flex-grow border rounded p-1 text-xs outline-none focus:border-indigo-500" placeholder="Escribe modelo..." autoFocus/>
+                        <button onClick={searchModel} className="bg-indigo-600 text-white p-1 rounded"><Icon name="send" size={14}/></button>
+                    </div>
+                </div>
+            );
+        };
+
         // --- ORDER GENERATOR ---
         const OrderGeneratorModal = ({ onClose, onProcess }) => {
             const [step, setStep] = useState('input');
@@ -248,6 +361,9 @@
             const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
             const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
             
+            // Estado para el Chatbot
+            const [showAssistant, setShowAssistant] = useState(false);
+
             useEffect(() => {
                 if (!form.fecha) return;
                 const fechaObj = new Date(form.fecha + 'T00:00:00');
@@ -256,6 +372,12 @@
                 const year = fechaObj.getFullYear().toString().slice(-2);
                 setForm(prev => ({ ...prev, partidaCodigo: `${mes}${year}_01` }));
             }, [form.fecha]);
+
+            const handleApplyTemplate = (templateData) => {
+                setForm(prev => ({ ...prev, modelo: templateData.modelo, cliente: templateData.cliente }));
+                setComponents(templateData.components);
+                setShowAssistant(false);
+            };
 
             const handleGenerateDrafts = () => {
                 if (!form.partidaCodigo || !form.cliente || !form.modelo) return alert("Faltan datos generales");
@@ -322,12 +444,23 @@
 
             return (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[90vh] overflow-y-auto flex flex-col">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[90vh] overflow-y-auto flex flex-col relative">
                         <div className="bg-blue-800 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><i className="fas fa-magic"></i> Generador Automático</h1></div><button onClick={onClose} className="text-white font-bold"><Icon name="x"/></button></div>
-                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto">
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto relative">
                             <div className="space-y-4">
                                 <h2 className="text-lg font-semibold text-gray-700 border-b pb-1">1. Datos Generales</h2>
-                                <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Modelo</label><input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div><div><label className="block text-xs font-bold text-gray-700">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div></div>
+                                <div className="grid grid-cols-2 gap-4 relative">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-700 flex justify-between">Modelo 
+                                            <button onClick={()=>setShowAssistant(!showAssistant)} className="text-[10px] text-blue-600 font-black hover:bg-blue-100 px-1 rounded flex items-center gap-1 transition"><Icon name="bot" size={12}/> {showAssistant ? 'Ocultar' : 'ASISTENTE'}</button>
+                                        </label>
+                                        <div className="relative">
+                                            <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase" placeholder="BUSCAR CON BOT ->"/>
+                                            {showAssistant && <ModelAssistant onApply={handleApplyTemplate} onClose={()=>setShowAssistant(false)} />}
+                                        </div>
+                                    </div>
+                                    <div><label className="block text-xs font-bold text-gray-700">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div>
+                                </div>
                                 <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Fecha Entrega</label><input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="w-full p-2 border rounded"/></div><div><label className="block text-xs font-bold text-gray-700">Cód. Partida</label><input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full p-2 border bg-gray-100 rounded font-black"/></div></div>
                                 <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
                             </div>
@@ -460,7 +593,6 @@
                              <div className="flex justify-between items-start mb-4 border-b-4 border-black pb-2">
                                 <div className="w-8/12">
                                     <h1 className="font-black uppercase tracking-tighter text-4xl mb-1">{order.cliente}</h1>
-                                    {/* CAMBIO: AUMENTADO TAMAÑO DE PARTIDA Y MODELO */}
                                     <div className="flex flex-col gap-1 header-info">
                                         <div className="text-3xl font-black uppercase">PARTIDA: {order.partida}</div>
                                         <div className="text-3xl font-black uppercase text-slate-800">MOD: {order.codigo}</div>
@@ -472,7 +604,6 @@
                                 <div className="w-7/12 flex flex-col gap-2">
                                     <table className="mb-0"><thead><tr><th className="text-left">PIEZA</th><th className="w-20">TALLA</th><th className="w-20">TOTAL</th></tr></thead><tbody>{order.subPiecesData.map((p,i)=>(<tr key={i}><td className="truncate">{p.pieza}</td><td className="text-center">{p.talla}</td><td className="text-center font-black">{p.totalPedido}</td></tr>))}</tbody></table>
                                     
-                                    {/* CAMBIO: TABLA DE ENHEBRADO SIN COLUMNA GUIA */}
                                     <table className="mb-0">
                                         <thead>
                                             <tr><th colSpan="2" className="bg-black text-white py-1 text-sm">ENHEBRADO</th></tr>
@@ -526,7 +657,6 @@
             const [isLoadingApi, setIsLoadingApi] = useState(false);
             const [apiError, setApiError] = useState(null);
 
-            // Lista de modelos activos (Lógica original)
             const allCodes = useMemo(() => {
                 const uniqueCodes = new Set(orders.map(o => o.codigo).filter(c => c));
                 return Array.from(uniqueCodes).sort();
@@ -537,15 +667,10 @@
                 return allCodes.filter(c => c.toUpperCase().includes(filter.toUpperCase()));
             }, [allCodes, filter]);
 
-            // LÓGICA DE EXPLORADOR GITHUB (NUEVA)
             const fetchRepoFiles = async () => {
                 if (!config.repoUrls || config.repoUrls.length === 0) return;
                 setIsLoadingApi(true);
                 setApiError(null);
-                
-                // Intento parsear la URL RAW para obtener datos de API
-                // Ejemplo Raw: https://raw.githubusercontent.com/USER/REPO/REF/PATH
-                // Ejemplo Api: https://api.github.com/repos/USER/REPO/contents/PATH?ref=REF
                 
                 try {
                     const rawUrl = config.repoUrls[0];
@@ -563,7 +688,6 @@
                     const data = await response.json();
                     if (!Array.isArray(data)) throw new Error("La respuesta no es una lista de archivos.");
                     
-                    // Filtrar solo imágenes
                     const images = data.filter(file => 
                         file.type === 'file' && 
                         (file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.png') || file.name.toLowerCase().endsWith('.jpeg'))
@@ -612,7 +736,6 @@
                         
                         <div className="flex-grow overflow-y-auto bg-slate-50 p-2 rounded border">
                             
-                            {/* MODO 1: ORDENES ACTIVAS (Lógica Anterior) */}
                             {mode === 'active' && (
                                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                                     {config.repoUrls && config.repoUrls.map((repo, idx) => (
@@ -629,7 +752,6 @@
                                 </div>
                             )}
 
-                            {/* MODO 2: EXPLORADOR API (Nueva Lógica) */}
                             {mode === 'explorer' && (
                                 <div>
                                     {isLoadingApi && <div className="text-center py-10 flex flex-col items-center text-indigo-600"><Icon name="loader-2" className="animate-spin mb-2" size={32}/>Cargando lista de archivos desde GitHub...</div>}
@@ -672,6 +794,9 @@
             const [showGenerator, setShowGenerator] = useState(false); 
             const [showGallery, setShowGallery] = useState(false);
             const [viewMode, setViewMode] = useState('active'); 
+            
+            // Nuevo Estado para el modal de plantillas
+            const [showTemplateCreator, setShowTemplateCreator] = useState(false);
             
             useEffect(() => {
                 const u1 = db.collection('orders').onSnapshot(s => setOrders(s.docs.map(d=>d.data())));
@@ -726,8 +851,9 @@
 
             return (
                 <div className="h-screen bg-slate-100 overflow-hidden relative">
-                    {/* AQUÍ ESTÁ EL NUEVO MODAL GENERADOR CON STAGING */}
+                    {/* MODALES */}
                     {showGenerator && <OrderGeneratorModal onClose={()=>setShowGenerator(false)} onProcess={handleGeneratorSuccess} />}
+                    {showTemplateCreator && <TemplateCreatorModal onClose={()=>setShowTemplateCreator(false)} />}
                     
                     {view === 'detail' && selectedOrder && <div className="absolute inset-0 z-40 bg-white overflow-y-auto print-visible-wrapper"><OrderView order={orders.find(o=>o.id===selectedOrder.id) || selectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
                     
@@ -740,12 +866,11 @@
                                 <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
                                     <Icon name="layout-dashboard"/> 
                                     <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
-                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v3.9.5 NAV-CHECK</span>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.0 AI-HUB</span>
                                 </h1>
                                 <div className="flex gap-2 items-center">
                                     <InstallButton />
 
-                                    {/* --- NUEVOS BOTONES DE NAVEGACIÓN PRINCIPAL --- */}
                                     <button onClick={() => window.location.href='post-tejido-check.html'} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
                                         <Icon name="list-checks"/> CONSOLIDADOR
                                     </button>
@@ -762,11 +887,15 @@
                                     <button onClick={()=>setShowGallery(true)} className="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs"><Icon name="image-search"/> GALERÍA</button>
                                     <button onClick={()=>setShowSettings(true)} className="bg-slate-300 hover:bg-slate-400 text-slate-800 p-2 rounded shadow"><Icon name="settings"/></button>
                                     
-                                    {/* BOTÓN PRINCIPAL GENERADOR */}
                                     {viewMode === 'active' && (
-                                        <button onClick={()=>setShowGenerator(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 animate-bounce">
-                                            <Icon name="wand-2"/> GENERAR ORDEN AUTOMÁTICA
-                                        </button>
+                                        <>
+                                            <button onClick={()=>setShowTemplateCreator(true)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 text-xs">
+                                                <Icon name="bot"/> CREAR PLANTILLA (IA)
+                                            </button>
+                                            <button onClick={()=>setShowGenerator(true)} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-bold shadow flex items-center gap-2 animate-bounce">
+                                                <Icon name="wand-2"/> GENERAR ORDEN AUTOMÁTICA
+                                            </button>
+                                        </>
                                     )}
                                 </div>
                             </div>
