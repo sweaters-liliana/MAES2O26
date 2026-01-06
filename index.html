@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v4.0 (AI Hub)</title>
+    <title>Sistema Textil Cloud - Cirineo v4.1 (Smart Templates)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#1e293b">
@@ -127,6 +127,55 @@
             }, [onScan]);
         };
 
+        // --- COMPONENTE DE INPUT DE TIEMPO (MM:SS) ---
+        const TimeInput = ({ value, onChange, disabled }) => {
+            // Value viene en minutos decimales (ej: 2.5 = 2 min 30 seg)
+            const [mins, setMins] = useState('');
+            const [secs, setSecs] = useState('');
+
+            useEffect(() => {
+                if (value === undefined || value === '' || value === null) {
+                    setMins(''); setSecs('');
+                } else {
+                    const totalMins = parseFloat(value);
+                    const m = Math.floor(totalMins);
+                    const s = Math.round((totalMins - m) * 60);
+                    setMins(m.toString());
+                    setSecs(s < 10 ? '0' + s : s.toString());
+                }
+            }, [value]);
+
+            const handleChange = (newM, newS) => {
+                const m = parseInt(newM) || 0;
+                const s = parseInt(newS) || 0;
+                const decimalValue = (m + (s / 60)).toFixed(4); // 4 decimales para precisión
+                onChange(decimalValue);
+            };
+
+            return (
+                <div className="flex items-center gap-1">
+                    <input 
+                        type="number" 
+                        value={mins} 
+                        placeholder="00"
+                        disabled={disabled}
+                        onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} 
+                        className={`w-10 text-center border rounded p-1 text-xs font-mono focus:border-indigo-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`}
+                    />
+                    <span className="font-bold text-gray-400">:</span>
+                    <input 
+                        type="number" 
+                        value={secs} 
+                        placeholder="00"
+                        max="59"
+                        disabled={disabled}
+                        onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} 
+                        className={`w-10 text-center border rounded p-1 text-xs font-mono focus:border-indigo-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`}
+                    />
+                </div>
+            );
+        };
+
         // --- COMPONENTE PAPELETA INDIVIDUAL (4x6) ---
         const PackageTicket = ({ order, pkg }) => {
             const canvasRef = useRef(null);
@@ -226,10 +275,13 @@
                             {localDraft.subPiecesData.map((p, idx) => (
                                 <div key={idx} className="bg-white border rounded p-3 mb-2 shadow-sm">
                                     <div className="font-bold text-indigo-700 mb-2 border-b pb-1">{p.pieza}</div>
-                                    <div className="grid grid-cols-4 gap-2">
+                                    <div className="grid grid-cols-4 gap-2 items-center">
                                         <div><label className="text-[10px] font-bold text-gray-400">Talla</label><input value={p.talla} onChange={e=>updatePiece(idx,'talla',e.target.value)} className="w-full border p-1 rounded text-xs font-bold"/></div>
                                          <div><label className="text-[10px] font-bold text-gray-400">Peso (g)</label><input value={p.peso} onChange={e=>updatePiece(idx,'peso',e.target.value)} className="w-full border p-1 rounded text-xs"/></div>
-                                         <div><label className="text-[10px] font-bold text-gray-400">Tiempo (min)</label><input value={p.tiempo} onChange={e=>updatePiece(idx,'tiempo',e.target.value)} className="w-full border p-1 rounded text-xs"/></div>
+                                         <div>
+                                            <label className="text-[10px] font-bold text-gray-400">Tiempo (Min:Seg)</label>
+                                            <TimeInput value={p.tiempo} onChange={val => updatePiece(idx, 'tiempo', val)} />
+                                        </div>
                                         <div><label className="text-[10px] font-bold text-gray-400">Cant.</label><input value={p.totalPedido} disabled className="w-full border p-1 rounded text-xs bg-gray-100 text-center"/></div>
                                     </div>
                                 </div>
@@ -244,11 +296,34 @@
             );
         };
 
-        // --- MODEL TEMPLATE CREATOR (NUEVO) ---
+        // --- MODEL TEMPLATE CREATOR (MEJORADO CON HILOS Y TIEMPO) ---
         const TemplateCreatorModal = ({ onClose }) => {
             const [form, setForm] = useState({ modelo: '', cliente: '' });
-            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
+            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+            const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
             
+            // Inventario para autocompletado en Plantilla
+            const [inventory, setInventory] = useState([]);
+            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+
+            useEffect(() => {
+                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => { if (doc.exists && doc.data().items) setInventory(doc.data().items); });
+                return () => unsubscribe();
+            }, []);
+
+            // Lógica de Threading en Plantilla
+            const handleMaterialInput = (idx, val) => { 
+                const newThreads = [...threading]; newThreads[idx].material = val; setThreading(newThreads);
+                if (val.length > 1) { const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); setSuggestions({ index: idx, items: filtered }); } 
+                else { setSuggestions({ index: null, items: [] }); } 
+            };
+            const selectSuggestion = (idx, item) => { 
+                const newThreads = [...threading]; 
+                newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id }; 
+                setThreading(newThreads); setSuggestions({ index: null, items: [] }); 
+            };
+            const updateComp = (idx, field, val) => { const n=[...components]; n[idx][field]= field === 'descripcion' || field === 'sufijo' ? val.toUpperCase() : val; setComponents(n); };
+
             const handleSaveTemplate = async () => {
                 if(!form.modelo || !form.cliente || components.length === 0) return alert("Completa los campos básicos");
                 try {
@@ -256,35 +331,70 @@
                         modelo: form.modelo.toUpperCase(),
                         cliente: form.cliente.toUpperCase(),
                         components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase()})),
+                        threading: threading, // Guardamos la receta de hilos
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    alert("¡Plantilla Guardada en Memoria!");
+                    alert("¡Plantilla Completa Guardada!");
                     onClose();
                 } catch(e) { console.error(e); alert("Error al guardar plantilla"); }
             };
 
             return (
                 <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl h-[80vh] flex flex-col">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
                         <div className="bg-purple-700 p-4 text-white flex justify-between items-center shrink-0">
-                            <div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="bot"/> Crear Plantilla Inteligente</h1><div className="text-xs text-purple-200">Esto entrenará al chatbot para futuros pedidos</div></div>
+                            <div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="bot"/> Crear Plantilla Maestra</h1><div className="text-xs text-purple-200">Entrena al sistema con Datos, Hilos y Tiempos</div></div>
                             <button onClick={onClose}><Icon name="x"/></button>
                         </div>
-                        <div className="p-6 overflow-y-auto flex-grow space-y-4">
+                        <div className="p-6 overflow-y-auto flex-grow space-y-6">
+                            
+                            {/* 1. Datos Generales */}
                             <div className="grid grid-cols-2 gap-4 bg-purple-50 p-4 rounded border border-purple-100">
                                 <div><label className="block text-xs font-bold text-gray-700">Modelo</label><input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase" placeholder="EJ: POLO-2024"/></div>
                                 <div><label className="block text-xs font-bold text-gray-700">Cliente Habitual</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div>
                             </div>
+
+                            {/* 2. Receta de Hilos (Threading) */}
+                            <div className="bg-white border rounded p-4 shadow-sm">
+                                <div className="flex justify-between items-center mb-2 border-b pb-1">
+                                    <h2 className="text-sm font-bold text-indigo-700 flex items-center gap-2"><Icon name="spool"/> Receta de Hilos (Enhebrado Base)</h2>
+                                    <button onClick={() => setThreading([...threading, {guia: threading.length+1, material: '', porcentaje: '', materialId: null}])} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">+ Hilo</button>
+                                </div>
+                                <table className="w-full text-xs">
+                                    <thead className="bg-slate-100"><tr><th className="p-1 w-10">Guía</th><th className="p-1">Material (Inventario)</th><th className="p-1 w-16">%</th><th className="w-6"></th></tr></thead>
+                                    <tbody>
+                                        {threading.map((h, i) => (
+                                            <tr key={i} className="relative">
+                                                <td><input value={h.guia} onChange={e=>{const n=[...threading]; n[i].guia=e.target.value; setThreading(n);}} className="w-full text-center border-b"/></td>
+                                                <td className="p-1"><input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full border p-1 rounded" placeholder="Buscar..."/>{suggestions.index === i && suggestions.items.length > 0 && (<div className="absolute z-50 bg-white border shadow-lg w-full max-w-md max-h-40 overflow-y-auto left-0 mt-1 rounded">{suggestions.items.map(item => (<div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b flex justify-between items-center"><div><span className="font-bold text-slate-700">{item.material}</span></div><span className="text-[9px]">Stock: {item.stock}</span></div>))}</div>)}</td>
+                                                <td><input value={h.porcentaje} onChange={e=>{const n=[...threading]; n[i].porcentaje=e.target.value; setThreading(n);}} className="w-full text-center border p-1" placeholder="%"/></td>
+                                                <td className="text-center"><button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-500">x</button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* 3. Componentes y Tiempos */}
                             <div className="space-y-2">
-                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-sm font-bold text-gray-700">Configuración de Componentes</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">+ Agregar</button></div>
+                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-sm font-bold text-gray-700">Configuración de Componentes y Tiempos</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">+ Agregar Componente</button></div>
                                 {components.map((comp, idx) => (
                                     <div key={idx} className="bg-gray-50 p-2 rounded border relative grid grid-cols-12 gap-2 items-end">
                                         <div className="col-span-12 absolute top-0 right-0 p-1"><button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="text-red-400"><Icon name="x" size={14}/></button></div>
-                                        <div className="col-span-4"><label className="text-[10px] font-bold">Pieza</label><input value={comp.descripcion} onChange={e => { const n=[...components]; n[idx].descripcion=e.target.value.toUpperCase(); setComponents(n); }} className="w-full p-1 border rounded text-xs uppercase"/></div>
-                                        <div className="col-span-2"><label className="text-[10px] font-bold">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const n=[...components]; n[idx].maquina=e.target.value; setComponents(n); }} className="w-full p-1 border rounded text-xs text-center font-bold"/></div>
-                                        <div className="col-span-2"><label className="text-[10px] font-bold">Sufijo</label><input value={comp.sufijo} onChange={e => { const n=[...components]; n[idx].sufijo=e.target.value.toUpperCase(); setComponents(n); }} className="w-full p-1 border rounded text-xs uppercase"/></div>
-                                        <div className="col-span-2"><label className="text-[10px] font-bold">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const n=[...components]; n[idx].multiplicador=Number(e.target.value); setComponents(n); }} className="w-full p-1 border rounded text-xs text-center"/></div>
-                                        <div className="col-span-2"><label className="text-[10px] font-bold">Pzs/Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const n=[...components]; n[idx].piezasPorPaquete=Number(e.target.value); setComponents(n); }} className="w-full p-1 border rounded text-xs text-center bg-blue-50"/></div>
+                                        
+                                        <div className="col-span-3"><label className="text-[10px] font-bold">Pieza</label><input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
+                                        <div className="col-span-1"><label className="text-[10px] font-bold">MQ</label><input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="w-full p-1 border rounded text-xs text-center font-bold"/></div>
+                                        <div className="col-span-2"><label className="text-[10px] font-bold">Sufijo</label><input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
+                                        
+                                        <div className="col-span-1"><label className="text-[10px] font-bold" title="Multiplicador">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="w-full p-1 border rounded text-xs text-center"/></div>
+                                        <div className="col-span-1"><label className="text-[10px] font-bold" title="Piezas por Paquete">P/Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="w-full p-1 border rounded text-xs text-center bg-blue-50"/></div>
+                                        
+                                        {/* NUEVOS CAMPOS */}
+                                        <div className="col-span-2"><label className="text-[10px] font-bold text-orange-600">Peso (g)</label><input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="w-full p-1 border rounded text-xs text-center border-orange-200" placeholder="0.0"/></div>
+                                        <div className="col-span-2">
+                                            <label className="text-[10px] font-bold text-orange-600">Tiempo (Min:Seg)</label>
+                                            <TimeInput value={comp.tiempo} onChange={val => updateComp(idx, 'tiempo', val)} />
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -315,7 +425,7 @@
                     if(doc.exists) {
                         const data = doc.data();
                         setFoundTemplate(data);
-                        setMessages(prev => [...prev, { role: 'bot', text: `¡Encontré el modelo **${data.modelo}**! Cliente: ${data.cliente}. Tiene ${data.components.length} componentes configurados. ¿Quieres usar estos datos?` }]);
+                        setMessages(prev => [...prev, { role: 'bot', text: `¡Encontré el modelo **${data.modelo}**! Cliente: ${data.cliente}. Tiene receta de hilos y ${data.components.length} componentes. ¿Aplicar todo?` }]);
                     } else {
                         setMessages(prev => [...prev, { role: 'bot', text: `No encontré una plantilla exacta para "${query}". Intenta crear una plantilla primero en el menú principal.` }]);
                         setFoundTemplate(null);
@@ -342,7 +452,7 @@
                     </div>
                     {foundTemplate && (
                         <div className="p-2 bg-green-50 border-t border-green-100">
-                            <button onClick={() => onApply(foundTemplate)} className="w-full bg-green-600 hover:bg-green-700 text-white py-1 rounded text-xs font-bold shadow animate-pulse">APLICAR DATOS AL FORMULARIO</button>
+                            <button onClick={() => onApply(foundTemplate)} className="w-full bg-green-600 hover:bg-green-700 text-white py-1 rounded text-xs font-bold shadow animate-pulse">APLICAR DATOS COMPLETOS</button>
                         </div>
                     )}
                     <div className="p-2 border-t bg-white flex gap-1">
@@ -359,9 +469,11 @@
             const [drafts, setDrafts] = useState([]);
             const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
             const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
-            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }]);
             
-            // Estado para el Chatbot
+            // Estado extendido para soportar lo que viene de la plantilla
+            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+            const [templateThreading, setTemplateThreading] = useState([]); // Guardamos el threading de la plantilla temporalmente
+            
             const [showAssistant, setShowAssistant] = useState(false);
 
             useEffect(() => {
@@ -375,7 +487,8 @@
 
             const handleApplyTemplate = (templateData) => {
                 setForm(prev => ({ ...prev, modelo: templateData.modelo, cliente: templateData.cliente }));
-                setComponents(templateData.components);
+                setComponents(templateData.components || []);
+                if(templateData.threading) setTemplateThreading(templateData.threading);
                 setShowAssistant(false);
             };
 
@@ -383,19 +496,37 @@
                 if (!form.partidaCodigo || !form.cliente || !form.modelo) return alert("Faltan datos generales");
                 const ordersByMachine = {};
                 let hasValidComponent = false;
+                
                 components.forEach(comp => {
                     if(!comp.descripcion || !comp.maquina) return;
                     hasValidComponent = true;
                     const maquinaKey = String(comp.maquina);
+                    
                     if (!ordersByMachine[maquinaKey]) {
+                        // Si tenemos threading de plantilla, lo usamos, si no, uno vacío por defecto
+                        const initialThreading = templateThreading.length > 0 
+                            ? templateThreading 
+                            : [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }];
+
                         ordersByMachine[maquinaKey] = {
                             codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(), maquina: maquinaKey, partida: form.partidaCodigo.toUpperCase(),
                             subPiecesData: [], predefinedPackages: [], createdAt: new Date().toLocaleString('es-MX'),
-                            threading: [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }]
+                            threading: initialThreading
                         };
                     }
+                    
                     const totalPiezasComp = form.totalPrendas * comp.multiplicador;
-                    ordersByMachine[maquinaKey].subPiecesData.push({ id: Date.now() + Math.random(), pieza: comp.descripcion.toUpperCase(), talla: 'UNI', totalPedido: totalPiezasComp, peso: '', tiempo: '' });
+                    
+                    // Aquí inyectamos el PESO y TIEMPO que vino de la plantilla (o que está vacío)
+                    ordersByMachine[maquinaKey].subPiecesData.push({ 
+                        id: Date.now() + Math.random(), 
+                        pieza: comp.descripcion.toUpperCase(), 
+                        talla: 'UNI', 
+                        totalPedido: totalPiezasComp, 
+                        peso: comp.peso || '', 
+                        tiempo: comp.tiempo || '' 
+                    });
+                    
                     const numPaquetes = comp.piezasPorPaquete > 0 ? Math.ceil(totalPiezasComp / comp.piezasPorPaquete) : 0;
                     for (let i = 1; i <= numPaquetes; i++) {
                         const cantidad = (i === numPaquetes && totalPiezasComp % comp.piezasPorPaquete !== 0) ? totalPiezasComp % comp.piezasPorPaquete : comp.piezasPorPaquete;
@@ -405,6 +536,7 @@
                         });
                     }
                 });
+                
                 if(!hasValidComponent) return alert("Agrega al menos un componente válido");
                 setDrafts(Object.values(ordersByMachine));
                 setStep('staging');
@@ -465,7 +597,7 @@
                                 <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
                             </div>
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0 }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
+                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
                                 <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
                                     {components.map((comp, idx) => (
                                         <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
@@ -866,7 +998,7 @@
                                 <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
                                     <Icon name="layout-dashboard"/> 
                                     <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
-                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.0 AI-HUB</span>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.1 AI-HUB</span>
                                 </h1>
                                 <div className="flex gap-2 items-center">
                                     <InstallButton />
