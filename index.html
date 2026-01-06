@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v4.1 (Smart Templates)</title>
+    <title>Sistema Textil Cloud - Cirineo v4.2 (Tallas Update)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#1e293b">
@@ -129,7 +129,6 @@
 
         // --- COMPONENTE DE INPUT DE TIEMPO (MM:SS) ---
         const TimeInput = ({ value, onChange, disabled }) => {
-            // Value viene en minutos decimales (ej: 2.5 = 2 min 30 seg)
             const [mins, setMins] = useState('');
             const [secs, setSecs] = useState('');
 
@@ -148,30 +147,15 @@
             const handleChange = (newM, newS) => {
                 const m = parseInt(newM) || 0;
                 const s = parseInt(newS) || 0;
-                const decimalValue = (m + (s / 60)).toFixed(4); // 4 decimales para precisión
+                const decimalValue = (m + (s / 60)).toFixed(4);
                 onChange(decimalValue);
             };
 
             return (
                 <div className="flex items-center gap-1">
-                    <input 
-                        type="number" 
-                        value={mins} 
-                        placeholder="00"
-                        disabled={disabled}
-                        onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} 
-                        className={`w-10 text-center border rounded p-1 text-xs font-mono focus:border-indigo-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`}
-                    />
+                    <input type="number" value={mins} placeholder="00" disabled={disabled} onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} className={`w-10 text-center border rounded p-1 text-xs font-mono focus:border-indigo-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`} />
                     <span className="font-bold text-gray-400">:</span>
-                    <input 
-                        type="number" 
-                        value={secs} 
-                        placeholder="00"
-                        max="59"
-                        disabled={disabled}
-                        onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} 
-                        className={`w-10 text-center border rounded p-1 text-xs font-mono focus:border-indigo-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`}
-                    />
+                    <input type="number" value={secs} placeholder="00" max="59" disabled={disabled} onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} className={`w-10 text-center border rounded p-1 text-xs font-mono focus:border-indigo-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`} />
                 </div>
             );
         };
@@ -184,11 +168,7 @@
             useEffect(() => {
                 if (canvasRef.current) {
                     const barcodeValue = `${order.id}-${pkg.id}`;
-                    try {
-                        JsBarcode(canvasRef.current, barcodeValue, {
-                            format: "CODE128", displayValue: false, height: 50, width: 2, margin: 0, background: "transparent"
-                        });
-                    } catch (e) { console.error("Error barcode", e); }
+                    try { JsBarcode(canvasRef.current, barcodeValue, { format: "CODE128", displayValue: false, height: 50, width: 2, margin: 0, background: "transparent" }); } catch (e) { console.error("Error barcode", e); }
                 }
             }, [order, pkg]);
 
@@ -296,13 +276,13 @@
             );
         };
 
-        // --- MODEL TEMPLATE CREATOR (MEJORADO CON HILOS Y TIEMPO) ---
+        // --- MODEL TEMPLATE CREATOR (CON TALLA, HILOS Y TIEMPO) ---
         const TemplateCreatorModal = ({ onClose }) => {
             const [form, setForm] = useState({ modelo: '', cliente: '' });
-            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+            // MODIFICADO: Agregada 'talla' al estado inicial
+            const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
             const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
             
-            // Inventario para autocompletado en Plantilla
             const [inventory, setInventory] = useState([]);
             const [suggestions, setSuggestions] = useState({ index: null, items: [] });
 
@@ -311,7 +291,6 @@
                 return () => unsubscribe();
             }, []);
 
-            // Lógica de Threading en Plantilla
             const handleMaterialInput = (idx, val) => { 
                 const newThreads = [...threading]; newThreads[idx].material = val; setThreading(newThreads);
                 if (val.length > 1) { const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); setSuggestions({ index: idx, items: filtered }); } 
@@ -322,7 +301,8 @@
                 newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id }; 
                 setThreading(newThreads); setSuggestions({ index: null, items: [] }); 
             };
-            const updateComp = (idx, field, val) => { const n=[...components]; n[idx][field]= field === 'descripcion' || field === 'sufijo' ? val.toUpperCase() : val; setComponents(n); };
+            // MODIFICADO: Agregada lógica para 'talla'
+            const updateComp = (idx, field, val) => { const n=[...components]; n[idx][field]= (field === 'descripcion' || field === 'sufijo' || field === 'talla') ? val.toUpperCase() : val; setComponents(n); };
 
             const handleSaveTemplate = async () => {
                 if(!form.modelo || !form.cliente || components.length === 0) return alert("Completa los campos básicos");
@@ -330,8 +310,9 @@
                     await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
                         modelo: form.modelo.toUpperCase(),
                         cliente: form.cliente.toUpperCase(),
-                        components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase()})),
-                        threading: threading, // Guardamos la receta de hilos
+                        // MODIFICADO: Guardamos la Talla
+                        components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase(), talla: c.talla.toUpperCase()})),
+                        threading: threading, 
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
                     alert("¡Plantilla Completa Guardada!");
@@ -343,7 +324,7 @@
                 <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4">
                     <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
                         <div className="bg-purple-700 p-4 text-white flex justify-between items-center shrink-0">
-                            <div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="bot"/> Crear Plantilla Maestra</h1><div className="text-xs text-purple-200">Entrena al sistema con Datos, Hilos y Tiempos</div></div>
+                            <div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="bot"/> Crear Plantilla Maestra</h1><div className="text-xs text-purple-200">Entrena al sistema con Datos, Tallas, Hilos y Tiempos</div></div>
                             <button onClick={onClose}><Icon name="x"/></button>
                         </div>
                         <div className="p-6 overflow-y-auto flex-grow space-y-6">
@@ -354,7 +335,7 @@
                                 <div><label className="block text-xs font-bold text-gray-700">Cliente Habitual</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div>
                             </div>
 
-                            {/* 2. Receta de Hilos (Threading) */}
+                            {/* 2. Receta de Hilos */}
                             <div className="bg-white border rounded p-4 shadow-sm">
                                 <div className="flex justify-between items-center mb-2 border-b pb-1">
                                     <h2 className="text-sm font-bold text-indigo-700 flex items-center gap-2"><Icon name="spool"/> Receta de Hilos (Enhebrado Base)</h2>
@@ -377,19 +358,20 @@
 
                             {/* 3. Componentes y Tiempos */}
                             <div className="space-y-2">
-                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-sm font-bold text-gray-700">Configuración de Componentes y Tiempos</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">+ Agregar Componente</button></div>
+                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-sm font-bold text-gray-700">Configuración de Componentes, Tallas y Tiempos</h2><button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">+ Agregar Componente</button></div>
                                 {components.map((comp, idx) => (
                                     <div key={idx} className="bg-gray-50 p-2 rounded border relative grid grid-cols-12 gap-2 items-end">
                                         <div className="col-span-12 absolute top-0 right-0 p-1"><button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="text-red-400"><Icon name="x" size={14}/></button></div>
                                         
                                         <div className="col-span-3"><label className="text-[10px] font-bold">Pieza</label><input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
+                                        {/* MODIFICADO: Campo Talla visible */}
+                                        <div className="col-span-1"><label className="text-[10px] font-bold">Talla</label><input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="w-full p-1 border rounded text-xs uppercase font-bold text-blue-800" placeholder="UNI"/></div>
                                         <div className="col-span-1"><label className="text-[10px] font-bold">MQ</label><input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="w-full p-1 border rounded text-xs text-center font-bold"/></div>
-                                        <div className="col-span-2"><label className="text-[10px] font-bold">Sufijo</label><input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
+                                        <div className="col-span-1"><label className="text-[10px] font-bold">Sufijo</label><input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
                                         
                                         <div className="col-span-1"><label className="text-[10px] font-bold" title="Multiplicador">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="w-full p-1 border rounded text-xs text-center"/></div>
                                         <div className="col-span-1"><label className="text-[10px] font-bold" title="Piezas por Paquete">P/Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="w-full p-1 border rounded text-xs text-center bg-blue-50"/></div>
                                         
-                                        {/* NUEVOS CAMPOS */}
                                         <div className="col-span-2"><label className="text-[10px] font-bold text-orange-600">Peso (g)</label><input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="w-full p-1 border rounded text-xs text-center border-orange-200" placeholder="0.0"/></div>
                                         <div className="col-span-2">
                                             <label className="text-[10px] font-bold text-orange-600">Tiempo (Min:Seg)</label>
@@ -420,7 +402,6 @@
                 setMessages(prev => [...prev, { role: 'user', text: query }]);
                 
                 try {
-                    // 1. Buscar en Templates
                     const doc = await db.collection('model_templates').doc(query.toUpperCase()).get();
                     if(doc.exists) {
                         const data = doc.data();
@@ -463,16 +444,16 @@
             );
         };
 
-        // --- ORDER GENERATOR ---
+        // --- ORDER GENERATOR (CON TALLA MANUAL Y AUTOMÁTICA) ---
         const OrderGeneratorModal = ({ onClose, onProcess }) => {
             const [step, setStep] = useState('input');
             const [drafts, setDrafts] = useState([]);
             const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
             const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
             
-            // Estado extendido para soportar lo que viene de la plantilla
-            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
-            const [templateThreading, setTemplateThreading] = useState([]); // Guardamos el threading de la plantilla temporalmente
+            // MODIFICADO: Agregada 'talla' al estado inicial del generador
+            const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+            const [templateThreading, setTemplateThreading] = useState([]);
             
             const [showAssistant, setShowAssistant] = useState(false);
 
@@ -503,7 +484,6 @@
                     const maquinaKey = String(comp.maquina);
                     
                     if (!ordersByMachine[maquinaKey]) {
-                        // Si tenemos threading de plantilla, lo usamos, si no, uno vacío por defecto
                         const initialThreading = templateThreading.length > 0 
                             ? templateThreading 
                             : [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }];
@@ -517,11 +497,11 @@
                     
                     const totalPiezasComp = form.totalPrendas * comp.multiplicador;
                     
-                    // Aquí inyectamos el PESO y TIEMPO que vino de la plantilla (o que está vacío)
+                    // MODIFICADO: Usar la talla del componente, si no existe usar UNI
                     ordersByMachine[maquinaKey].subPiecesData.push({ 
                         id: Date.now() + Math.random(), 
                         pieza: comp.descripcion.toUpperCase(), 
-                        talla: 'UNI', 
+                        talla: comp.talla || 'UNI', 
                         totalPedido: totalPiezasComp, 
                         peso: comp.peso || '', 
                         tiempo: comp.tiempo || '' 
@@ -597,13 +577,22 @@
                                 <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
                             </div>
                             <div className="space-y-4">
-                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
+                                <div className="flex justify-between items-center border-b pb-1"><h2 className="text-lg font-semibold text-gray-700">2. Partes de la Prenda</h2><button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs flex gap-1 items-center"><Icon name="plus" size={12}/> Agregar</button></div>
                                 <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
                                     {components.map((comp, idx) => (
                                         <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
                                             <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><Icon name="x" size={14}/></button>
-                                            <div className="grid grid-cols-2 gap-2 mb-2"><div><label className="text-[10px] font-bold text-gray-500">Descripción</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase"/></div><div><label className="text-[10px] font-bold text-gray-500">Sufijo Cód.</label><input value={comp.sufijo} onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-indigo-50"/></div></div>
-                                            <div className="grid grid-cols-3 gap-2"><div><label className="text-[10px] font-bold text-gray-500">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-black text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs text-center"/></div><div><label className="text-[10px] font-bold text-gray-500">Pzs x Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs bg-blue-50 text-center"/></div></div>
+                                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                                <div className="col-span-2"><label className="text-[10px] font-bold text-gray-500">Descripción</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase"/></div>
+                                                {/* MODIFICADO: Agregada input Talla en generador */}
+                                                <div><label className="text-[10px] font-bold text-gray-500">Talla</label><input value={comp.talla} onChange={e => { const newComps=[...components]; newComps[idx].talla=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-blue-50 text-blue-800" placeholder="UNI"/></div>
+                                            </div>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                <div><label className="text-[10px] font-bold text-gray-500">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-black text-center"/></div>
+                                                <div className="col-span-1"><label className="text-[10px] font-bold text-gray-500">Sufijo</label><input value={comp.sufijo} onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-indigo-50"/></div>
+                                                <div><label className="text-[10px] font-bold text-gray-500">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs text-center"/></div>
+                                                <div><label className="text-[10px] font-bold text-gray-500">Pzs x Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} className="w-full p-1 border rounded text-xs bg-blue-50 text-center"/></div>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -927,7 +916,6 @@
             const [showGallery, setShowGallery] = useState(false);
             const [viewMode, setViewMode] = useState('active'); 
             
-            // Nuevo Estado para el modal de plantillas
             const [showTemplateCreator, setShowTemplateCreator] = useState(false);
             
             useEffect(() => {
@@ -938,7 +926,6 @@
             }, []);
             useEffect(()=>lucide.createIcons(), [view, orders, viewMode]);
 
-            // --- ESCÁNER GLOBAL ---
             const handleGlobalScan = async (scannedCode) => {
                 if (!scannedCode.includes('-')) return;
                 const [orderId, pkgIdString] = scannedCode.split('-');
@@ -962,7 +949,6 @@
             };
             useBarcodeScanner(handleGlobalScan);
 
-            // --- AGRUPACIÓN ---
             const displayedGroups = useMemo(() => {
                 const filtered = viewMode === 'active' 
                     ? orders.filter(o => o.status !== 'ARCHIVADO') 
@@ -978,7 +964,7 @@
 
             const handleGeneratorSuccess = () => {
                 setShowGenerator(false);
-                setViewMode('active'); // Ir a la vista principal para ver lo nuevo
+                setViewMode('active');
             };
 
             return (
@@ -998,7 +984,7 @@
                                 <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
                                     <Icon name="layout-dashboard"/> 
                                     <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
-                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.1 AI-HUB</span>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.2 AI-HUB</span>
                                 </h1>
                                 <div className="flex gap-2 items-center">
                                     <InstallButton />
