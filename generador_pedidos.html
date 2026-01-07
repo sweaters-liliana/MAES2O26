@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo Factory - Generador de Pedidos AI</title>
+    <title>Neo Factory - Generador de Pedidos</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -16,10 +16,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-        /* --- ESTÉTICA DARK MODE (NEO FACTORY) --- */
-        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; overflow-x: hidden; }
+        /* Estilos Dark Mode Base */
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; }
         
-        /* Scrollbars Personalizados */
+        /* Scrollbars */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
@@ -27,26 +27,17 @@
 
         input:focus { outline: 2px solid #6366f1; outline-offset: 1px; }
         
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.5s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Estilos Ventana Flotante Excel */
+        /* Excel Viewer Styles */
         .floating-window {
             position: fixed; z-index: 100; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             border: 1px solid #475569; display: flex; flex-direction: column;
             overflow: hidden; border-radius: 0.5rem; background-color: #1e293b;
         }
-        .excel-table { border-collapse: collapse; background: #fff; color: #000; font-size: 11px; }
-        .excel-table td { border: 1px solid #c0c0c0; padding: 2px 4px; white-space: pre-wrap; }
-        
-        /* Utilidades Inputs */
-        .neo-input {
-            width: 100%; background-color: #0f172a; border: 1px solid #334155;
-            padding: 0.5rem; border-radius: 0.375rem; color: white;
-            font-weight: 700; text-transform: uppercase; transition: all 0.2s;
-        }
-        .neo-input:focus { border-color: #6366f1; background-color: #1e293b; }
-        .neo-label { display: block; font-size: 0.65rem; font-weight: 800; color: #94a3b8; margin-bottom: 0.25rem; letter-spacing: 0.05em; }
+        .excel-table { border-collapse: collapse; background: #fff; color: #000; }
+        .excel-table td { border: 1px solid #c0c0c0; padding: 2px; white-space: pre-wrap; }
     </style>
 </head>
 <body>
@@ -55,7 +46,7 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- 1. CONFIGURACIÓN FIREBASE REAL ---
+        // --- 1. CONFIGURACIÓN FIREBASE (REAL) ---
         const firebaseConfig = {
             apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
             authDomain: "cirineo-cec21.firebaseapp.com",
@@ -69,7 +60,7 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- 2. UTILIDADES Y GITHUB ---
+        // --- 2. UTILIDADES ---
         const Icon = ({ name, size = 18, className }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
             return <i data-lucide={name} width={size} height={size} className={className}></i>;
@@ -80,88 +71,65 @@
             return `${partida}-${piecePrefixes}-M${maquina}`;
         };
 
+        // --- 3. GITHUB EXCEL VIEWER (Funcionalidad Preservada) ---
         const GITHUB_CONFIG = { owner: 'sweaters-liliana', repo: 'MAES2O26', path: 'Fichas' };
         const fetchExcelFromGitHub = async (modelName) => {
-            if (!modelName) throw new Error("Falta modelo");
+            // Lógica simplificada para el ejemplo
+            if (!modelName) throw new Error("Ingresa un modelo");
             const apiUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
             const listResponse = await fetch(apiUrl);
             if (!listResponse.ok) throw new Error("Error GitHub API");
             const files = await listResponse.json();
             const targetFile = files.find(f => f.name.toLowerCase().includes(modelName.toLowerCase()) && f.name.endsWith('.xlsx'));
-            if (!targetFile) throw new Error(`Sin ficha para "${modelName}"`);
+            if (!targetFile) throw new Error(`No se encontró Excel para "${modelName}"`);
             const fileResponse = await fetch(targetFile.download_url);
             const blob = await fileResponse.blob();
             const workbook = XLSX.read(await blob.arrayBuffer());
             return { fileName: targetFile.name, worksheet: workbook.Sheets[workbook.SheetNames[0]] };
         };
 
-        // --- 3. COMPONENTE: VISOR EXCEL FLOTANTE ---
+        // --- COMPONENTE EXCEL FLOTANTE ---
         const FloatingExcelViewer = ({ worksheet, fileName, onClose }) => {
-            const [position, setPosition] = useState({ x: 20, y: 80 });
-            const [isDragging, setIsDragging] = useState(false);
-            const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0 });
-
-            const startDrag = (e) => {
-                setIsDragging(true);
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                dragRef.current = { startX: clientX, startY: clientY, initialX: position.x, initialY: position.y };
-            };
-
-            useEffect(() => {
-                const handleMove = (e) => {
-                    if (!isDragging) return;
-                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                    const dx = clientX - dragRef.current.startX;
-                    const dy = clientY - dragRef.current.startY;
-                    setPosition({ x: dragRef.current.initialX + dx, y: dragRef.current.initialY + dy });
-                };
-                const handleUp = () => setIsDragging(false);
-                if (isDragging) {
-                    window.addEventListener('mousemove', handleMove);
-                    window.addEventListener('mouseup', handleUp);
-                    window.addEventListener('touchmove', handleMove);
-                    window.addEventListener('touchend', handleUp);
-                }
-                return () => {
-                    window.removeEventListener('mousemove', handleMove);
-                    window.removeEventListener('mouseup', handleUp);
-                    window.removeEventListener('touchmove', handleMove);
-                    window.removeEventListener('touchend', handleUp);
-                };
-            }, [isDragging]);
-
-            const gridHtml = useMemo(() => worksheet ? XLSX.utils.sheet_to_html(worksheet) : '', [worksheet]);
+            const [zoom, setZoom] = useState(0.75);
+            const grid = useMemo(() => {
+                if (!worksheet) return null;
+                const html = XLSX.utils.sheet_to_html(worksheet);
+                return html; // Simplificado para renderizar HTML directo de SheetJS
+            }, [worksheet]);
 
             return (
-                <div className="floating-window w-[90vw] md:w-[600px] h-[500px]" style={{ left: position.x, top: position.y }}>
-                    <div className="bg-slate-800 p-2 border-b border-slate-600 flex justify-between items-center cursor-move select-none"
-                         onMouseDown={startDrag} onTouchStart={startDrag}>
-                        <span className="font-bold text-xs text-emerald-400 flex gap-2 items-center"><Icon name="file-spreadsheet"/> {fileName}</span>
-                        <button onClick={onClose} className="text-red-400 hover:bg-red-900/50 p-1 rounded"><Icon name="x" size={16}/></button>
+                <div className="fixed top-20 right-10 w-[600px] h-[500px] bg-white border-2 border-slate-600 shadow-2xl z-50 flex flex-col rounded-lg overflow-hidden animate-fade-in">
+                    <div className="bg-slate-800 p-2 flex justify-between items-center text-white cursor-move">
+                        <span className="font-bold text-xs uppercase flex gap-2"><Icon name="file-spreadsheet"/> {fileName}</span>
+                        <button onClick={onClose} className="text-red-400 hover:text-white"><Icon name="x" size={16}/></button>
                     </div>
-                    <div className="flex-grow overflow-auto bg-white p-2" dangerouslySetInnerHTML={{__html: gridHtml}} />
+                    <div className="flex-grow overflow-auto p-2 bg-white" dangerouslySetInnerHTML={{__html: grid}} />
                 </div>
             );
         };
 
-        // --- 4. APP PRINCIPAL: GENERADOR DE PEDIDOS ---
-        const NeoOrderGenerator = () => {
-            // Estado Principal
+        // --- 4. APLICACIÓN PRINCIPAL DE GENERACIÓN ---
+        const OrderGeneratorApp = () => {
+            // Estado del Formulario
             const [form, setForm] = useState({
-                modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0],
-                partidaCodigo: '', totalPrendas: 0
+                modelo: '',
+                cliente: '',
+                fecha: new Date().toISOString().split('T')[0],
+                partidaCodigo: '',
+                totalPrendas: 0
             });
 
-            // Componentes, Hilos (para inventario) y UI
+            // Estado de Componentes y Configuración
             const [components, setComponents] = useState([]);
-            const [threading, setThreading] = useState([]); 
-            const [excelFile, setExcelFile] = useState(null);
+            const [threading, setThreading] = useState([]); // Receta de hilos
+            const [activeTab, setActiveTab] = useState('config'); // config | review
             const [loading, setLoading] = useState(false);
+            
+            // Estado Auxiliar
+            const [excelFile, setExcelFile] = useState(null);
             const [inventory, setInventory] = useState([]);
 
-            // Cargar Inventario Real
+            // Cargar Inventario para validaciones
             useEffect(() => {
                 const unsub = db.collection('inventory').doc('main').onSnapshot(doc => {
                     if (doc.exists) setInventory(doc.data().items || []);
@@ -169,50 +137,62 @@
                 return () => unsub();
             }, []);
 
-            // Auto-Generar Código Partida
+            // Auto-generar código de partida
             useEffect(() => {
                 if (!form.fecha) return;
-                const date = new Date(form.fecha + 'T00:00:00');
-                const months = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
-                const code = `${months[date.getMonth()]}${date.getFullYear().toString().slice(-2)}_01`;
-                setForm(prev => ({ ...prev, partidaCodigo: code }));
+                const d = new Date(form.fecha + 'T00:00:00');
+                const m = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"][d.getMonth()];
+                const y = d.getFullYear().toString().slice(-2);
+                setForm(prev => ({ ...prev, partidaCodigo: `${m}${y}_01` }));
             }, [form.fecha]);
 
-            // Lógica: Buscar Modelo (DB + GitHub)
-            const handleSearch = async () => {
+            // BUSCAR PLANTILLA EN FIRESTORE (Inteligencia)
+            const handleSearchModel = async () => {
                 if (!form.modelo) return;
                 setLoading(true);
-                
-                // 1. Buscar Plantilla en DB
                 try {
+                    // 1. Buscar en BD (Plantillas guardadas)
                     const doc = await db.collection('model_templates').doc(form.modelo.toUpperCase()).get();
                     if (doc.exists) {
                         const data = doc.data();
-                        setForm(prev => ({ ...prev, cliente: data.cliente || '' }));
+                        setForm(prev => ({ ...prev, cliente: data.cliente }));
                         setComponents(data.components || []);
                         setThreading(data.threading || []);
-                        alert(`✅ Plantilla "${data.modelo}" cargada desde base de datos.`);
+                        alert(`¡Plantilla encontrada! ${data.components.length} componentes cargados.`);
                     } else {
-                        // 2. Si no existe, intentar cargar Excel de GitHub como ayuda
+                        // 2. Si no existe en BD, intentar buscar Excel en GitHub como referencia
                         try {
                             const excel = await fetchExcelFromGitHub(form.modelo);
                             setExcelFile(excel);
-                            alert("⚠️ Modelo nuevo. Se abrió la ficha técnica para referencia manual.");
+                            alert("Modelo no tiene plantilla guardada, pero encontré la ficha técnica en GitHub.");
                         } catch (e) {
-                            alert("❌ Modelo no encontrado en DB ni en GitHub.");
+                            alert("Modelo nuevo: No existe plantilla ni ficha técnica encontrada.");
                         }
                     }
                 } catch (e) { console.error(e); alert("Error de conexión"); }
                 setLoading(false);
             };
 
-            // Lógica: Generar Pedidos (Transacción Real)
-            const handleGenerate = async () => {
+            const addComponent = () => {
+                setComponents([...components, { 
+                    descripcion: '', talla: 'UNI', sufijo: '', maquina: '', 
+                    multiplicador: 1, piezasPorPaquete: 0, peso: 0, tiempo: 0 
+                }]);
+            };
+
+            const updateComponent = (idx, field, val) => {
+                const n = [...components];
+                n[idx][field] = typeof val === 'string' ? val.toUpperCase() : val;
+                setComponents(n);
+            };
+
+            // --- LÓGICA CORE: GENERAR Y GUARDAR ÓRDENES ---
+            const handleGenerateOrders = async () => {
                 if (!form.partidaCodigo || !form.modelo || components.length === 0 || form.totalPrendas <= 0) {
-                    return alert("Faltan datos clave (Modelo, Partida, Cantidad o Componentes)");
+                    return alert("Por favor completa todos los campos, agrega componentes y define una cantidad total.");
                 }
 
-                if (!confirm("¿GENERAR PEDIDOS?\n\nEsto creará las órdenes en el sistema principal y descontará material del inventario.")) return;
+                if (!confirm("¿Estás seguro de generar estas órdenes? Esto afectará el inventario y la producción en vivo.")) return;
 
                 setLoading(true);
                 try {
@@ -223,236 +203,310 @@
                     components.forEach(comp => {
                         if (!comp.maquina) return;
                         const maqKey = String(comp.maquina);
-                        
+
                         if (!ordersByMachine[maqKey]) {
                             ordersByMachine[maqKey] = {
-                                codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(),
-                                maquina: maqKey, partida: form.partidaCodigo.toUpperCase(),
-                                threading: threading, // Hereda hilos
-                                subPiecesData: [], predefinedPackages: [],
-                                createdAt: new Date().toLocaleString('es-MX'), status: 'EN PROCESO'
+                                codigo: form.modelo.toUpperCase(),
+                                cliente: form.cliente.toUpperCase(),
+                                maquina: maqKey,
+                                partida: form.partidaCodigo.toUpperCase(),
+                                threading: threading, // Hereda la receta de hilos
+                                subPiecesData: [],
+                                predefinedPackages: [],
+                                createdAt: new Date().toLocaleString('es-MX'),
+                                status: 'EN PROCESO'
                             };
                         }
 
-                        // Calcular piezas
-                        const totalPiezas = form.totalPrendas * comp.multiplicador;
-                        
+                        // Calcular piezas totales
+                        const totalPiezasComp = form.totalPrendas * comp.multiplicador;
+
+                        // Agregar metadata de pieza
                         ordersByMachine[maqKey].subPiecesData.push({
                             id: Date.now() + Math.random(),
-                            pieza: comp.descripcion, talla: comp.talla || 'UNI',
-                            totalPedido: totalPiezas, peso: comp.peso, tiempo: comp.tiempo
+                            pieza: comp.descripcion,
+                            talla: comp.talla,
+                            totalPedido: totalPiezasComp,
+                            peso: comp.peso,
+                            tiempo: comp.tiempo
                         });
 
-                        // Generar Paquetes (Progreso)
-                        const pzsPorPaq = comp.piezasPorPaquete > 0 ? comp.piezasPorPaquete : totalPiezas;
-                        const numPaquetes = Math.ceil(totalPiezas / pzsPorPaq);
-                        
+                        // Generar Paquetes (Barcodes)
+                        const numPaquetes = comp.piezasPorPaquete > 0 ? Math.ceil(totalPiezasComp / comp.piezasPorPaquete) : 1;
                         for (let i = 1; i <= numPaquetes; i++) {
-                            const cantidad = (i === numPaquetes && totalPiezas % pzsPorPaq !== 0) ? totalPiezas % pzsPorPaq : pzsPorPaq;
+                            const cantidad = (i === numPaquetes && totalPiezasComp % comp.piezasPorPaquete !== 0) 
+                                ? totalPiezasComp % comp.piezasPorPaquete 
+                                : comp.piezasPorPaquete;
+                            
                             ordersByMachine[maqKey].predefinedPackages.push({
                                 id: Date.now() + Math.random() + i,
-                                piezaNombre: comp.descripcion, cantidad: cantidad,
-                                paqueteNum: i, paquetesDePieza: numPaquetes,
-                                codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}`,
-                                finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''
+                                piezaNombre: comp.descripcion,
+                                cantidad: cantidad,
+                                paqueteNum: i,
+                                paquetesDePieza: numPaquetes,
+                                codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}_${numPaquetes}`,
+                                finished: false,
+                                tejedor: '',
+                                fecha: '',
+                                defectos: '',
+                                agujas: ''
                             });
                         }
                     });
 
-                    // 2. Procesar Inventario y Escrituras
+                    // 2. Preparar escrituras en Batch
                     const invRef = db.collection('inventory').doc('main');
                     const invDoc = await invRef.get();
-                    let currentItems = invDoc.exists ? invDoc.data().items : [];
+                    let currentInventory = invDoc.exists ? invDoc.data().items : [];
 
-                    Object.values(ordersByMachine).forEach(draft => {
-                        const newId = String(Date.now() + Math.random()).slice(-8); // ID corto numérico simulado
+                    Object.values(ordersByMachine).forEach(orderDraft => {
+                        const newId = String(Date.now() + Math.random());
                         const orderRef = db.collection('orders').doc(newId);
                         
-                        // Cálculo Descuento Inventario
-                        const totalGramosOrden = draft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso||0) * p.totalPedido), 0);
-                        
-                        (draft.threading || []).forEach(hilo => {
+                        const displayId = generateSmartID(orderDraft.partida, orderDraft.subPiecesData, orderDraft.maquina);
+                        const totalGramos = orderDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso||0) * Number(p.totalPedido||0)), 0);
+
+                        // Descuento de Inventario
+                        (orderDraft.threading || []).forEach(hilo => {
                             if (hilo.materialId && hilo.porcentaje) {
-                                const consumoKg = ((totalGramosOrden * (Number(hilo.porcentaje)/100))/1000);
-                                const itemIdx = currentItems.findIndex(i => i.id === hilo.materialId);
+                                const consumoKg = Number(((totalGramos * (Number(hilo.porcentaje)/100))/1000).toFixed(2));
+                                const itemIdx = currentInventory.findIndex(i => i.id === hilo.materialId);
                                 if (itemIdx !== -1) {
-                                    currentItems[itemIdx].stock = (parseFloat(currentItems[itemIdx].stock || 0) - consumoKg).toFixed(2);
+                                    currentInventory[itemIdx].stock = (parseFloat(currentInventory[itemIdx].stock || 0) - consumoKg).toFixed(2);
+                                    // Log movimiento (opcional, simplificado aquí)
                                 }
                             }
                         });
 
                         batch.set(orderRef, {
-                            ...draft, id: Number(newId),
-                            displayId: generateSmartID(draft.partida, draft.subPiecesData, draft.maquina),
-                            progreso: draft.predefinedPackages,
-                            totalPedido: draft.subPiecesData.reduce((a,b)=>a+b.totalPedido, 0)
+                            ...orderDraft,
+                            id: Number(newId),
+                            displayId: displayId,
+                            progreso: orderDraft.predefinedPackages,
+                            totalPedido: orderDraft.subPiecesData.reduce((a, b) => a + b.totalPedido, 0)
                         });
                     });
 
-                    // 3. Commit
-                    batch.update(invRef, { items: currentItems });
+                    // 3. Actualizar Inventario y Ejecutar
+                    batch.update(invRef, { items: currentInventory });
                     await batch.commit();
-                    
-                    alert("¡PEDIDOS CREADOS EXITOSAMENTE!\n\nPuedes verlos en el Dashboard Principal.");
-                    window.location.reload(); // Reset para nuevo pedido
 
-                } catch (e) { console.error(e); alert("Error al guardar: " + e.message); }
+                    alert("¡Órdenes Generadas Exitosamente! Verifica el Dashboard principal.");
+                    window.location.reload(); // Reiniciar para nuevo pedido
+
+                } catch (e) {
+                    console.error(e);
+                    alert("Error al generar órdenes: " + e.message);
+                }
                 setLoading(false);
             };
 
-            const addComponent = () => setComponents([...components, { descripcion: '', talla: 'UNI', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: 0, tiempo: 0 }]);
-            const updateComp = (idx, field, val) => { const n = [...components]; n[idx][field] = typeof val === 'string' ? val.toUpperCase() : val; setComponents(n); };
+            // Estilos comunes
+            const inputClass = "w-full bg-slate-900 border border-slate-700 rounded p-2 text-white font-bold uppercase focus:border-indigo-500 transition shadow-inner placeholder-slate-600";
+            const labelClass = "block text-[10px] font-bold text-slate-400 mb-1 tracking-wider";
 
             return (
-                <div className="min-h-screen p-4 md:p-8 flex justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
+                <div className="min-h-screen bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black text-slate-200 p-4 md:p-8 flex flex-col items-center">
                     
                     {excelFile && <FloatingExcelViewer worksheet={excelFile.worksheet} fileName={excelFile.fileName} onClose={()=>setExcelFile(null)} />}
 
-                    <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        
-                        {/* HEADER */}
-                        <div className="lg:col-span-12 flex justify-between items-end border-b border-slate-700 pb-4 mb-2">
-                            <div>
-                                <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter flex items-center gap-3">
-                                    <Icon name="zap" className="text-yellow-400" size={32}/> NEO GENERATOR
-                                </h1>
-                                <p className="text-slate-500 font-mono text-xs mt-1 ml-1">SISTEMA INTELIGENTE DE PRODUCCIÓN V5.0</p>
-                            </div>
-                            <button onClick={() => window.location.href='index.html'} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded font-bold text-xs border border-slate-600 flex items-center gap-2 transition">
-                                <Icon name="arrow-left"/> VOLVER AL DASHBOARD
-                            </button>
+                    {/* Header */}
+                    <div className="w-full max-w-6xl mb-8 flex justify-between items-end border-b border-slate-700 pb-4">
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter flex items-center gap-3">
+                                <Icon name="factory" size={32} className="text-indigo-400"/>
+                                GENERADOR DE ÓRDENES
+                            </h1>
+                            <p className="text-slate-500 font-mono text-xs mt-1">SISTEMA INTEGRADO V4.2 // CONECTADO A DB PRODUCCIÓN</p>
                         </div>
+                        <button onClick={() => window.location.href='index.html'} className="text-slate-400 hover:text-white flex items-center gap-2 font-bold text-sm bg-slate-800 px-4 py-2 rounded hover:bg-slate-700 border border-slate-700 transition">
+                            <Icon name="arrow-left"/> VOLVER AL DASHBOARD
+                        </button>
+                    </div>
 
-                        {/* PANEL IZQUIERDO: DATOS GENERALES */}
-                        <div className="lg:col-span-4 space-y-6">
+                    <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        
+                        {/* COLUMNA 1: CONFIGURACIÓN GENERAL */}
+                        <div className="lg:col-span-1 space-y-6">
                             
-                            <div className="bg-slate-800/80 backdrop-blur border border-slate-700 rounded-xl p-6 shadow-2xl">
-                                <div className="flex items-center gap-2 mb-6 text-indigo-400 font-bold border-b border-slate-700 pb-2">
-                                    <Icon name="database"/> DATOS GLOBALES
-                                </div>
-
+                            {/* Tarjeta de Datos Principales */}
+                            <div className="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-xl">
+                                <h2 className="text-indigo-300 font-bold mb-4 flex items-center gap-2"><Icon name="box-select"/> DATOS DEL PEDIDO</h2>
+                                
                                 <div className="space-y-4">
-                                    <div>
-                                        <label className="neo-label">BUSCAR MODELO (AUTO-COMPLETAR)</label>
+                                    <div className="relative">
+                                        <label className={labelClass}>MODELO (AUTO-BUSCADOR)</label>
                                         <div className="flex gap-2">
-                                            <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} onKeyDown={e=>e.key==='Enter' && handleSearch()} className="neo-input" placeholder="EJ: POLO-2024"/>
-                                            <button onClick={handleSearch} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded flex items-center justify-center transition border border-indigo-400 shadow-lg shadow-indigo-500/30">
+                                            <input 
+                                                value={form.modelo} 
+                                                onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})}
+                                                onKeyDown={e => e.key === 'Enter' && handleSearchModel()}
+                                                className={inputClass} 
+                                                placeholder="EJ: POLO-2024" 
+                                            />
+                                            <button onClick={handleSearchModel} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded flex items-center justify-center transition border border-indigo-500 shadow-lg shadow-indigo-500/20">
                                                 {loading ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="search"/>}
                                             </button>
                                         </div>
                                     </div>
-                                    
+
                                     <div>
-                                        <label className="neo-label">CLIENTE</label>
-                                        <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="neo-input"/>
+                                        <label className={labelClass}>CLIENTE</label>
+                                        <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className={inputClass} />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <label className="neo-label">FECHA ENTREGA</label>
-                                            <input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="neo-input font-mono cursor-pointer"/>
+                                            <label className={labelClass}>FECHA ENTREGA</label>
+                                            <input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className={`${inputClass} font-mono cursor-pointer`} />
                                         </div>
                                         <div>
-                                            <label className="neo-label">LOTE / PARTIDA</label>
-                                            <input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="neo-input bg-slate-950 text-emerald-400 border-emerald-900"/>
+                                            <label className={labelClass}>PARTIDA / LOTE</label>
+                                            <input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className={`${inputClass} bg-slate-950 text-emerald-400 border-emerald-900/50`} />
                                         </div>
                                     </div>
 
-                                    <div className="pt-4 mt-4 border-t border-slate-700">
-                                        <label className="neo-label text-orange-400 text-center text-xs">CANTIDAD TOTAL DE PRENDAS</label>
-                                        <input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full bg-slate-900 border-2 border-orange-500/50 rounded-lg p-3 text-3xl text-center text-white font-black focus:border-orange-500 transition shadow-lg shadow-orange-900/20" placeholder="0"/>
+                                    <div className="pt-2 border-t border-slate-700 mt-2">
+                                        <label className="text-xs font-bold text-orange-400 mb-1 block">CANTIDAD TOTAL DE PRENDAS</label>
+                                        <input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full bg-slate-900 border-2 border-orange-500/50 rounded p-3 text-2xl text-center text-white font-black focus:border-orange-500 focus:bg-slate-800 transition shadow-lg shadow-orange-900/10 placeholder-slate-700" placeholder="0"/>
                                     </div>
                                 </div>
                             </div>
 
-                            <button onClick={handleGenerate} disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 rounded-xl shadow-lg shadow-emerald-900/50 transform active:scale-95 transition flex items-center justify-center gap-3 border border-emerald-400/30 text-lg group">
-                                <Icon name="rocket" className="group-hover:animate-bounce"/> LANZAR PRODUCCIÓN
-                            </button>
+                            {/* Tarjeta de Resumen / Acción */}
+                            <div className="bg-gradient-to-br from-indigo-900/50 to-purple-900/50 border border-indigo-500/30 rounded-xl p-5 shadow-2xl flex flex-col justify-between min-h-[150px]">
+                                <div>
+                                    <h3 className="text-white font-bold text-lg mb-1">Resumen Producción</h3>
+                                    <div className="text-slate-300 text-xs">
+                                        Componentes: <strong className="text-white">{components.length}</strong><br/>
+                                        Máquinas Activas: <strong className="text-white">{new Set(components.map(c=>c.maquina).filter(Boolean)).size}</strong>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={handleGenerateOrders} 
+                                    disabled={loading || form.totalPrendas <= 0}
+                                    className="w-full mt-4 bg-emerald-500 hover:bg-emerald-400 text-white font-black py-3 rounded-lg shadow-lg shadow-emerald-900/40 transform active:scale-95 transition flex items-center justify-center gap-2 border-b-4 border-emerald-700"
+                                >
+                                    <Icon name="rocket"/> LANZAR PRODUCCIÓN
+                                </button>
+                            </div>
                         </div>
 
-                        {/* PANEL DERECHO: COMPONENTES */}
-                        <div className="lg:col-span-8 flex flex-col h-[800px] lg:h-auto bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden relative">
-                            
-                            <div className="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center shrink-0">
-                                <h2 className="text-white font-bold flex items-center gap-2 text-sm"><Icon name="layers"/> ESTRUCTURA DEL PEDIDO</h2>
-                                <button onClick={addComponent} className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition">
-                                    <Icon name="plus-circle" size={16}/> AGREGAR PIEZA
+                        {/* COLUMNA 2: DETALLES DE COMPONENTES */}
+                        <div className="lg:col-span-2 bg-slate-800 rounded-xl border border-slate-700 flex flex-col overflow-hidden shadow-xl h-[80vh] lg:h-auto">
+                            <div className="p-4 bg-slate-900/50 border-b border-slate-700 flex justify-between items-center">
+                                <h2 className="text-indigo-300 font-bold flex items-center gap-2"><Icon name="layers"/> COMPONENTES Y TALLAS</h2>
+                                <button onClick={addComponent} className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3 py-1.5 rounded flex items-center gap-1 transition shadow-lg shadow-indigo-500/20 border border-indigo-400">
+                                    <Icon name="plus" size={14}/> AGREGAR PIEZA
                                 </button>
                             </div>
 
                             <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar">
                                 {components.length === 0 && (
-                                    <div className="h-full flex flex-col items-center justify-center text-slate-600">
-                                        <Icon name="box-select" size={64} className="mb-4 opacity-50"/>
-                                        <p className="font-bold">LISTA VACÍA</p>
-                                        <p className="text-xs">Busca un modelo o agrega piezas manualmente</p>
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-50">
+                                        <Icon name="shirt" size={48} className="mb-2"/>
+                                        <p className="text-sm font-bold">Sin componentes agregados</p>
+                                        <p className="text-xs">Busca un modelo o agrega manualmente</p>
                                     </div>
                                 )}
-
+                                
                                 {components.map((comp, idx) => (
-                                    <div key={idx} className="bg-slate-900 border border-slate-700 rounded-lg p-3 relative group hover:border-indigo-500/50 transition shadow-sm">
-                                        <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"><Icon name="trash-2" size={16}/></button>
+                                    <div key={idx} className="bg-slate-900 border border-slate-700 rounded-lg p-3 relative group hover:border-indigo-500/50 transition">
+                                        <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition">
+                                            <Icon name="trash-2" size={16}/>
+                                        </button>
 
                                         <div className="grid grid-cols-12 gap-3 items-end">
+                                            {/* Descripción */}
                                             <div className="col-span-12 md:col-span-4">
-                                                <label className="neo-label">PIEZA</label>
-                                                <input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="neo-input text-white" placeholder="EJ: DELANTERO"/>
+                                                <label className={labelClass}>PIEZA / DESCRIPCIÓN</label>
+                                                <input 
+                                                    value={comp.descripcion} 
+                                                    onChange={e => updateComponent(idx, 'descripcion', e.target.value)}
+                                                    className={`${inputClass} font-bold text-white`} 
+                                                    placeholder="DELANTERO..."
+                                                />
                                             </div>
-                                            <div className="col-span-3 md:col-span-2">
-                                                <label className="neo-label text-indigo-300">TALLA</label>
-                                                <input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="neo-input text-center text-indigo-300 border-indigo-900/30" placeholder="UNI"/>
+
+                                            {/* Talla */}
+                                            <div className="col-span-4 md:col-span-2">
+                                                <label className={labelClass}>TALLA</label>
+                                                <input 
+                                                    value={comp.talla} 
+                                                    onChange={e => updateComponent(idx, 'talla', e.target.value)}
+                                                    className={`${inputClass} text-center bg-indigo-950/30 text-indigo-300 border-indigo-900/50`} 
+                                                    placeholder="UNI"
+                                                />
                                             </div>
-                                            <div className="col-span-3 md:col-span-2">
-                                                <label className="neo-label text-amber-400">MAQ</label>
-                                                <input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="neo-input text-center text-amber-400 border-amber-900/30"/>
+
+                                            {/* Máquina */}
+                                            <div className="col-span-4 md:col-span-2">
+                                                <label className={labelClass}>MÁQUINA</label>
+                                                <input 
+                                                    type="number"
+                                                    value={comp.maquina} 
+                                                    onChange={e => updateComponent(idx, 'maquina', e.target.value)}
+                                                    className={`${inputClass} text-center font-black text-amber-400 border-amber-900/30`} 
+                                                />
                                             </div>
-                                            <div className="col-span-3 md:col-span-2">
-                                                <label className="neo-label">SUFIJO</label>
-                                                <input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="neo-input text-center text-xs" placeholder="-XXX"/>
+
+                                            {/* Sufijo */}
+                                            <div className="col-span-4 md:col-span-2">
+                                                <label className={labelClass}>SUFIJO CÓDIGO</label>
+                                                <input 
+                                                    value={comp.sufijo} 
+                                                    onChange={e => updateComponent(idx, 'sufijo', e.target.value)}
+                                                    className={`${inputClass} text-center text-xs`} 
+                                                    placeholder="-DEL"
+                                                />
                                             </div>
+
+                                            {/* Datos Técnicos (Fila 2 en movil, inline en desktop grande) */}
                                             <div className="col-span-3 md:col-span-2">
-                                                <label className="neo-label">MULT</label>
-                                                <input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="neo-input text-center text-xs"/>
+                                                 <label className={labelClass}>MULTIP.</label>
+                                                 <input type="number" value={comp.multiplicador} onChange={e => updateComponent(idx, 'multiplicador', Number(e.target.value))} className={`${inputClass} text-center text-xs`} />
                                             </div>
                                             
-                                            {/* Fila inferior de datos técnicos */}
-                                            <div className="col-span-4 md:col-span-2">
-                                                <label className="neo-label text-cyan-300">PZS/PAQ</label>
-                                                <input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="neo-input text-center text-xs text-cyan-300 border-cyan-900/30"/>
+                                            <div className="col-span-3 md:col-span-2">
+                                                 <label className={labelClass}>PZS/PAQ</label>
+                                                 <input type="number" value={comp.piezasPorPaquete} onChange={e => updateComponent(idx, 'piezasPorPaquete', Number(e.target.value))} className={`${inputClass} text-center text-xs bg-cyan-950/30 text-cyan-300`} />
                                             </div>
-                                            <div className="col-span-4 md:col-span-2">
-                                                <label className="neo-label text-orange-300">PESO (g)</label>
-                                                <input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="neo-input text-center text-xs text-orange-300 border-orange-900/30"/>
+
+                                            <div className="col-span-3 md:col-span-2">
+                                                 <label className={labelClass}>PESO (g)</label>
+                                                 <input type="number" value={comp.peso} onChange={e => updateComponent(idx, 'peso', e.target.value)} className={`${inputClass} text-center text-xs`} />
                                             </div>
-                                            <div className="col-span-4 md:col-span-2">
-                                                <label className="neo-label">TIEMPO</label>
-                                                <input type="number" value={comp.tiempo} onChange={e => updateComp(idx, 'tiempo', e.target.value)} className="neo-input text-center text-xs"/>
+
+                                             <div className="col-span-3 md:col-span-2">
+                                                 <label className={labelClass}>TIEMPO (min)</label>
+                                                 <input type="number" value={comp.tiempo} onChange={e => updateComponent(idx, 'tiempo', e.target.value)} className={`${inputClass} text-center text-xs`} />
                                             </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            {/* RECETA DE HILOS (Info) */}
+                            {/* Pie de Receta de Hilos (Solo lectura informativo) */}
                             {threading.length > 0 && (
-                                <div className="bg-slate-950 p-3 border-t border-slate-700 text-[10px] text-slate-400 flex items-center gap-4 overflow-x-auto">
-                                    <div className="font-bold shrink-0 flex items-center gap-1 text-indigo-400"><Icon name="spool" size={12}/> HILOS (Auto-Descuento):</div>
-                                    {threading.map((h, i) => (
-                                        <div key={i} className="bg-slate-800 px-2 py-1 rounded border border-slate-700 whitespace-nowrap">
-                                            {h.material} <span className="text-white font-bold">{h.porcentaje}%</span>
-                                        </div>
-                                    ))}
+                                <div className="p-3 bg-slate-900/80 border-t border-slate-700 text-xs">
+                                    <div className="font-bold text-slate-400 mb-2 flex items-center gap-2"><Icon name="spool" size={12}/> HILOS CONFIGURADOS EN PLANTILLA (Se descontarán del inventario)</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {threading.map((h, i) => (
+                                            <span key={i} className="bg-slate-800 border border-slate-600 px-2 py-1 rounded text-slate-300">
+                                                {h.material} <span className="text-indigo-400 font-bold">{h.porcentaje}%</span>
+                                            </span>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
                         </div>
-
                     </div>
                 </div>
             );
-        };
+        }
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<NeoOrderGenerator />);
+        root.render(<OrderGeneratorApp />);
     </script>
 </body>
 </html>
