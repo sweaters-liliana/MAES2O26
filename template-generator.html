@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Plantillas - Optimizado</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Estilos base para inputs */
+        input:focus { outline: 2px solid #9333ea; outline-offset: 1px; }
+        /* Animación suave para modales */
+        .modal-enter { animation: fadeIn 0.2s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    </style>
+</head>
+<body class="bg-slate-200 text-slate-800 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- MOCK DE FIREBASE (Para que funcione la UI sin base de datos real en este demo) ---
+        // En tu proyecto real, usa tu instancia 'db' original.
+        const dbMock = {
+            collection: (name) => ({
+                doc: (id) => ({
+                    set: async (data) => {
+                        console.log(`Guardando en ${name}/${id}:`, data);
+                        return Promise.resolve(true);
+                    },
+                    onSnapshot: (cb) => {
+                        // Simulamos inventario para el autocompletado
+                        cb({ 
+                            exists: true, 
+                            data: () => ({ items: [
+                                { id: '1', material: 'ALGODON 30/1', color: 'NEGRO', stock: 100 },
+                                { id: '2', material: 'POLIESTER', color: 'BLANCO', stock: 50 },
+                                { id: '3', material: 'LYCRA', color: 'TRANSPARENTE', stock: 20 }
+                            ]})
+                        });
+                        return () => {};
+                    }
+                })
+            }),
+            FieldValue: { serverTimestamp: () => new Date() }
+        };
+
+        // --- COMPONENTES AUXILIARES ---
+
+        const Icon = ({ name, size = 18, className }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            });
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
+
+        const TimeInput = ({ value, onChange, disabled }) => {
+            const [mins, setMins] = useState('');
+            const [secs, setSecs] = useState('');
+
+            useEffect(() => {
+                if (value === undefined || value === '' || value === null) {
+                    setMins(''); setSecs('');
+                } else {
+                    const totalMins = parseFloat(value);
+                    const m = Math.floor(totalMins);
+                    const s = Math.round((totalMins - m) * 60);
+                    setMins(m.toString());
+                    setSecs(s < 10 ? '0' + s : s.toString());
+                }
+            }, [value]);
+
+            const handleChange = (newM, newS) => {
+                const m = parseInt(newM) || 0;
+                const s = parseInt(newS) || 0;
+                const decimalValue = (m + (s / 60)).toFixed(4);
+                onChange(decimalValue);
+            };
+
+            return (
+                <div className="flex items-center gap-1">
+                    <input type="number" value={mins} placeholder="00" disabled={disabled} onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} className={`w-full md:w-10 text-center border border-gray-300 rounded p-2 md:p-1 text-sm md:text-xs font-mono focus:border-purple-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`} />
+                    <span className="font-bold text-gray-400">:</span>
+                    <input type="number" value={secs} placeholder="00" max="59" disabled={disabled} onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} className={`w-full md:w-10 text-center border border-gray-300 rounded p-2 md:p-1 text-sm md:text-xs font-mono focus:border-purple-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`} />
+                </div>
+            );
+        };
+
+        // --- COMPONENTE PRINCIPAL EXTRAÍDO Y MEJORADO ---
+
+        const TemplateCreatorModal = ({ onClose }) => {
+            const [form, setForm] = useState({ modelo: '', cliente: '' });
+            const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+            const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
+            
+            const [inventory, setInventory] = useState([]);
+            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+
+            useEffect(() => {
+                // Usamos dbMock en lugar de db real para el ejemplo
+                const unsubscribe = dbMock.collection('inventory').doc('main').onSnapshot(doc => { 
+                    if (doc.exists && doc.data().items) setInventory(doc.data().items); 
+                });
+                return () => unsubscribe();
+            }, []);
+
+            const handleMaterialInput = (idx, val) => { 
+                const newThreads = [...threading]; newThreads[idx].material = val; setThreading(newThreads);
+                if (val.length > 1) { 
+                    const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); 
+                    setSuggestions({ index: idx, items: filtered }); 
+                } else { 
+                    setSuggestions({ index: null, items: [] }); 
+                } 
+            };
+            
+            const selectSuggestion = (idx, item) => { 
+                const newThreads = [...threading]; 
+                newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id }; 
+                setThreading(newThreads); setSuggestions({ index: null, items: [] }); 
+            };
+
+            const updateComp = (idx, field, val) => { 
+                const n = [...components]; 
+                n[idx][field] = (field === 'descripcion' || field === 'sufijo' || field === 'talla') ? val.toUpperCase() : val; 
+                setComponents(n); 
+            };
+
+            const handleSaveTemplate = async () => {
+                if(!form.modelo || !form.cliente || components.length === 0) return alert("Completa los campos básicos");
+                try {
+                    await dbMock.collection('model_templates').doc(form.modelo.toUpperCase()).set({
+                        modelo: form.modelo.toUpperCase(),
+                        cliente: form.cliente.toUpperCase(),
+                        components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase(), talla: c.talla.toUpperCase()})),
+                        threading: threading, 
+                        updatedAt: dbMock.FieldValue.serverTimestamp()
+                    });
+                    alert("¡Plantilla Completa Guardada!");
+                    onClose();
+                } catch(e) { console.error(e); alert("Error al guardar plantilla"); }
+            };
+
+            return (
+                <div className="fixed inset-0 bg-black/80 z-[70] flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in">
+                    {/* Contenedor Principal: Full width en móvil, max-width en desktop */}
+                    <div className="bg-white md:rounded-lg shadow-2xl w-full h-[95vh] md:h-[90vh] md:max-w-4xl flex flex-col modal-enter overflow-hidden rounded-t-2xl">
+                        
+                        {/* Header */}
+                        <div className="bg-purple-700 p-4 text-white flex justify-between items-center shrink-0">
+                            <div>
+                                <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
+                                    <Icon name="bot" className="text-purple-200"/> 
+                                    <span>Crear Plantilla Maestra</span>
+                                </h1>
+                                <div className="text-xs text-purple-200 hidden md:block">Entrena al sistema con Datos, Tallas, Hilos y Tiempos</div>
+                            </div>
+                            <button onClick={onClose} className="bg-purple-800 p-2 rounded-full hover:bg-purple-600 transition"><Icon name="x"/></button>
+                        </div>
+
+                        {/* Contenido Scrollable */}
+                        <div className="p-4 md:p-6 overflow-y-auto flex-grow space-y-6 bg-slate-50">
+                            
+                            {/* 1. Datos Generales */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded shadow-sm border border-purple-100">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Modelo</label>
+                                    <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border border-gray-300 rounded font-bold uppercase focus:border-purple-500" placeholder="EJ: POLO-2024"/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Cliente Habitual</label>
+                                    <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border border-gray-300 rounded font-bold uppercase focus:border-purple-500"/>
+                                </div>
+                            </div>
+
+                            {/* 2. Receta de Hilos */}
+                            <div className="bg-white border rounded p-4 shadow-sm">
+                                <div className="flex justify-between items-center mb-3 border-b pb-2">
+                                    <h2 className="text-sm font-bold text-indigo-700 flex items-center gap-2"><Icon name="spool"/> Receta de Hilos</h2>
+                                    <button onClick={() => setThreading([...threading, {guia: threading.length+1, material: '', porcentaje: '', materialId: null}])} className="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded font-bold transition">+ Hilo</button>
+                                </div>
+                                
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs min-w-[300px]">
+                                        <thead className="bg-slate-100 text-slate-500">
+                                            <tr>
+                                                <th className="p-2 w-12 text-center">Guía</th>
+                                                <th className="p-2 text-left">Material (Inventario)</th>
+                                                <th className="p-2 w-16 text-center">%</th>
+                                                <th className="w-8"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {threading.map((h, i) => (
+                                                <tr key={i} className="relative group hover:bg-slate-50">
+                                                    <td className="p-1"><input value={h.guia} onChange={e=>{const n=[...threading]; n[i].guia=e.target.value; setThreading(n);}} className="w-full text-center border p-1 rounded font-bold text-gray-700"/></td>
+                                                    <td className="p-1 relative">
+                                                        <input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full border p-1.5 rounded outline-none focus:border-indigo-500" placeholder="Buscar..."/>
+                                                        {suggestions.index === i && suggestions.items.length > 0 && (
+                                                            <div className="absolute z-50 bg-white border shadow-xl w-full min-w-[200px] max-h-40 overflow-y-auto left-0 mt-1 rounded text-xs">
+                                                                {suggestions.items.map(item => (
+                                                                    <div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b last:border-0 flex justify-between items-center">
+                                                                        <div><span className="font-bold text-slate-700">{item.material}</span></div>
+                                                                        <span className="text-[9px] bg-green-100 text-green-800 px-1 rounded">Stock: {item.stock}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-1"><input value={h.porcentaje} onChange={e=>{const n=[...threading]; n[i].porcentaje=e.target.value; setThreading(n);}} className="w-full text-center border p-1.5 rounded" placeholder="%"/></td>
+                                                    <td className="text-center p-1"><button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600 p-1"><Icon name="trash-2" size={14}/></button></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* 3. Componentes y Tiempos - OPTIMIZADO PARA MOVIL */}
+                            <div className="space-y-3">
+                                <div className="flex flex-col md:flex-row justify-between md:items-center border-b pb-2 gap-2">
+                                    <h2 className="text-sm font-bold text-gray-700">Configuración de Componentes</h2>
+                                    <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-xs font-bold w-full md:w-auto flex justify-center items-center gap-2 shadow-sm transition">
+                                        <Icon name="plus-circle" size={16}/> Agregar Componente
+                                    </button>
+                                </div>
+
+                                {/* Header de la "tabla" solo visible en Desktop */}
+                                <div className="hidden md:grid md:grid-cols-12 md:gap-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    <div className="col-span-3">Pieza</div>
+                                    <div className="col-span-1">Talla</div>
+                                    <div className="col-span-1 text-center">MQ</div>
+                                    <div className="col-span-1">Sufijo</div>
+                                    <div className="col-span-1 text-center">Mult.</div>
+                                    <div className="col-span-1 text-center">P/Paq</div>
+                                    <div className="col-span-2 text-center text-orange-600">Peso (g)</div>
+                                    <div className="col-span-2 text-orange-600">Tiempo</div>
+                                </div>
+
+                                <div className="space-y-4 md:space-y-2">
+                                    {components.map((comp, idx) => (
+                                        <div key={idx} className="bg-white md:bg-gray-50 p-4 md:p-2 rounded-lg border border-gray-200 md:border-transparent relative flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-2 items-end md:items-center shadow-sm md:shadow-none transition hover:bg-white hover:shadow-md hover:border-purple-200">
+                                            
+                                            {/* Botón Eliminar */}
+                                            <div className="absolute top-2 right-2 md:static md:col-span-12 md:order-last md:w-auto md:flex md:justify-center hidden">
+                                                 {/* Desktop delete logic handled by layout, see below for trick */}
+                                            </div>
+                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 md:relative md:top-auto md:right-auto md:order-12 text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition">
+                                                <Icon name="x" size={18} className="md:w-4 md:h-4"/>
+                                            </button>
+
+                                            {/* Campos Mobile/Desktop Híbridos */}
+                                            
+                                            <div className="w-full md:col-span-3">
+                                                <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block">Descripción Pieza</label>
+                                                <input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs uppercase focus:border-purple-500 font-medium" placeholder="EJ: DELANTERO"/>
+                                            </div>
+                                            
+                                            <div className="w-full md:col-span-1 grid grid-cols-2 gap-2 md:block">
+                                                <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block self-center">Talla</label>
+                                                <input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs uppercase font-bold text-blue-700 bg-blue-50 focus:border-blue-500" placeholder="UNI"/>
+                                            </div>
+
+                                            <div className="w-full flex gap-3 md:contents">
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center">Máquina</label>
+                                                    <input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs text-center font-bold focus:border-purple-500"/>
+                                                </div>
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center">Sufijo</label>
+                                                    <input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs uppercase text-center focus:border-purple-500"/>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="w-full flex gap-3 md:contents">
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center" title="Multiplicador">Mult.</label>
+                                                    <input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs text-center focus:border-purple-500"/>
+                                                </div>
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center" title="Piezas por Paquete">P/Paq</label>
+                                                    <input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs text-center bg-blue-50 focus:border-blue-500"/>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="w-full md:col-span-2">
+                                                <label className="md:hidden text-xs font-bold text-orange-600 mb-1 block">Peso (g)</label>
+                                                <input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="w-full p-2 md:p-1 border border-orange-200 rounded text-sm md:text-xs text-center focus:border-orange-500" placeholder="0.0"/>
+                                            </div>
+                                            
+                                            <div className="w-full md:col-span-2">
+                                                <label className="md:hidden text-xs font-bold text-orange-600 mb-1 block">Tiempo (Min:Seg)</label>
+                                                <TimeInput value={comp.tiempo} onChange={val => updateComp(idx, 'tiempo', val)} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t bg-gray-100 md:rounded-b-lg flex justify-end gap-3 shrink-0 pb-8 md:pb-4">
+                            <button onClick={onClose} className="px-4 py-2 rounded text-slate-600 font-bold hover:bg-slate-200 text-sm">Cancelar</button>
+                            <button onClick={handleSaveTemplate} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 md:py-2 rounded shadow-lg flex items-center gap-2 font-bold text-sm md:text-xs transform active:scale-95 transition w-full md:w-auto justify-center">
+                                <Icon name="save"/> GUARDAR EN MEMORIA
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const App = () => {
+            const [showModal, setShowModal] = useState(true);
+
+            return (
+                <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
+                    <h1 className="text-2xl font-black text-slate-700">App Demo</h1>
+                    <button 
+                        onClick={() => setShowModal(true)} 
+                        className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition flex gap-2 items-center"
+                    >
+                        <Icon name="plus-square"/> Abrir Generador de Plantillas
+                    </button>
+                    
+                    {showModal && <TemplateCreatorModal onClose={() => setShowModal(false)} />}
+                </div>
+            )
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
