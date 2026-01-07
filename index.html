@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v4.2 (Tallas Update)</title>
+    <title>Sistema Textil Cloud - Cirineo v4.4 (Trash Update)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#1e293b">
@@ -279,7 +279,6 @@
         // --- MODEL TEMPLATE CREATOR (CON TALLA, HILOS Y TIEMPO) ---
         const TemplateCreatorModal = ({ onClose }) => {
             const [form, setForm] = useState({ modelo: '', cliente: '' });
-            // MODIFICADO: Agregada 'talla' al estado inicial
             const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
             const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
             
@@ -301,7 +300,6 @@
                 newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id }; 
                 setThreading(newThreads); setSuggestions({ index: null, items: [] }); 
             };
-            // MODIFICADO: Agregada lógica para 'talla'
             const updateComp = (idx, field, val) => { const n=[...components]; n[idx][field]= (field === 'descripcion' || field === 'sufijo' || field === 'talla') ? val.toUpperCase() : val; setComponents(n); };
 
             const handleSaveTemplate = async () => {
@@ -310,7 +308,6 @@
                     await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
                         modelo: form.modelo.toUpperCase(),
                         cliente: form.cliente.toUpperCase(),
-                        // MODIFICADO: Guardamos la Talla
                         components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase(), talla: c.talla.toUpperCase()})),
                         threading: threading, 
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -364,7 +361,6 @@
                                         <div className="col-span-12 absolute top-0 right-0 p-1"><button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="text-red-400"><Icon name="x" size={14}/></button></div>
                                         
                                         <div className="col-span-3"><label className="text-[10px] font-bold">Pieza</label><input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
-                                        {/* MODIFICADO: Campo Talla visible */}
                                         <div className="col-span-1"><label className="text-[10px] font-bold">Talla</label><input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="w-full p-1 border rounded text-xs uppercase font-bold text-blue-800" placeholder="UNI"/></div>
                                         <div className="col-span-1"><label className="text-[10px] font-bold">MQ</label><input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="w-full p-1 border rounded text-xs text-center font-bold"/></div>
                                         <div className="col-span-1"><label className="text-[10px] font-bold">Sufijo</label><input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-1 border rounded text-xs uppercase"/></div>
@@ -451,7 +447,6 @@
             const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
             const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
             
-            // MODIFICADO: Agregada 'talla' al estado inicial del generador
             const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
             const [templateThreading, setTemplateThreading] = useState([]);
             
@@ -497,7 +492,6 @@
                     
                     const totalPiezasComp = form.totalPrendas * comp.multiplicador;
                     
-                    // MODIFICADO: Usar la talla del componente, si no existe usar UNI
                     ordersByMachine[maquinaKey].subPiecesData.push({ 
                         id: Date.now() + Math.random(), 
                         pieza: comp.descripcion.toUpperCase(), 
@@ -520,6 +514,13 @@
                 if(!hasValidComponent) return alert("Agrega al menos un componente válido");
                 setDrafts(Object.values(ordersByMachine));
                 setStep('staging');
+            };
+            
+            // --- FUNCION PARA ELIMINAR BORRADOR EN STAGING ---
+            const removeDraft = (indexToRemove) => {
+                if(window.confirm("¿Estás seguro de eliminar este borrador de orden?")) {
+                    setDrafts(drafts.filter((_, i) => i !== indexToRemove));
+                }
             };
 
             const handleSaveOne = async (finalDraft) => {
@@ -552,7 +553,40 @@
             };
 
             if (step === 'editing' && currentDraftIndex !== null) return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-2xl h-[90vh] overflow-hidden relative"><DraftEditor draft={drafts[currentDraftIndex]} onSave={handleSaveOne} onCancel={() => setStep('staging')} /></div></div>);
-            if (step === 'staging') return (<div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"><div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[80vh] overflow-hidden flex flex-col"><div className="bg-orange-600 p-4 text-white flex justify-between items-center shrink-0"><div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="layers"/> Órdenes Preparadas</h1></div><button onClick={() => setStep('input')} className="text-white bg-orange-700 px-3 py-1 rounded text-xs font-bold">Volver</button></div><div className="p-6 overflow-y-auto bg-slate-100 flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">{drafts.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-gray-400 py-10"><Icon name="check-circle" size={48} className="mb-2"/><button onClick={onClose} className="mt-4 text-blue-600 font-bold hover:underline">Cerrar</button></div>}{drafts.map((draft, idx) => (<div key={idx} className="bg-white rounded shadow border-l-4 border-indigo-500 p-4 flex flex-col justify-between"><div><div className="flex justify-between items-start mb-2"><h3 className="font-black text-xl text-slate-700">MÁQUINA {draft.maquina}</h3><span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded">BORRADOR</span></div><div className="text-sm text-gray-600 mb-2"><p><strong>Cliente:</strong> {draft.cliente}</p><p><strong>Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p></div></div><button onClick={() => { setCurrentDraftIndex(idx); setStep('editing'); }} className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded flex items-center justify-center gap-2"><Icon name="edit"/> REVISAR, PESOS E INVENTARIO</button></div>))}</div></div></div>);
+            if (step === 'staging') return (
+                <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl h-[80vh] overflow-hidden flex flex-col">
+                        <div className="bg-orange-600 p-4 text-white flex justify-between items-center shrink-0">
+                            <div><h1 className="text-xl font-bold flex items-center gap-2"><Icon name="layers"/> Órdenes Preparadas</h1></div>
+                            <button onClick={() => setStep('input')} className="text-white bg-orange-700 px-3 py-1 rounded text-xs font-bold">Volver</button>
+                        </div>
+                        <div className="p-6 overflow-y-auto bg-slate-100 flex-grow grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {drafts.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-gray-400 py-10"><Icon name="check-circle" size={48} className="mb-2"/><button onClick={onClose} className="mt-4 text-blue-600 font-bold hover:underline">Cerrar</button></div>}
+                            {drafts.map((draft, idx) => (
+                                <div key={idx} className="bg-white rounded shadow border-l-4 border-indigo-500 p-4 flex flex-col justify-between relative group">
+                                    <div>
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="font-black text-xl text-slate-700">MÁQUINA {draft.maquina}</h3>
+                                            <div className="flex items-center gap-2">
+                                                <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded">BORRADOR</span>
+                                                {/* BOTÓN DE BASURA EN STAGING */}
+                                                <button onClick={() => removeDraft(idx)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Eliminar este borrador">
+                                                    <Icon name="trash-2" size={18}/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="text-sm text-gray-600 mb-2">
+                                            <p><strong>Cliente:</strong> {draft.cliente}</p>
+                                            <p><strong>Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => { setCurrentDraftIndex(idx); setStep('editing'); }} className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 rounded flex items-center justify-center gap-2"><Icon name="edit"/> REVISAR, PESOS E INVENTARIO</button>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
 
             return (
                 <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
@@ -581,10 +615,11 @@
                                 <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
                                     {components.map((comp, idx) => (
                                         <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
-                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 text-red-400 hover:text-red-600"><Icon name="x" size={14}/></button>
+                                            {/* BOTÓN DE BASURA EN PIEZAS (ACTUALIZADO) */}
+                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 bg-red-50 hover:bg-red-100 text-red-500 p-1.5 rounded transition" title="Eliminar pieza"><Icon name="trash-2" size={14}/></button>
+                                            
                                             <div className="grid grid-cols-3 gap-2 mb-2">
                                                 <div className="col-span-2"><label className="text-[10px] font-bold text-gray-500">Descripción</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase"/></div>
-                                                {/* MODIFICADO: Agregada input Talla en generador */}
                                                 <div><label className="text-[10px] font-bold text-gray-500">Talla</label><input value={comp.talla} onChange={e => { const newComps=[...components]; newComps[idx].talla=e.target.value.toUpperCase(); setComponents(newComps); }} className="w-full p-1 border rounded text-xs font-bold uppercase bg-blue-50 text-blue-800" placeholder="UNI"/></div>
                                             </div>
                                             <div className="grid grid-cols-4 gap-2">
