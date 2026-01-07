@@ -2,433 +2,457 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Sistema Integral de Pedidos - Cirineo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo Factory - Generador de Pedidos AI</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-        body { background-color: #0f172a; color: white; -webkit-tap-highlight-color: transparent; font-family: sans-serif; }
+        /* --- ESTÉTICA DARK MODE (NEO FACTORY) --- */
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', system-ui, sans-serif; overflow-x: hidden; }
         
-        /* SOLUCIÓN AL SCROLL DE MENÚS DESPLEGABLES */
-        .accordion-content { 
-            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out; 
-            max-height: 0; 
-            opacity: 0; 
-            overflow: hidden; 
-        }
+        /* Scrollbars Personalizados */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
-        .accordion-content.open { 
-            max-height: 550px; /* Altura ideal para ver muchos archivos sin perderse */
-            opacity: 1; 
-            overflow-y: auto; /* Activa el scroll interno */
-        }
-
-        /* Personalización de la barra de scroll para que se vea moderna */
-        .accordion-content::-webkit-scrollbar { width: 6px; }
-        .accordion-content::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        input:focus { outline: 2px solid #6366f1; outline-offset: 1px; }
         
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        .modal-enter { animation: slideUp 0.3s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-        .suggestions-box {
-            position: absolute; z-index: 100; background: #1e293b; 
-            border: 1px solid #475569; width: 100%; max-height: 150px; 
-            overflow-y: auto; border-radius: 0.5rem;
+        /* Estilos Ventana Flotante Excel */
+        .floating-window {
+            position: fixed; z-index: 100; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 1px solid #475569; display: flex; flex-direction: column;
+            overflow: hidden; border-radius: 0.5rem; background-color: #1e293b;
         }
+        .excel-table { border-collapse: collapse; background: #fff; color: #000; font-size: 11px; }
+        .excel-table td { border: 1px solid #c0c0c0; padding: 2px 4px; white-space: pre-wrap; }
+        
+        /* Utilidades Inputs */
+        .neo-input {
+            width: 100%; background-color: #0f172a; border: 1px solid #334155;
+            padding: 0.5rem; border-radius: 0.375rem; color: white;
+            font-weight: 700; text-transform: uppercase; transition: all 0.2s;
+        }
+        .neo-input:focus { border-color: #6366f1; background-color: #1e293b; }
+        .neo-label { display: block; font-size: 0.65rem; font-weight: 800; color: #94a3b8; margin-bottom: 0.25rem; letter-spacing: 0.05em; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
-        
-        // --- CONFIGURACIÓN FIREBASE ---
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- 1. CONFIGURACIÓN FIREBASE REAL ---
         const firebaseConfig = {
-            apiKey: "AIzaSyCngQL1pdqghv2vbjkPycT1Xf0C46f7jYs",
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
             authDomain: "cirineo-cec21.firebaseapp.com",
             projectId: "cirineo-cec21",
             storageBucket: "cirineo-cec21.firebasestorage.app",
             messagingSenderId: "620210618284",
-            appId: "1:620210618284:web:482bab9bf74650fff18409"
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
         };
 
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        const Icon = ({ name, size = 18, className }) => <i data-lucide={name} width={size} height={size} className={className}></i>;
+        // --- 2. UTILIDADES Y GITHUB ---
+        const Icon = ({ name, size = 18, className }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
 
-        // --- COMPONENTE: REVISIÓN DE INVENTARIO (TU FOTO) ---
-        const InventoryReview = ({ draft, onSave, onCancel }) => {
-            const [localDraft, setLocalDraft] = useState(draft);
-            const [inventory, setInventory] = useState([]);
-            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
-            
+        const generateSmartID = (partida, pieces, maquina) => {
+            const piecePrefixes = pieces.map(p => p.pieza.substring(0, 2).toUpperCase()).join('/');
+            return `${partida}-${piecePrefixes}-M${maquina}`;
+        };
+
+        const GITHUB_CONFIG = { owner: 'sweaters-liliana', repo: 'MAES2O26', path: 'Fichas' };
+        const fetchExcelFromGitHub = async (modelName) => {
+            if (!modelName) throw new Error("Falta modelo");
+            const apiUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
+            const listResponse = await fetch(apiUrl);
+            if (!listResponse.ok) throw new Error("Error GitHub API");
+            const files = await listResponse.json();
+            const targetFile = files.find(f => f.name.toLowerCase().includes(modelName.toLowerCase()) && f.name.endsWith('.xlsx'));
+            if (!targetFile) throw new Error(`Sin ficha para "${modelName}"`);
+            const fileResponse = await fetch(targetFile.download_url);
+            const blob = await fileResponse.blob();
+            const workbook = XLSX.read(await blob.arrayBuffer());
+            return { fileName: targetFile.name, worksheet: workbook.Sheets[workbook.SheetNames[0]] };
+        };
+
+        // --- 3. COMPONENTE: VISOR EXCEL FLOTANTE ---
+        const FloatingExcelViewer = ({ worksheet, fileName, onClose }) => {
+            const [position, setPosition] = useState({ x: 20, y: 80 });
+            const [isDragging, setIsDragging] = useState(false);
+            const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0 });
+
+            const startDrag = (e) => {
+                setIsDragging(true);
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                dragRef.current = { startX: clientX, startY: clientY, initialX: position.x, initialY: position.y };
+            };
+
             useEffect(() => {
-                db.collection('inventory').doc('main').get().then(doc => {
+                const handleMove = (e) => {
+                    if (!isDragging) return;
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    const dx = clientX - dragRef.current.startX;
+                    const dy = clientY - dragRef.current.startY;
+                    setPosition({ x: dragRef.current.initialX + dx, y: dragRef.current.initialY + dy });
+                };
+                const handleUp = () => setIsDragging(false);
+                if (isDragging) {
+                    window.addEventListener('mousemove', handleMove);
+                    window.addEventListener('mouseup', handleUp);
+                    window.addEventListener('touchmove', handleMove);
+                    window.addEventListener('touchend', handleUp);
+                }
+                return () => {
+                    window.removeEventListener('mousemove', handleMove);
+                    window.removeEventListener('mouseup', handleUp);
+                    window.removeEventListener('touchmove', handleMove);
+                    window.removeEventListener('touchend', handleUp);
+                };
+            }, [isDragging]);
+
+            const gridHtml = useMemo(() => worksheet ? XLSX.utils.sheet_to_html(worksheet) : '', [worksheet]);
+
+            return (
+                <div className="floating-window w-[90vw] md:w-[600px] h-[500px]" style={{ left: position.x, top: position.y }}>
+                    <div className="bg-slate-800 p-2 border-b border-slate-600 flex justify-between items-center cursor-move select-none"
+                         onMouseDown={startDrag} onTouchStart={startDrag}>
+                        <span className="font-bold text-xs text-emerald-400 flex gap-2 items-center"><Icon name="file-spreadsheet"/> {fileName}</span>
+                        <button onClick={onClose} className="text-red-400 hover:bg-red-900/50 p-1 rounded"><Icon name="x" size={16}/></button>
+                    </div>
+                    <div className="flex-grow overflow-auto bg-white p-2" dangerouslySetInnerHTML={{__html: gridHtml}} />
+                </div>
+            );
+        };
+
+        // --- 4. APP PRINCIPAL: GENERADOR DE PEDIDOS ---
+        const NeoOrderGenerator = () => {
+            // Estado Principal
+            const [form, setForm] = useState({
+                modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0],
+                partidaCodigo: '', totalPrendas: 0
+            });
+
+            // Componentes, Hilos (para inventario) y UI
+            const [components, setComponents] = useState([]);
+            const [threading, setThreading] = useState([]); 
+            const [excelFile, setExcelFile] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const [inventory, setInventory] = useState([]);
+
+            // Cargar Inventario Real
+            useEffect(() => {
+                const unsub = db.collection('inventory').doc('main').onSnapshot(doc => {
                     if (doc.exists) setInventory(doc.data().items || []);
                 });
+                return () => unsub();
             }, []);
 
-            const calculateConsumption = (hilo) => {
-                if (!hilo.materialId || !hilo.porcentaje) return 0;
-                const totalGramos = localDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0);
-                return ((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2);
-            };
-
-            return (
-                <div className="fixed inset-0 bg-slate-900 z-[80] flex flex-col">
-                    <div className="bg-indigo-700 p-4 flex justify-between items-center shrink-0 shadow-lg">
-                        <h2 className="font-bold text-lg flex items-center gap-2"><Icon name="database"/> REVISAR M{localDraft.maquina}</h2>
-                        <button onClick={onCancel} className="bg-white/20 p-2 rounded-full"><Icon name="x"/></button>
-                    </div>
-                    
-                    <div className="p-4 overflow-y-auto flex-grow space-y-4">
-                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <h3 className="text-blue-400 font-bold text-xs uppercase mb-4 tracking-widest">Hilos e Inventario</h3>
-                            {localDraft.threading.map((h, i) => (
-                                <div key={i} className="mb-4 relative border-b border-slate-700 pb-4 last:border-0">
-                                    <div className="grid grid-cols-6 gap-2 items-end">
-                                        <div className="col-span-3">
-                                            <label className="text-[10px] text-slate-500 font-bold uppercase">Guía {h.guia}</label>
-                                            <input value={h.material} onChange={e => {
-                                                const val = e.target.value;
-                                                const n = [...localDraft.threading]; n[i].material = val;
-                                                setLocalDraft({...localDraft, threading: n});
-                                                if(val.length > 1) {
-                                                    setSuggestions({index: i, items: inventory.filter(inv => `${inv.material} ${inv.color}`.toLowerCase().includes(val.toLowerCase()))});
-                                                } else setSuggestions({index: null, items: []});
-                                            }} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm" placeholder="Buscar material..."/>
-                                        </div>
-                                        <div className="col-span-1">
-                                            <label className="text-[10px] text-slate-500 font-bold">%</label>
-                                            <input type="number" value={h.porcentaje} onChange={e => {
-                                                const n = [...localDraft.threading]; n[i].porcentaje = e.target.value;
-                                                setLocalDraft({...localDraft, threading: n});
-                                            }} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-sm text-center font-bold"/>
-                                        </div>
-                                        <div className="col-span-2 text-right">
-                                            <span className="text-[10px] text-red-400 font-bold block">CONSUMO</span>
-                                            <span className="text-lg font-black text-white">{calculateConsumption(h)} <small className="text-[10px]">kg</small></span>
-                                        </div>
-                                    </div>
-                                    {suggestions.index === i && suggestions.items.length > 0 && (
-                                        <div className="suggestions-box">
-                                            {suggestions.items.map(item => (
-                                                <div key={item.id} onClick={() => {
-                                                    const n = [...localDraft.threading]; 
-                                                    n[i].material = `${item.material} - ${item.color}`;
-                                                    n[i].materialId = item.id;
-                                                    setLocalDraft({...localDraft, threading: n});
-                                                    setSuggestions({index: null, items: []});
-                                                }} className="p-3 hover:bg-indigo-600 border-b border-slate-700 text-xs">
-                                                    {item.material} - {item.color} <span className="text-green-400 font-bold">({item.stock}kg)</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-
-                        <div className="bg-slate-800 p-4 rounded-xl border border-slate-700">
-                            <h3 className="text-green-400 font-bold text-xs uppercase mb-4 tracking-widest">Pesos de Piezas (Gramos)</h3>
-                            {localDraft.subPiecesData.map((p, idx) => (
-                                <div key={idx} className="flex gap-4 items-center mb-4 bg-slate-900/50 p-2 rounded-lg">
-                                    <div className="flex-grow font-bold text-sm text-slate-300 uppercase">{p.pieza}</div>
-                                    <div className="w-24">
-                                        <input type="number" placeholder="Gramos" value={p.peso} onChange={e => {
-                                            const n = [...localDraft.subPiecesData]; n[idx].peso = e.target.value;
-                                            setLocalDraft({...localDraft, subPiecesData: n});
-                                        }} className="w-full bg-slate-800 border-2 border-slate-600 rounded p-2 text-center text-white font-bold focus:border-green-500 outline-none"/>
-                                    </div>
-                                    <div className="text-xs text-slate-500 font-bold">{p.totalPedido} Pzs</div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="p-4 bg-slate-800 border-t border-slate-700 flex gap-3">
-                        <button onClick={() => onSave(localDraft)} className="flex-1 bg-green-600 py-4 rounded-xl font-black text-white shadow-xl flex items-center justify-center gap-2">
-                            <Icon name="check-circle"/> ACTIVAR PEDIDO
-                        </button>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- COMPONENTE: GENERADOR PRINCIPAL ---
-        const OrderGeneratorModal = ({ initialData, mode, onClose, onSaveSuccess }) => {
-            const [step, setStep] = useState('form'); // form, staging, review
-            const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partida: '', totalGlobal: 0 });
-            const [components, setComponents] = useState([{ descripcion: '', sufijo: '', maquina: '', totalLienzos: 0, piezasPorPaquete: 0 }]);
-            const [preparedDrafts, setPreparedDrafts] = useState([]);
-            const [currentReviewIdx, setCurrentReviewIdx] = useState(null);
-
+            // Auto-Generar Código Partida
             useEffect(() => {
-                if (initialData) {
-                    setForm({
-                        modelo: initialData.modelo || initialData.codigo || '',
-                        cliente: initialData.cliente || '',
-                        fecha: initialData.fecha || new Date().toISOString().split('T')[0],
-                        partida: initialData.partida || '',
-                        totalGlobal: initialData.totalPedidoGlobal || 0
-                    });
-                    if (initialData.componentsSource) setComponents(initialData.componentsSource);
-                }
-            }, [initialData]);
-
-            // Generador de código de partida automático
-            useEffect(() => {
-                if (mode === 'create' && form.fecha) {
-                    const d = new Date(form.fecha + 'T00:00:00');
-                    const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-                    setForm(prev => ({ ...prev, partida: `${meses[d.getMonth()]}${d.getFullYear().toString().slice(-2)}_01` }));
-                }
+                if (!form.fecha) return;
+                const date = new Date(form.fecha + 'T00:00:00');
+                const months = ["ENE","FEB","MAR","ABR","MAY","JUN","JUL","AGO","SEP","OCT","NOV","DIC"];
+                const code = `${months[date.getMonth()]}${date.getFullYear().toString().slice(-2)}_01`;
+                setForm(prev => ({ ...prev, partidaCodigo: code }));
             }, [form.fecha]);
 
-            const handleProcess = () => {
-                if(!form.modelo || !form.cliente || !form.partida) return alert("Completa los datos generales");
+            // Lógica: Buscar Modelo (DB + GitHub)
+            const handleSearch = async () => {
+                if (!form.modelo) return;
+                setLoading(true);
                 
-                const grouped = {};
-                components.forEach(c => {
-                    if(!c.maquina || !c.totalLienzos) return;
-                    const mq = c.maquina;
-                    if(!grouped[mq]) grouped[mq] = { 
-                        codigo: form.modelo, cliente: form.cliente, maquina: mq, partida: form.partida, 
-                        fecha: form.fecha, totalPedidoGlobal: form.totalGlobal, subPiecesData: [], 
-                        predefinedPackages: [], threading: [{guia:1, material:'', porcentaje:''}, {guia:2, material:'', porcentaje:''}],
-                        componentsSource: components
-                    };
-                    
-                    grouped[mq].subPiecesData.push({ pieza: c.descripcion.toUpperCase(), totalPedido: Number(c.totalLienzos), peso: '', talla: 'UNI' });
-                    
-                    const numPaq = Math.ceil(c.totalLienzos / (c.piezasPorPaquete || c.totalLienzos));
-                    for(let i=1; i<=numPaq; i++){
-                        grouped[mq].predefinedPackages.push({
-                            piezaNombre: c.descripcion.toUpperCase(), cantidad: (i===numPaq && c.totalLienzos%c.piezasPorPaquete!==0) ? c.totalLienzos%c.piezasPorPaquete : (c.piezasPorPaquete || c.totalLienzos),
-                            paqueteNum: i, paquetesDePieza: numPaq, codigoUnico: `${form.partida}${c.sufijo}_${i}_${numPaq}`, finished: false
-                        });
+                // 1. Buscar Plantilla en DB
+                try {
+                    const doc = await db.collection('model_templates').doc(form.modelo.toUpperCase()).get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        setForm(prev => ({ ...prev, cliente: data.cliente || '' }));
+                        setComponents(data.components || []);
+                        setThreading(data.threading || []);
+                        alert(`✅ Plantilla "${data.modelo}" cargada desde base de datos.`);
+                    } else {
+                        // 2. Si no existe, intentar cargar Excel de GitHub como ayuda
+                        try {
+                            const excel = await fetchExcelFromGitHub(form.modelo);
+                            setExcelFile(excel);
+                            alert("⚠️ Modelo nuevo. Se abrió la ficha técnica para referencia manual.");
+                        } catch (e) {
+                            alert("❌ Modelo no encontrado en DB ni en GitHub.");
+                        }
                     }
-                });
-                setPreparedDrafts(Object.values(grouped));
-                setStep('staging');
+                } catch (e) { console.error(e); alert("Error de conexión"); }
+                setLoading(false);
             };
 
-            const handleFinalSave = async (finalOrder) => {
-                const batch = db.batch();
-                const id = String(Date.now() + Math.random());
-                batch.set(db.collection('orders').doc(id), { ...finalOrder, id: Number(id), status: 'EN PROCESO', progreso: finalOrder.predefinedPackages });
-                
-                // Si venía de un borrador, borrarlo
-                if (mode === 'edit_draft' && initialData?.id) batch.delete(db.collection('drafts').doc(initialData.id));
-                
-                await batch.commit();
-                const remaining = preparedDrafts.filter((_, i) => i !== currentReviewIdx);
-                setPreparedDrafts(remaining);
-                setStep('staging');
-                if (remaining.length === 0) onSaveSuccess("¡Pedidos activados!");
+            // Lógica: Generar Pedidos (Transacción Real)
+            const handleGenerate = async () => {
+                if (!form.partidaCodigo || !form.modelo || components.length === 0 || form.totalPrendas <= 0) {
+                    return alert("Faltan datos clave (Modelo, Partida, Cantidad o Componentes)");
+                }
+
+                if (!confirm("¿GENERAR PEDIDOS?\n\nEsto creará las órdenes en el sistema principal y descontará material del inventario.")) return;
+
+                setLoading(true);
+                try {
+                    const batch = db.batch();
+                    const ordersByMachine = {};
+
+                    // 1. Agrupar por Máquina
+                    components.forEach(comp => {
+                        if (!comp.maquina) return;
+                        const maqKey = String(comp.maquina);
+                        
+                        if (!ordersByMachine[maqKey]) {
+                            ordersByMachine[maqKey] = {
+                                codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(),
+                                maquina: maqKey, partida: form.partidaCodigo.toUpperCase(),
+                                threading: threading, // Hereda hilos
+                                subPiecesData: [], predefinedPackages: [],
+                                createdAt: new Date().toLocaleString('es-MX'), status: 'EN PROCESO'
+                            };
+                        }
+
+                        // Calcular piezas
+                        const totalPiezas = form.totalPrendas * comp.multiplicador;
+                        
+                        ordersByMachine[maqKey].subPiecesData.push({
+                            id: Date.now() + Math.random(),
+                            pieza: comp.descripcion, talla: comp.talla || 'UNI',
+                            totalPedido: totalPiezas, peso: comp.peso, tiempo: comp.tiempo
+                        });
+
+                        // Generar Paquetes (Progreso)
+                        const pzsPorPaq = comp.piezasPorPaquete > 0 ? comp.piezasPorPaquete : totalPiezas;
+                        const numPaquetes = Math.ceil(totalPiezas / pzsPorPaq);
+                        
+                        for (let i = 1; i <= numPaquetes; i++) {
+                            const cantidad = (i === numPaquetes && totalPiezas % pzsPorPaq !== 0) ? totalPiezas % pzsPorPaq : pzsPorPaq;
+                            ordersByMachine[maqKey].predefinedPackages.push({
+                                id: Date.now() + Math.random() + i,
+                                piezaNombre: comp.descripcion, cantidad: cantidad,
+                                paqueteNum: i, paquetesDePieza: numPaquetes,
+                                codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}`,
+                                finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''
+                            });
+                        }
+                    });
+
+                    // 2. Procesar Inventario y Escrituras
+                    const invRef = db.collection('inventory').doc('main');
+                    const invDoc = await invRef.get();
+                    let currentItems = invDoc.exists ? invDoc.data().items : [];
+
+                    Object.values(ordersByMachine).forEach(draft => {
+                        const newId = String(Date.now() + Math.random()).slice(-8); // ID corto numérico simulado
+                        const orderRef = db.collection('orders').doc(newId);
+                        
+                        // Cálculo Descuento Inventario
+                        const totalGramosOrden = draft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso||0) * p.totalPedido), 0);
+                        
+                        (draft.threading || []).forEach(hilo => {
+                            if (hilo.materialId && hilo.porcentaje) {
+                                const consumoKg = ((totalGramosOrden * (Number(hilo.porcentaje)/100))/1000);
+                                const itemIdx = currentItems.findIndex(i => i.id === hilo.materialId);
+                                if (itemIdx !== -1) {
+                                    currentItems[itemIdx].stock = (parseFloat(currentItems[itemIdx].stock || 0) - consumoKg).toFixed(2);
+                                }
+                            }
+                        });
+
+                        batch.set(orderRef, {
+                            ...draft, id: Number(newId),
+                            displayId: generateSmartID(draft.partida, draft.subPiecesData, draft.maquina),
+                            progreso: draft.predefinedPackages,
+                            totalPedido: draft.subPiecesData.reduce((a,b)=>a+b.totalPedido, 0)
+                        });
+                    });
+
+                    // 3. Commit
+                    batch.update(invRef, { items: currentItems });
+                    await batch.commit();
+                    
+                    alert("¡PEDIDOS CREADOS EXITOSAMENTE!\n\nPuedes verlos en el Dashboard Principal.");
+                    window.location.reload(); // Reset para nuevo pedido
+
+                } catch (e) { console.error(e); alert("Error al guardar: " + e.message); }
+                setLoading(false);
             };
 
-            const saveAsDraft = async () => {
-                const draftData = { ...form, componentsSource: components, updatedAt: firebase.firestore.FieldValue.serverTimestamp(), status: 'BORRADOR' };
-                if (mode === 'edit_draft' && initialData?.id) await db.collection('drafts').doc(initialData.id).set(draftData);
-                else await db.collection('drafts').add(draftData);
-                onSaveSuccess("Guardado en Borradores");
-            };
-
-            if (step === 'review') return <InventoryReview draft={preparedDrafts[currentReviewIdx]} onCancel={() => setStep('staging')} onSave={handleFinalSave} />;
-
-            if (step === 'staging') return (
-                <div className="fixed inset-0 bg-slate-900 z-[70] flex flex-col">
-                    <div className="bg-orange-600 p-4 flex justify-between items-center text-white">
-                        <h2 className="font-bold">Órdenes Preparadas</h2>
-                        <button onClick={() => setStep('form')} className="text-xs bg-orange-800 px-3 py-1 rounded">Atrás</button>
-                    </div>
-                    <div className="p-4 space-y-4">
-                        {preparedDrafts.map((d, i) => (
-                            <div key={i} className="bg-slate-800 p-4 rounded-xl border-l-4 border-indigo-500">
-                                <div className="text-xl font-black mb-2">MÁQUINA {d.maquina}</div>
-                                <div className="text-xs text-slate-400 mb-4">{d.subPiecesData.length} Componentes listos</div>
-                                <button onClick={() => { setCurrentReviewIdx(i); setStep('review'); }} className="w-full bg-indigo-600 py-3 rounded-lg font-bold">REVISAR E INVENTARIAR</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
+            const addComponent = () => setComponents([...components, { descripcion: '', talla: 'UNI', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: 0, tiempo: 0 }]);
+            const updateComp = (idx, field, val) => { const n = [...components]; n[idx][field] = typeof val === 'string' ? val.toUpperCase() : val; setComponents(n); };
 
             return (
-                <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col modal-enter">
-                    <div className="bg-slate-800 p-4 flex justify-between items-center border-b border-slate-700 shrink-0">
-                        <h2 className="text-green-400 font-black tracking-tighter text-xl uppercase">{mode}</h2>
-                        <button onClick={onClose} className="bg-red-600 w-8 h-8 rounded-full flex items-center justify-center text-white"><Icon name="x"/></button>
-                    </div>
-                    <div className="flex-grow overflow-y-auto p-4 space-y-6">
-                        <div className="bg-slate-900 p-4 rounded-xl border border-slate-700">
-                            <h3 className="text-blue-400 font-bold text-xs uppercase mb-4 tracking-tighter">1. Información de Producción</h3>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div><label className="text-[10px] text-slate-500 font-bold">MODELO</label><input value={form.modelo} onChange={e=>setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 font-bold"/></div>
-                                <div><label className="text-[10px] text-slate-500 font-bold">CLIENTE</label><input value={form.cliente} onChange={e=>setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 font-bold"/></div>
-                                <div><label className="text-[10px] text-slate-500 font-bold">FECHA ENTREGA</label><input type="date" value={form.fecha} onChange={e=>setForm({...form, fecha: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-xs"/></div>
-                                <div><label className="text-[10px] text-slate-500 font-bold">PARTIDA</label><input value={form.partida} onChange={e=>setForm({...form, partida: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-yellow-500 font-bold"/></div>
-                                <div className="col-span-2"><label className="text-[10px] text-slate-500 font-bold">PEDIDO TOTAL (PRENDAS)</label><input type="number" value={form.totalGlobal} onChange={e=>setForm({...form, totalGlobal: e.target.value})} className="w-full bg-slate-800 border border-slate-600 rounded p-2 text-center text-xl font-black"/></div>
+                <div className="min-h-screen p-4 md:p-8 flex justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
+                    
+                    {excelFile && <FloatingExcelViewer worksheet={excelFile.worksheet} fileName={excelFile.fileName} onClose={()=>setExcelFile(null)} />}
+
+                    <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        
+                        {/* HEADER */}
+                        <div className="lg:col-span-12 flex justify-between items-end border-b border-slate-700 pb-4 mb-2">
+                            <div>
+                                <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter flex items-center gap-3">
+                                    <Icon name="zap" className="text-yellow-400" size={32}/> NEO GENERATOR
+                                </h1>
+                                <p className="text-slate-500 font-mono text-xs mt-1 ml-1">SISTEMA INTELIGENTE DE PRODUCCIÓN V5.0</p>
                             </div>
+                            <button onClick={() => window.location.href='index.html'} className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded font-bold text-xs border border-slate-600 flex items-center gap-2 transition">
+                                <Icon name="arrow-left"/> VOLVER AL DASHBOARD
+                            </button>
                         </div>
 
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center"><h3 className="text-green-400 font-bold text-xs uppercase">2. Configurar Piezas</h3>
-                            <button onClick={()=>setComponents([...components, {descripcion:'', sufijo:'', maquina:'', totalLienzos:0, piezasPorPaquete:0}])} className="bg-green-600 px-3 py-1 rounded text-xs font-bold">+ PIEZA</button></div>
-                            {components.map((c, idx) => (
-                                <div key={idx} className="bg-slate-800 p-4 rounded-xl border-l-4 border-indigo-500 relative shadow-lg">
-                                    <button onClick={()=>setComponents(components.filter((_,i)=>i!==idx))} className="absolute top-2 right-2 text-red-500"><Icon name="trash-2" size={16}/></button>
-                                    <input placeholder="NOMBRE DE PIEZA (EJ: ESPALDA)" value={c.descripcion} onChange={e=>{const n=[...components];n[idx].descripcion=e.target.value.toUpperCase();setComponents(n)}} className="w-full bg-transparent border-b border-slate-600 text-white font-bold mb-4 outline-none"/>
-                                    <div className="grid grid-cols-2 gap-3 text-center">
-                                        <div><label className="text-[10px] text-slate-500 block">MÁQUINA</label><input type="number" value={c.maquina} onChange={e=>{const n=[...components];n[idx].maquina=e.target.value;setComponents(n)}} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-yellow-400 font-bold"/></div>
-                                        <div><label className="text-[10px] text-slate-500 block">SUFIJO</label><input value={c.sufijo} onChange={e=>{const n=[...components];n[idx].sufijo=e.target.value.toUpperCase();setComponents(n)}} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-xs text-center"/></div>
-                                        <div><label className="text-[10px] text-slate-500 block">TOTAL LIENZOS</label><input type="number" value={c.totalLienzos} onChange={e=>{const n=[...components];n[idx].totalLienzos=e.target.value;setComponents(n)}} className="w-full bg-slate-700 rounded p-1 font-bold"/></div>
-                                        <div><label className="text-[10px] text-slate-500 block">PZS X PAQUETE</label><input type="number" value={c.piezasPorPaquete} onChange={e=>{const n=[...components];n[idx].piezasPorPaquete=e.target.value;setComponents(n)}} className="w-full bg-slate-700 rounded p-1 font-bold"/></div>
+                        {/* PANEL IZQUIERDO: DATOS GENERALES */}
+                        <div className="lg:col-span-4 space-y-6">
+                            
+                            <div className="bg-slate-800/80 backdrop-blur border border-slate-700 rounded-xl p-6 shadow-2xl">
+                                <div className="flex items-center gap-2 mb-6 text-indigo-400 font-bold border-b border-slate-700 pb-2">
+                                    <Icon name="database"/> DATOS GLOBALES
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="neo-label">BUSCAR MODELO (AUTO-COMPLETAR)</label>
+                                        <div className="flex gap-2">
+                                            <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} onKeyDown={e=>e.key==='Enter' && handleSearch()} className="neo-input" placeholder="EJ: POLO-2024"/>
+                                            <button onClick={handleSearch} disabled={loading} className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 rounded flex items-center justify-center transition border border-indigo-400 shadow-lg shadow-indigo-500/30">
+                                                {loading ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="search"/>}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="neo-label">CLIENTE</label>
+                                        <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="neo-input"/>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="neo-label">FECHA ENTREGA</label>
+                                            <input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="neo-input font-mono cursor-pointer"/>
+                                        </div>
+                                        <div>
+                                            <label className="neo-label">LOTE / PARTIDA</label>
+                                            <input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="neo-input bg-slate-950 text-emerald-400 border-emerald-900"/>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 mt-4 border-t border-slate-700">
+                                        <label className="neo-label text-orange-400 text-center text-xs">CANTIDAD TOTAL DE PRENDAS</label>
+                                        <input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full bg-slate-900 border-2 border-orange-500/50 rounded-lg p-3 text-3xl text-center text-white font-black focus:border-orange-500 transition shadow-lg shadow-orange-900/20" placeholder="0"/>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
-                        <div className="h-24"></div>
-                    </div>
-                    <div className="bg-slate-800 p-4 border-t border-slate-700 flex gap-2">
-                        <button onClick={handleProcess} className="flex-1 bg-blue-600 py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2">PROCESAR <Icon name="arrow-right"/></button>
-                        <button onClick={saveAsDraft} className="bg-orange-600 px-4 rounded-xl"><Icon name="save"/></button>
-                    </div>
-                </div>
-            );
-        };
+                            </div>
 
-        // --- COMPONENTE RAÍZ ---
-        const App = () => {
-            const [data, setData] = useState({ active: [], drafts: [], archived: [] });
-            const [openSection, setOpenSection] = useState('active'); 
-            const [editor, setEditor] = useState({ isOpen: false, mode: 'CREAR', data: null });
-
-            useEffect(() => {
-                const unsubOrders = db.collection('orders').onSnapshot(snap => {
-                    const all = snap.docs.map(d => ({...d.data(), id: d.id}));
-                    setData(prev => ({ 
-                        ...prev, 
-                        active: all.filter(o => o.status !== 'ARCHIVADO'),
-                        archived: all.filter(o => o.status === 'ARCHIVADO')
-                    }));
-                });
-                const unsubDrafts = db.collection('drafts').onSnapshot(snap => {
-                    setData(prev => ({ ...prev, drafts: snap.docs.map(d => ({...d.data(), id: d.id})) }));
-                });
-                return () => { unsubOrders(); unsubDrafts(); };
-            }, []);
-
-            useEffect(() => { lucide.createIcons(); }, [data, openSection]);
-
-            const handleSuccess = (m) => {
-                setEditor({ isOpen: false, mode: 'CREAR', data: null });
-                alert(m);
-            };
-
-            const toggleArchive = async (order) => {
-                const newStatus = order.status === 'ARCHIVADO' ? 'EN PROCESO' : 'ARCHIVADO';
-                await db.collection('orders').doc(order.id).update({ status: newStatus });
-            };
-
-            return (
-                <div className="min-h-screen bg-slate-900 p-4 pb-24 flex flex-col items-center">
-                    <button onClick={() => setEditor({ isOpen: true, mode: 'CREAR', data: null })} className="w-full max-w-2xl bg-gradient-to-r from-green-600 to-green-500 text-white h-24 rounded-2xl shadow-xl flex items-center justify-center gap-4 mb-8 transform active:scale-95 transition">
-                        <Icon name="plus-circle" size={32}/><span className="text-2xl font-black">NUEVO PEDIDO</span>
-                    </button>
-
-                    <div className="w-full max-w-2xl space-y-4">
-                        {/* ACTIVOS */}
-                        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-2xl">
-                            <button onClick={() => setOpenSection(openSection==='active'?null:'active')} className="w-full p-5 flex justify-between items-center bg-blue-600 text-white font-black">
-                                <div className="flex items-center gap-3"><Icon name="play-circle"/> ACTIVOS ({data.active.length})</div>
-                                <Icon name={openSection === 'active' ? "chevron-up" : "chevron-down"} />
+                            <button onClick={handleGenerate} disabled={loading} className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black py-4 rounded-xl shadow-lg shadow-emerald-900/50 transform active:scale-95 transition flex items-center justify-center gap-3 border border-emerald-400/30 text-lg group">
+                                <Icon name="rocket" className="group-hover:animate-bounce"/> LANZAR PRODUCCIÓN
                             </button>
-                            <div className={`accordion-content bg-slate-900 ${openSection === 'active' ? 'open' : ''}`}>
-                                <div className="p-2 space-y-2">
-                                    {data.active.map(o => (
-                                        <div key={o.id} className="p-4 bg-slate-800 rounded-xl border border-slate-700 flex justify-between items-center">
-                                            <div><div className="font-black text-white">{o.codigo}</div><div className="text-xs text-blue-400">MQ{o.maquina} | {o.partida}</div></div>
-                                            <div className="flex gap-2">
-                                                <button onClick={()=>setEditor({isOpen:true, mode:'EDITAR', data:o})} className="p-2 bg-slate-700 rounded-lg text-blue-400"><Icon name="edit"/></button>
-                                                <button onClick={()=>toggleArchive(o)} className="p-2 bg-slate-700 rounded-lg text-orange-400"><Icon name="archive"/></button>
+                        </div>
+
+                        {/* PANEL DERECHO: COMPONENTES */}
+                        <div className="lg:col-span-8 flex flex-col h-[800px] lg:h-auto bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden relative">
+                            
+                            <div className="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-center shrink-0">
+                                <h2 className="text-white font-bold flex items-center gap-2 text-sm"><Icon name="layers"/> ESTRUCTURA DEL PEDIDO</h2>
+                                <button onClick={addComponent} className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2 rounded flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition">
+                                    <Icon name="plus-circle" size={16}/> AGREGAR PIEZA
+                                </button>
+                            </div>
+
+                            <div className="flex-grow overflow-y-auto p-4 space-y-3 custom-scrollbar">
+                                {components.length === 0 && (
+                                    <div className="h-full flex flex-col items-center justify-center text-slate-600">
+                                        <Icon name="box-select" size={64} className="mb-4 opacity-50"/>
+                                        <p className="font-bold">LISTA VACÍA</p>
+                                        <p className="text-xs">Busca un modelo o agrega piezas manualmente</p>
+                                    </div>
+                                )}
+
+                                {components.map((comp, idx) => (
+                                    <div key={idx} className="bg-slate-900 border border-slate-700 rounded-lg p-3 relative group hover:border-indigo-500/50 transition shadow-sm">
+                                        <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition"><Icon name="trash-2" size={16}/></button>
+
+                                        <div className="grid grid-cols-12 gap-3 items-end">
+                                            <div className="col-span-12 md:col-span-4">
+                                                <label className="neo-label">PIEZA</label>
+                                                <input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="neo-input text-white" placeholder="EJ: DELANTERO"/>
                                             </div>
+                                            <div className="col-span-3 md:col-span-2">
+                                                <label className="neo-label text-indigo-300">TALLA</label>
+                                                <input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="neo-input text-center text-indigo-300 border-indigo-900/30" placeholder="UNI"/>
+                                            </div>
+                                            <div className="col-span-3 md:col-span-2">
+                                                <label className="neo-label text-amber-400">MAQ</label>
+                                                <input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="neo-input text-center text-amber-400 border-amber-900/30"/>
+                                            </div>
+                                            <div className="col-span-3 md:col-span-2">
+                                                <label className="neo-label">SUFIJO</label>
+                                                <input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="neo-input text-center text-xs" placeholder="-XXX"/>
+                                            </div>
+                                            <div className="col-span-3 md:col-span-2">
+                                                <label className="neo-label">MULT</label>
+                                                <input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="neo-input text-center text-xs"/>
+                                            </div>
+                                            
+                                            {/* Fila inferior de datos técnicos */}
+                                            <div className="col-span-4 md:col-span-2">
+                                                <label className="neo-label text-cyan-300">PZS/PAQ</label>
+                                                <input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="neo-input text-center text-xs text-cyan-300 border-cyan-900/30"/>
+                                            </div>
+                                            <div className="col-span-4 md:col-span-2">
+                                                <label className="neo-label text-orange-300">PESO (g)</label>
+                                                <input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="neo-input text-center text-xs text-orange-300 border-orange-900/30"/>
+                                            </div>
+                                            <div className="col-span-4 md:col-span-2">
+                                                <label className="neo-label">TIEMPO</label>
+                                                <input type="number" value={comp.tiempo} onChange={e => updateComp(idx, 'tiempo', e.target.value)} className="neo-input text-center text-xs"/>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* RECETA DE HILOS (Info) */}
+                            {threading.length > 0 && (
+                                <div className="bg-slate-950 p-3 border-t border-slate-700 text-[10px] text-slate-400 flex items-center gap-4 overflow-x-auto">
+                                    <div className="font-bold shrink-0 flex items-center gap-1 text-indigo-400"><Icon name="spool" size={12}/> HILOS (Auto-Descuento):</div>
+                                    {threading.map((h, i) => (
+                                        <div key={i} className="bg-slate-800 px-2 py-1 rounded border border-slate-700 whitespace-nowrap">
+                                            {h.material} <span className="text-white font-bold">{h.porcentaje}%</span>
                                         </div>
                                     ))}
                                 </div>
-                            </div>
+                            )}
                         </div>
 
-                        {/* BORRADORES */}
-                        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
-                            <button onClick={() => setOpenSection(openSection==='drafts'?null:'drafts')} className="w-full p-5 flex justify-between items-center bg-orange-600 text-white font-black">
-                                <div className="flex items-center gap-3"><Icon name="file-text"/> BORRADORES ({data.drafts.length})</div>
-                                <Icon name={openSection === 'drafts' ? "chevron-up" : "chevron-down"} />
-                            </button>
-                            <div className={`accordion-content bg-slate-900 ${openSection === 'drafts' ? 'open' : ''}`}>
-                                <div className="p-2 space-y-2">
-                                    {data.drafts.map(d => (
-                                        <div key={d.id} className="p-4 bg-slate-800 rounded-xl border border-slate-700 flex justify-between items-center">
-                                            <div><div className="font-bold text-white uppercase">{d.modelo} - {d.cliente}</div><div className="text-[10px] text-orange-400">Pzs: {d.totalGlobal}</div></div>
-                                            <div className="flex gap-2">
-                                                <button onClick={()=>setEditor({isOpen:true, mode:'EDITAR BORRADOR', data:d})} className="p-2 bg-slate-700 rounded-lg text-white"><Icon name="external-link"/></button>
-                                                <button onClick={()=>db.collection('drafts').doc(d.id).delete()} className="p-2 bg-red-900/30 rounded-lg text-red-500"><Icon name="trash"/></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* ARCHIVADOS */}
-                        <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700">
-                            <button onClick={() => setOpenSection(openSection==='archived'?null:'archived')} className="w-full p-5 flex justify-between items-center bg-slate-700 text-white font-black">
-                                <div className="flex items-center gap-3"><Icon name="archive"/> ARCHIVADOS ({data.archived.length})</div>
-                                <Icon name={openSection === 'archived' ? "chevron-up" : "chevron-down"} />
-                            </button>
-                            <div className={`accordion-content bg-slate-900 ${openSection === 'archived' ? 'open' : ''}`}>
-                                <div className="p-2 space-y-2">
-                                    {data.archived.map(o => (
-                                        <div key={o.id} className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 flex justify-between items-center grayscale">
-                                            <div><div className="font-bold text-slate-400">{o.codigo}</div><div className="text-[10px]">{o.partida}</div></div>
-                                            <div className="flex gap-2">
-                                                <button onClick={()=>setEditor({isOpen:true, mode:'COPIAR', data:o})} className="p-2 bg-slate-700 rounded-lg text-blue-400"><Icon name="copy"/></button>
-                                                <button onClick={()=>toggleArchive(o)} className="p-2 bg-slate-700 rounded-lg text-green-400"><Icon name="rotate-ccw"/></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
                     </div>
-
-                    {editor.isOpen && (
-                        <OrderGeneratorModal 
-                            mode={editor.mode} 
-                            initialData={editor.data} 
-                            onClose={()=>setEditor({isOpen:false, mode:'CREAR', data:null})} 
-                            onSaveSuccess={handleSuccess} 
-                        />
-                    )}
                 </div>
             );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<NeoOrderGenerator />);
     </script>
 </body>
 </html>
