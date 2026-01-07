@@ -3,73 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cirineo - Generador Master (DB Real)</title>
-    
-    <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
+    <title>Generador de Plantillas - Optimizado</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
     <script src="https://unpkg.com/lucide@latest"></script>
-    
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
+        /* Estilos base para inputs */
         input:focus { outline: 2px solid #9333ea; outline-offset: 1px; }
-        .modal-enter { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Estilos para estado deshabilitado (Split Screen) */
-        .form-disabled {
-            opacity: 0.5;
-            pointer-events: none;
-            filter: grayscale(100%);
-            transition: all 0.3s ease;
-        }
-        
-        /* Loader */
-        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #9333ea; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Animación suave para modales */
+        .modal-enter { animation: fadeIn 0.2s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
     </style>
 </head>
 <body class="bg-slate-200 text-slate-800 font-sans">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, useMemo } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // --- 1. CONFIGURACIÓN FIREBASE ORIGINAL ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
-            authDomain: "cirineo-cec21.firebaseapp.com",
-            projectId: "cirineo-cec21",
-            storageBucket: "cirineo-cec21.firebasestorage.app",
-            messagingSenderId: "620210618284",
-            appId: "1:620210618284:web:482bab9bf74650fff18409",
-            measurementId: "G-B7YLM78RVW"
+        // --- MOCK DE FIREBASE (Para que funcione la UI sin base de datos real en este demo) ---
+        // En tu proyecto real, usa tu instancia 'db' original.
+        const dbMock = {
+            collection: (name) => ({
+                doc: (id) => ({
+                    set: async (data) => {
+                        console.log(`Guardando en ${name}/${id}:`, data);
+                        return Promise.resolve(true);
+                    },
+                    onSnapshot: (cb) => {
+                        // Simulamos inventario para el autocompletado
+                        cb({ 
+                            exists: true, 
+                            data: () => ({ items: [
+                                { id: '1', material: 'ALGODON 30/1', color: 'NEGRO', stock: 100 },
+                                { id: '2', material: 'POLIESTER', color: 'BLANCO', stock: 50 },
+                                { id: '3', material: 'LYCRA', color: 'TRANSPARENTE', stock: 20 }
+                            ]})
+                        });
+                        return () => {};
+                    }
+                })
+            }),
+            FieldValue: { serverTimestamp: () => new Date() }
         };
 
-        // Inicialización segura
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
+        // --- COMPONENTES AUXILIARES ---
 
-        // --- COMPONENTES UI ---
-
-        const Icon = ({ name, size = 18, className, onClick }) => {
-            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
-            return <i data-lucide={name} width={size} height={size} className={className} onClick={onClick}></i>;
+        const Icon = ({ name, size = 18, className }) => {
+            useEffect(() => {
+                if (window.lucide) window.lucide.createIcons();
+            });
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        const TimeInput = ({ value, onChange }) => {
+        const TimeInput = ({ value, onChange, disabled }) => {
             const [mins, setMins] = useState('');
             const [secs, setSecs] = useState('');
 
             useEffect(() => {
-                if (!value) { setMins(''); setSecs(''); } else {
+                if (value === undefined || value === '' || value === null) {
+                    setMins(''); setSecs('');
+                } else {
                     const totalMins = parseFloat(value);
                     const m = Math.floor(totalMins);
                     const s = Math.round((totalMins - m) * 60);
@@ -81,400 +82,256 @@
             const handleChange = (newM, newS) => {
                 const m = parseInt(newM) || 0;
                 const s = parseInt(newS) || 0;
-                onChange((m + (s / 60)).toFixed(4));
+                const decimalValue = (m + (s / 60)).toFixed(4);
+                onChange(decimalValue);
             };
 
             return (
                 <div className="flex items-center gap-1">
-                    <input type="number" value={mins} placeholder="00" onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} className="w-full md:w-10 text-center border border-gray-300 rounded p-2 md:p-1 text-sm font-mono focus:border-purple-500 outline-none" />
+                    <input type="number" value={mins} placeholder="00" disabled={disabled} onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} className={`w-full md:w-10 text-center border border-gray-300 rounded p-2 md:p-1 text-sm md:text-xs font-mono focus:border-purple-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`} />
                     <span className="font-bold text-gray-400">:</span>
-                    <input type="number" value={secs} placeholder="00" max="59" onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} className="w-full md:w-10 text-center border border-gray-300 rounded p-2 md:p-1 text-sm font-mono focus:border-purple-500 outline-none" />
+                    <input type="number" value={secs} placeholder="00" max="59" disabled={disabled} onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} className={`w-full md:w-10 text-center border border-gray-300 rounded p-2 md:p-1 text-sm md:text-xs font-mono focus:border-purple-500 outline-none ${disabled ? 'bg-gray-100' : 'bg-white'}`} />
                 </div>
             );
         };
 
-        // --- MODAL DE REPOSITORIOS (Guardado en Firestore) ---
-        const RepoSettingsModal = ({ isOpen, onClose }) => {
-            const [repos, setRepos] = useState([]);
-            const [newPath, setNewPath] = useState('');
-            const [loading, setLoading] = useState(false);
+        // --- COMPONENTE PRINCIPAL EXTRAÍDO Y MEJORADO ---
 
-            // Cargar configuración real desde Firestore
-            useEffect(() => {
-                if(!isOpen) return;
-                const unsub = db.collection('settings').doc('config').onSnapshot(doc => {
-                    if (doc.exists && doc.data().repoUrls) {
-                        // Adaptamos el formato antiguo (array de strings) al nuevo objeto si es necesario
-                        const data = doc.data().repoUrls.map(url => ({ id: url, path: url, type: url.includes('github') ? 'github' : 'network' }));
-                        setRepos(data);
-                    }
-                });
-                return () => unsub();
-            }, [isOpen]);
-
-            const saveRepo = async () => {
-                if (!newPath) return;
-                setLoading(true);
-                try {
-                    const currentUrls = repos.map(r => r.path);
-                    const updatedUrls = [...currentUrls, newPath];
-                    await db.collection('settings').doc('config').set({ repoUrls: updatedUrls }, { merge: true });
-                    setNewPath('');
-                } catch (e) { console.error(e); alert("Error guardando config"); }
-                setLoading(false);
-            };
-
-            const deleteRepo = async (pathToDelete) => {
-                if(!confirm("¿Eliminar repositorio?")) return;
-                const updatedUrls = repos.filter(r => r.path !== pathToDelete).map(r => r.path);
-                await db.collection('settings').doc('config').set({ repoUrls: updatedUrls }, { merge: true });
-            };
-
-            if (!isOpen) return null;
-
-            return (
-                <div className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-md p-6 modal-enter">
-                        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                            <Icon name="folder-git-2" className="text-purple-600"/> Repositorios (Archivos)
-                        </h2>
-                        <div className="flex gap-2 mb-4">
-                            <input value={newPath} onChange={e=>setNewPath(e.target.value)} className="border p-2 rounded text-sm flex-1" placeholder="URL GitHub Raw (ej: https://raw.github...)"/>
-                            <button onClick={saveRepo} disabled={loading} className="bg-purple-600 text-white p-2 rounded hover:bg-purple-700 font-bold text-xs">
-                                {loading ? '...' : 'AGREGAR'}
-                            </button>
-                        </div>
-                        <div className="bg-slate-50 p-2 rounded max-h-40 overflow-y-auto space-y-2">
-                            {repos.map((r, i) => (
-                                <div key={i} className="flex justify-between items-center bg-white p-2 border rounded text-xs break-all">
-                                    <span className="text-slate-600">{r.path}</span>
-                                    <button onClick={()=>deleteRepo(r.path)} className="text-red-500 font-bold ml-2">X</button>
-                                </div>
-                            ))}
-                        </div>
-                        <div className="mt-4 text-right"><button onClick={onClose} className="px-4 py-2 bg-gray-200 rounded font-bold text-xs">CERRAR</button></div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- VISOR DE ARCHIVOS REALES (Excel / Office Viewer) ---
-        const RealFileViewer = ({ modelName, isActive, onClose, onMinimize, onActivate }) => {
-            const [fileUrl, setFileUrl] = useState(null);
-            const [localFile, setLocalFile] = useState(null);
-            const [repoUrls, setRepoUrls] = useState([]);
-            const [loading, setLoading] = useState(false);
-
-            // Obtener repositorios
-            useEffect(() => {
-                db.collection('settings').doc('config').get().then(doc => {
-                    if (doc.exists) setRepoUrls(doc.data().repoUrls || []);
-                });
-            }, []);
-
-            // Intentar construir URL automática
-            useEffect(() => {
-                if (!modelName || repoUrls.length === 0) return;
-                
-                // Lógica para intentar encontrar el archivo en GitHub
-                const base = repoUrls[0]; // Usamos el primero por defecto
-                const cleanBase = base.endsWith('/') ? base : base + '/';
-                
-                // Construimos la URL asumiendo que el archivo se llama igual que el modelo + .xlsx
-                // Para GitHub Raw, necesitamos convertirlo a URL pública o usar un proxy si es privado.
-                // Aquí usamos la URL directa suponiendo que es pública o raw tokenizada.
-                const targetUrl = `${cleanBase}${modelName}.xlsx`;
-                
-                // Verificación simple (fetch head) podría ir aquí, pero por CORS directo lo seteamos
-                setFileUrl(targetUrl); 
-            }, [modelName, repoUrls]);
-
-            // Manejador para archivo local manual
-            const handleLocalFileUpload = (e) => {
-                const file = e.target.files[0];
-                if (file) {
-                    const objectUrl = URL.createObjectURL(file);
-                    setLocalFile(objectUrl); // Esto funciona para imágenes o PDF, pero para Excel necesitamos un visor JS.
-                    // Para mantenerlo simple sin librerías pesadas (SheetJS), usaremos la estrategia de "Archivo Cargado" visualmente
-                    // O si es PDF/Img se muestra directo.
-                }
-            };
-
-            // URL para el Visor de Office Online (requiere que el archivo sea accesible públicamente en internet)
-            const officeViewerUrl = fileUrl ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}` : null;
-
-            return (
-                <div className="h-full flex flex-col border-t-4 border-green-600 bg-white shadow-2xl relative">
-                    {/* Barra de Herramientas */}
-                    <div className="bg-green-700 text-white p-2 flex justify-between items-center z-10 shadow-md">
-                        <div className="flex items-center gap-3 overflow-hidden">
-                            <Icon name="file-spreadsheet" className="text-green-200 shrink-0"/> 
-                            <div className="flex flex-col">
-                                <span className="text-sm font-bold truncate max-w-[200px]">{modelName}.xlsx</span>
-                                <span className="text-[9px] text-green-200 truncate">{fileUrl || 'Esperando archivo...'}</span>
-                            </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                            {/* Input para cargar archivo local si no está en la nube */}
-                            <label className="bg-green-800 hover:bg-green-600 p-1.5 rounded cursor-pointer text-xs flex items-center gap-1 border border-green-500" title="Abrir local">
-                                <Icon name="folder-open" size={14}/>
-                                <input type="file" className="hidden" accept=".xlsx,.xls,.pdf,.jpg" onChange={handleLocalFileUpload}/>
-                            </label>
-
-                            <div className="h-6 w-px bg-green-500 mx-1"></div>
-
-                            <button onClick={onActivate} title="Mover / Interactuar" className={`p-1.5 rounded transition ${isActive ? 'bg-yellow-400 text-yellow-900 animate-pulse' : 'bg-green-600 hover:bg-green-500'}`}>
-                                <Icon name="hand" size={18}/>
-                            </button>
-                            <button onClick={onMinimize} title="Minimizar" className="p-1.5 bg-green-600 hover:bg-green-500 rounded">
-                                <Icon name="minus" size={18}/>
-                            </button>
-                            <button onClick={onClose} title="Validar y Editar Formulario" className={`p-1.5 rounded font-bold flex items-center gap-1 transition ${!isActive ? 'bg-white text-green-700 shadow-lg scale-105' : 'bg-green-800 text-gray-300'}`}>
-                                <Icon name="check" size={18}/> {!isActive && "EDITAR DATOS"}
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Área de Visualización */}
-                    <div className="flex-1 bg-slate-100 relative overflow-hidden flex flex-col justify-center items-center">
-                        {!isActive && <div className="absolute inset-0 z-20 bg-black/10 backdrop-blur-[1px] flex items-center justify-center text-white font-bold drop-shadow-md cursor-not-allowed select-none">MODO SOLO LECTURA (Desbloquea Arriba)</div>}
-
-                        {/* 1. Intento mostrar Excel via Office Online */}
-                        {fileUrl && !localFile && (
-                            <iframe 
-                                src={officeViewerUrl} 
-                                className="w-full h-full border-none" 
-                                title="Excel Viewer"
-                                onError={() => alert("No se pudo cargar el Excel. Verifique que la URL sea pública.")}
-                            />
-                        )}
-
-                        {/* 2. Si se carga local (limitado por navegador) mostramos placeholder o PDF */}
-                        {localFile && (
-                            <object data={localFile} className="w-full h-full flex flex-col items-center justify-center text-slate-500">
-                                <div className="text-center p-10 bg-white rounded shadow">
-                                    <Icon name="file-check" size={48} className="mx-auto text-green-600 mb-2"/>
-                                    <p className="font-bold">Archivo Local Cargado</p>
-                                    <p className="text-xs max-w-xs mt-2">Los navegadores bloquean la vista directa de Excel locales por seguridad. <br/>Úselo como referencia en su otra ventana.</p>
-                                    <a href={localFile} target="_blank" className="mt-4 inline-block bg-blue-600 text-white px-4 py-2 rounded text-xs font-bold">Abrir en Ventana Nueva</a>
-                                </div>
-                            </object>
-                        )}
-
-                        {/* 3. Estado Vacío */}
-                        {!fileUrl && !localFile && (
-                            <div className="text-center text-slate-400">
-                                <Icon name="search-x" size={48} className="mx-auto mb-2 opacity-50"/>
-                                <p className="text-sm">No se encontró archivo automático.</p>
-                                <p className="text-xs">Cargue uno manualmente o configure el repositorio.</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-        };
-
-        // --- GENERADOR PRINCIPAL (Lógica Original Restaurada) ---
         const TemplateCreatorModal = ({ onClose }) => {
-            // Estados Datos
             const [form, setForm] = useState({ modelo: '', cliente: '' });
             const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
             const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
             
-            // Estados Inventario (DB Real)
             const [inventory, setInventory] = useState([]);
             const [suggestions, setSuggestions] = useState({ index: null, items: [] });
-            
-            // Estados UI
-            const [repoSettingsOpen, setRepoSettingsOpen] = useState(false);
-            const [excelMode, setExcelMode] = useState('hidden'); // hidden, split, minimized
-            const [excelActive, setExcelActive] = useState(false); // true = excel tiene foco (form bloqueado)
 
-            // 1. CARGA DE INVENTARIO (DB REAL)
             useEffect(() => {
-                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => { 
+                // Usamos dbMock en lugar de db real para el ejemplo
+                const unsubscribe = dbMock.collection('inventory').doc('main').onSnapshot(doc => { 
                     if (doc.exists && doc.data().items) setInventory(doc.data().items); 
                 });
                 return () => unsubscribe();
             }, []);
 
-            // 2. AUTO-ACTIVAR EXCEL AL ESCRIBIR MODELO
-            useEffect(() => {
-                if (form.modelo.length > 3 && excelMode === 'hidden') {
-                    setExcelMode('split');
-                    setExcelActive(true); // Foco en Excel para ver archivo
-                }
-            }, [form.modelo]);
-
-            // Lógica Autocompletado Hilos (Original)
             const handleMaterialInput = (idx, val) => { 
                 const newThreads = [...threading]; newThreads[idx].material = val; setThreading(newThreads);
                 if (val.length > 1) { 
                     const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); 
                     setSuggestions({ index: idx, items: filtered }); 
-                } else { setSuggestions({ index: null, items: [] }); } 
+                } else { 
+                    setSuggestions({ index: null, items: [] }); 
+                } 
             };
+            
             const selectSuggestion = (idx, item) => { 
                 const newThreads = [...threading]; 
                 newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id }; 
                 setThreading(newThreads); setSuggestions({ index: null, items: [] }); 
             };
 
-            // Lógica Componentes
             const updateComp = (idx, field, val) => { 
                 const n = [...components]; 
                 n[idx][field] = (field === 'descripcion' || field === 'sufijo' || field === 'talla') ? val.toUpperCase() : val; 
                 setComponents(n); 
             };
 
-            // 3. GUARDADO EN DB REAL (model_templates)
             const handleSaveTemplate = async () => {
                 if(!form.modelo || !form.cliente || components.length === 0) return alert("Completa los campos básicos");
                 try {
-                    await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
+                    await dbMock.collection('model_templates').doc(form.modelo.toUpperCase()).set({
                         modelo: form.modelo.toUpperCase(),
                         cliente: form.cliente.toUpperCase(),
                         components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase(), talla: c.talla.toUpperCase()})),
                         threading: threading, 
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        updatedAt: dbMock.FieldValue.serverTimestamp()
                     });
-                    alert("¡Plantilla Guardada Exitosamente!");
+                    alert("¡Plantilla Completa Guardada!");
                     onClose();
-                } catch(e) { console.error(e); alert("Error al guardar en base de datos."); }
+                } catch(e) { console.error(e); alert("Error al guardar plantilla"); }
             };
 
             return (
-                <div className="fixed inset-0 bg-slate-900/90 z-[70] flex flex-col overflow-hidden">
-                    
-                    {/* Botón Flotante Restaurar Excel */}
-                    {excelMode === 'minimized' && (
-                        <button onClick={() => { setExcelMode('split'); setExcelActive(true); }} className="fixed bottom-6 right-6 z-[100] bg-green-600 text-white p-4 rounded-full shadow-2xl animate-bounce border-2 border-white hover:scale-110 transition">
-                            <Icon name="file-spreadsheet" size={28}/>
-                        </button>
-                    )}
-
-                    <div className="bg-white w-full h-full flex flex-col relative">
+                <div className="fixed inset-0 bg-black/80 z-[70] flex items-end md:items-center justify-center p-0 md:p-4 animate-fade-in">
+                    {/* Contenedor Principal: Full width en móvil, max-width en desktop */}
+                    <div className="bg-white md:rounded-lg shadow-2xl w-full h-[95vh] md:h-[90vh] md:max-w-4xl flex flex-col modal-enter overflow-hidden rounded-t-2xl">
                         
-                        {/* HEADER */}
-                        <div className="bg-purple-800 p-2 text-white flex justify-between items-center shrink-0 shadow-md z-50">
-                            <div className="flex items-center gap-3">
-                                <h1 className="text-lg font-bold flex items-center gap-2 pl-2">
-                                    <Icon name="database" className="text-green-400"/>
-                                    <span className="hidden md:inline">Generador Maestro</span>
+                        {/* Header */}
+                        <div className="bg-purple-700 p-4 text-white flex justify-between items-center shrink-0">
+                            <div>
+                                <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
+                                    <Icon name="bot" className="text-purple-200"/> 
+                                    <span>Crear Plantilla Maestra</span>
                                 </h1>
-                                <button onClick={()=>setRepoSettingsOpen(true)} className="bg-purple-900 hover:bg-purple-700 px-3 py-1 rounded text-xs flex items-center gap-1 border border-purple-500 transition">
-                                    <Icon name="settings" size={12}/> <span className="hidden md:inline">Config. Archivos</span>
-                                </button>
+                                <div className="text-xs text-purple-200 hidden md:block">Entrena al sistema con Datos, Tallas, Hilos y Tiempos</div>
                             </div>
-                            <button onClick={onClose} className="bg-red-500 hover:bg-red-600 p-1.5 rounded text-white transition"><Icon name="x" size={18}/></button>
+                            <button onClick={onClose} className="bg-purple-800 p-2 rounded-full hover:bg-purple-600 transition"><Icon name="x"/></button>
                         </div>
 
-                        {/* BODY DIVIDIDO */}
-                        <div className="flex-1 flex flex-col relative overflow-hidden">
+                        {/* Contenido Scrollable */}
+                        <div className="p-4 md:p-6 overflow-y-auto flex-grow space-y-6 bg-slate-50">
                             
-                            {/* PARTE SUPERIOR: FORMULARIO */}
-                            <div className={`w-full overflow-y-auto bg-slate-50 p-2 md:p-6 transition-all duration-300 ${excelMode === 'split' ? 'h-1/2 border-b-4 border-slate-300' : 'h-full'} ${excelActive && excelMode === 'split' ? 'form-disabled' : ''}`}>
-                                
-                                <div className="max-w-5xl mx-auto space-y-4">
-                                    {/* Inputs Principales */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded shadow-sm border border-purple-100">
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-700 mb-1">MODELO (Activa Excel)</label>
-                                            <input autoFocus value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border-2 border-purple-100 focus:border-purple-600 rounded font-black text-lg uppercase transition-colors" placeholder="EJ: POLO-2024"/>
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-bold text-gray-700 mb-1">CLIENTE</label>
-                                            <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border border-gray-300 rounded font-bold uppercase"/>
-                                        </div>
-                                    </div>
-
-                                    {/* Receta de Hilos (Original restaurado) */}
-                                    <div className="bg-white border rounded p-4 shadow-sm relative">
-                                        <div className="flex justify-between items-center mb-2 border-b pb-1">
-                                            <h3 className="text-sm font-bold text-indigo-700">Enhebrado (Inventario Real)</h3>
-                                            <button onClick={() => setThreading([...threading, {guia: threading.length+1, material: '', porcentaje: '', materialId: null}])} className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold">+ Hilo</button>
-                                        </div>
-                                        <table className="w-full text-xs">
-                                            <thead className="bg-slate-100"><tr><th className="p-1 w-10">Guía</th><th className="p-1 text-left">Material</th><th className="p-1 w-16">%</th><th className="w-8"></th></tr></thead>
-                                            <tbody>
-                                                {threading.map((h, i) => (
-                                                    <tr key={i}>
-                                                        <td><input value={h.guia} onChange={e=>{const n=[...threading]; n[i].guia=e.target.value; setThreading(n);}} className="w-full text-center border-b font-bold"/></td>
-                                                        <td className="p-1 relative">
-                                                            <input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full border p-1 rounded" placeholder="Buscar en DB..."/>
-                                                            {suggestions.index === i && suggestions.items.length > 0 && (<div className="absolute z-20 bg-white border shadow-xl w-full max-h-40 overflow-y-auto left-0 mt-1 rounded">{suggestions.items.map(item => (<div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b flex justify-between"><span>{item.material}</span><span className="text-green-600 font-bold">{item.stock}kg</span></div>))}</div>)}
-                                                        </td>
-                                                        <td><input value={h.porcentaje} onChange={e=>{const n=[...threading]; n[i].porcentaje=e.target.value; setThreading(n);}} className="w-full text-center border p-1"/></td>
-                                                        <td className="text-center"><button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-500 font-bold">x</button></td>
-                                                    </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    {/* Componentes Grid Híbrido */}
-                                    <div className="space-y-2">
-                                        <div className="flex justify-between items-center"><h3 className="font-bold text-sm text-gray-700">Componentes</h3><button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 text-white px-3 py-1 rounded text-xs font-bold">+ Agregar</button></div>
-                                        
-                                        <div className="hidden md:grid md:grid-cols-12 gap-2 text-[10px] font-bold text-gray-400 uppercase text-center"><div className="col-span-3 text-left">Pieza</div><div className="col-span-1">Talla</div><div className="col-span-1">MQ</div><div className="col-span-1">Sufijo</div><div className="col-span-1">Mult</div><div className="col-span-1">P/Paq</div><div className="col-span-2">Peso</div><div className="col-span-2">Tiempo</div></div>
-                                        
-                                        {components.map((comp, idx) => (
-                                            <div key={idx} className="bg-white p-3 rounded shadow-sm border md:grid md:grid-cols-12 md:gap-2 items-center relative flex flex-col gap-2">
-                                                <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 text-red-400 md:relative md:order-last md:col-span-12 md:w-auto md:flex md:justify-center hover:text-red-600"><Icon name="x" size={16}/></button>
-                                                
-                                                <div className="md:col-span-3 w-full"><label className="md:hidden text-[10px] font-bold">PIEZA</label><input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="w-full p-1 border rounded text-xs uppercase font-bold"/></div>
-                                                <div className="md:col-span-1 w-full"><label className="md:hidden text-[10px] font-bold">TALLA</label><input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="w-full p-1 border rounded text-xs uppercase font-bold text-blue-700 bg-blue-50 text-center" placeholder="UNI"/></div>
-                                                <div className="flex gap-2 w-full md:contents">
-                                                    <div className="md:col-span-1 flex-1"><label className="md:hidden text-[10px] font-bold">MQ</label><input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="w-full p-1 border rounded text-xs text-center font-bold"/></div>
-                                                    <div className="md:col-span-1 flex-1"><label className="md:hidden text-[10px] font-bold">SUF</label><input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-1 border rounded text-xs uppercase text-center"/></div>
-                                                </div>
-                                                <div className="flex gap-2 w-full md:contents">
-                                                    <div className="md:col-span-1 flex-1"><label className="md:hidden text-[10px] font-bold">MULT</label><input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="w-full p-1 border rounded text-xs text-center"/></div>
-                                                    <div className="md:col-span-1 flex-1"><label className="md:hidden text-[10px] font-bold">P/PAQ</label><input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="w-full p-1 border rounded text-xs text-center bg-gray-50"/></div>
-                                                </div>
-                                                <div className="md:col-span-2 w-full"><label className="md:hidden text-[10px] font-bold text-orange-500">PESO</label><input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="w-full p-1 border border-orange-200 rounded text-xs text-center" placeholder="0.0"/></div>
-                                                <div className="md:col-span-2 w-full"><label className="md:hidden text-[10px] font-bold text-orange-500">TIEMPO</label><TimeInput value={comp.tiempo} onChange={val => updateComp(idx, 'tiempo', val)} /></div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    
-                                    <div className="pt-4 flex justify-end">
-                                        <button onClick={handleSaveTemplate} className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2 transform active:scale-95 transition">
-                                            <Icon name="save"/> GUARDAR DATOS EN NUBE
-                                        </button>
-                                    </div>
+                            {/* 1. Datos Generales */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-4 rounded shadow-sm border border-purple-100">
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Modelo</label>
+                                    <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full p-2 border border-gray-300 rounded font-bold uppercase focus:border-purple-500" placeholder="EJ: POLO-2024"/>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-700 mb-1">Cliente Habitual</label>
+                                    <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border border-gray-300 rounded font-bold uppercase focus:border-purple-500"/>
                                 </div>
                             </div>
 
-                            {/* PARTE INFERIOR: EXCEL REAL */}
-                            {excelMode === 'split' && (
-                                <div className="h-1/2 w-full relative z-40 animate-fadeIn">
-                                    <RealFileViewer 
-                                        modelName={form.modelo} 
-                                        isActive={excelActive}
-                                        onClose={() => setExcelActive(false)}
-                                        onMinimize={() => { setExcelMode('minimized'); setExcelActive(false); }}
-                                        onActivate={() => setExcelActive(true)}
-                                    />
+                            {/* 2. Receta de Hilos */}
+                            <div className="bg-white border rounded p-4 shadow-sm">
+                                <div className="flex justify-between items-center mb-3 border-b pb-2">
+                                    <h2 className="text-sm font-bold text-indigo-700 flex items-center gap-2"><Icon name="spool"/> Receta de Hilos</h2>
+                                    <button onClick={() => setThreading([...threading, {guia: threading.length+1, material: '', porcentaje: '', materialId: null}])} className="text-xs bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded font-bold transition">+ Hilo</button>
                                 </div>
-                            )}
+                                
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-xs min-w-[300px]">
+                                        <thead className="bg-slate-100 text-slate-500">
+                                            <tr>
+                                                <th className="p-2 w-12 text-center">Guía</th>
+                                                <th className="p-2 text-left">Material (Inventario)</th>
+                                                <th className="p-2 w-16 text-center">%</th>
+                                                <th className="w-8"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y">
+                                            {threading.map((h, i) => (
+                                                <tr key={i} className="relative group hover:bg-slate-50">
+                                                    <td className="p-1"><input value={h.guia} onChange={e=>{const n=[...threading]; n[i].guia=e.target.value; setThreading(n);}} className="w-full text-center border p-1 rounded font-bold text-gray-700"/></td>
+                                                    <td className="p-1 relative">
+                                                        <input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full border p-1.5 rounded outline-none focus:border-indigo-500" placeholder="Buscar..."/>
+                                                        {suggestions.index === i && suggestions.items.length > 0 && (
+                                                            <div className="absolute z-50 bg-white border shadow-xl w-full min-w-[200px] max-h-40 overflow-y-auto left-0 mt-1 rounded text-xs">
+                                                                {suggestions.items.map(item => (
+                                                                    <div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b last:border-0 flex justify-between items-center">
+                                                                        <div><span className="font-bold text-slate-700">{item.material}</span></div>
+                                                                        <span className="text-[9px] bg-green-100 text-green-800 px-1 rounded">Stock: {item.stock}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="p-1"><input value={h.porcentaje} onChange={e=>{const n=[...threading]; n[i].porcentaje=e.target.value; setThreading(n);}} className="w-full text-center border p-1.5 rounded" placeholder="%"/></td>
+                                                    <td className="text-center p-1"><button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-600 p-1"><Icon name="trash-2" size={14}/></button></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
 
+                            {/* 3. Componentes y Tiempos - OPTIMIZADO PARA MOVIL */}
+                            <div className="space-y-3">
+                                <div className="flex flex-col md:flex-row justify-between md:items-center border-b pb-2 gap-2">
+                                    <h2 className="text-sm font-bold text-gray-700">Configuración de Componentes</h2>
+                                    <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-xs font-bold w-full md:w-auto flex justify-center items-center gap-2 shadow-sm transition">
+                                        <Icon name="plus-circle" size={16}/> Agregar Componente
+                                    </button>
+                                </div>
+
+                                {/* Header de la "tabla" solo visible en Desktop */}
+                                <div className="hidden md:grid md:grid-cols-12 md:gap-2 px-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                    <div className="col-span-3">Pieza</div>
+                                    <div className="col-span-1">Talla</div>
+                                    <div className="col-span-1 text-center">MQ</div>
+                                    <div className="col-span-1">Sufijo</div>
+                                    <div className="col-span-1 text-center">Mult.</div>
+                                    <div className="col-span-1 text-center">P/Paq</div>
+                                    <div className="col-span-2 text-center text-orange-600">Peso (g)</div>
+                                    <div className="col-span-2 text-orange-600">Tiempo</div>
+                                </div>
+
+                                <div className="space-y-4 md:space-y-2">
+                                    {components.map((comp, idx) => (
+                                        <div key={idx} className="bg-white md:bg-gray-50 p-4 md:p-2 rounded-lg border border-gray-200 md:border-transparent relative flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-2 items-end md:items-center shadow-sm md:shadow-none transition hover:bg-white hover:shadow-md hover:border-purple-200">
+                                            
+                                            {/* Botón Eliminar */}
+                                            <div className="absolute top-2 right-2 md:static md:col-span-12 md:order-last md:w-auto md:flex md:justify-center hidden">
+                                                 {/* Desktop delete logic handled by layout, see below for trick */}
+                                            </div>
+                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 md:relative md:top-auto md:right-auto md:order-12 text-red-400 hover:text-red-600 hover:bg-red-50 p-1 rounded transition">
+                                                <Icon name="x" size={18} className="md:w-4 md:h-4"/>
+                                            </button>
+
+                                            {/* Campos Mobile/Desktop Híbridos */}
+                                            
+                                            <div className="w-full md:col-span-3">
+                                                <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block">Descripción Pieza</label>
+                                                <input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs uppercase focus:border-purple-500 font-medium" placeholder="EJ: DELANTERO"/>
+                                            </div>
+                                            
+                                            <div className="w-full md:col-span-1 grid grid-cols-2 gap-2 md:block">
+                                                <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block self-center">Talla</label>
+                                                <input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs uppercase font-bold text-blue-700 bg-blue-50 focus:border-blue-500" placeholder="UNI"/>
+                                            </div>
+
+                                            <div className="w-full flex gap-3 md:contents">
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center">Máquina</label>
+                                                    <input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs text-center font-bold focus:border-purple-500"/>
+                                                </div>
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center">Sufijo</label>
+                                                    <input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs uppercase text-center focus:border-purple-500"/>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="w-full flex gap-3 md:contents">
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center" title="Multiplicador">Mult.</label>
+                                                    <input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs text-center focus:border-purple-500"/>
+                                                </div>
+                                                <div className="flex-1 md:col-span-1">
+                                                    <label className="md:hidden text-xs font-bold text-gray-500 mb-1 block text-center" title="Piezas por Paquete">P/Paq</label>
+                                                    <input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className="w-full p-2 md:p-1 border border-gray-300 rounded text-sm md:text-xs text-center bg-blue-50 focus:border-blue-500"/>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="w-full md:col-span-2">
+                                                <label className="md:hidden text-xs font-bold text-orange-600 mb-1 block">Peso (g)</label>
+                                                <input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className="w-full p-2 md:p-1 border border-orange-200 rounded text-sm md:text-xs text-center focus:border-orange-500" placeholder="0.0"/>
+                                            </div>
+                                            
+                                            <div className="w-full md:col-span-2">
+                                                <label className="md:hidden text-xs font-bold text-orange-600 mb-1 block">Tiempo (Min:Seg)</label>
+                                                <TimeInput value={comp.tiempo} onChange={val => updateComp(idx, 'tiempo', val)} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t bg-gray-100 md:rounded-b-lg flex justify-end gap-3 shrink-0 pb-8 md:pb-4">
+                            <button onClick={onClose} className="px-4 py-2 rounded text-slate-600 font-bold hover:bg-slate-200 text-sm">Cancelar</button>
+                            <button onClick={handleSaveTemplate} className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 md:py-2 rounded shadow-lg flex items-center gap-2 font-bold text-sm md:text-xs transform active:scale-95 transition w-full md:w-auto justify-center">
+                                <Icon name="save"/> GUARDAR EN MEMORIA
+                            </button>
                         </div>
                     </div>
-
-                    <RepoSettingsModal isOpen={repoSettingsOpen} onClose={()=>setRepoSettingsOpen(false)} />
                 </div>
             );
-        };
+        }
 
         const App = () => {
             const [showModal, setShowModal] = useState(true);
+
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-4">
-                    <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg flex gap-2">
-                        <Icon name="maximize"/> ABRIR APP MAESTRA
+                    <h1 className="text-2xl font-black text-slate-700">App Demo</h1>
+                    <button 
+                        onClick={() => setShowModal(true)} 
+                        className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition flex gap-2 items-center"
+                    >
+                        <Icon name="plus-square"/> Abrir Generador de Plantillas
                     </button>
+                    
                     {showModal && <TemplateCreatorModal onClose={() => setShowModal(false)} />}
                 </div>
             )
