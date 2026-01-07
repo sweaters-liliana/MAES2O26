@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Plantillas - Dark Mode & Floating Excel</title>
+    <title>Neo Factory - Creador de Plantillas</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -13,9 +13,12 @@
     
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
     <style>
         /* Estilos base Dark Mode */
-        body { background-color: #0f172a; color: #e2e8f0; }
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
         
         /* Scrollbars oscuros */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -31,7 +34,7 @@
         /* Estilos para el Excel Fiel */
         .excel-viewer-container {
             font-family: Calibri, Arial, sans-serif;
-            background: #ffffff; /* El papel del excel se mantiene blanco para legibilidad */
+            background: #ffffff; 
             height: 100%;
         }
         .excel-table {
@@ -52,34 +55,17 @@
         
         /* Clases para la ventana flotante */
         .floating-window {
-            position: fixed;
-            z-index: 100;
+            position: fixed; z-index: 100;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            border: 1px solid #475569;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            border-radius: 0.5rem;
-            background-color: #1e293b;
+            border: 1px solid #475569; display: flex; flex-direction: column;
+            overflow: hidden; border-radius: 0.5rem; background-color: #1e293b;
             transition: box-shadow 0.2s;
         }
-        .floating-window.dragging {
-            box-shadow: 0 0 0 2px #6366f1;
-            opacity: 0.95;
-            user-select: none;
-        }
+        .floating-window.dragging { box-shadow: 0 0 0 2px #6366f1; opacity: 0.95; user-select: none; }
         .resize-handle {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 30px;
-            height: 30px;
-            cursor: se-resize;
-            display: flex;
-            align-items: flex-end;
-            justify-content: flex-end;
-            padding: 2px;
-            z-index: 20;
+            position: absolute; bottom: 0; right: 0; width: 30px; height: 30px;
+            cursor: se-resize; display: flex; align-items: flex-end; justify-content: flex-end;
+            padding: 2px; z-index: 20;
         }
     </style>
 </head>
@@ -89,64 +75,39 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
 
-        // --- 1. MOCK DE FIREBASE (Sin cambios) ---
-        const dbMock = {
-            collection: (name) => ({
-                doc: (id) => ({
-                    set: async (data) => {
-                        console.log(`Guardando en ${name}/${id}:`, data);
-                        return Promise.resolve(true);
-                    },
-                    onSnapshot: (cb) => {
-                        cb({ 
-                            exists: true, 
-                            data: () => ({ items: [
-                                { id: '1', material: 'ALGODON 30/1', color: 'NEGRO', stock: 100 },
-                                { id: '2', material: 'POLIESTER', color: 'BLANCO', stock: 50 },
-                                { id: '3', material: 'LYCRA', color: 'TRANSPARENTE', stock: 20 },
-                                { id: '4', material: 'HILO 2/28', color: 'ROJO', stock: 15 }
-                            ]})
-                        });
-                        return () => {};
-                    }
-                })
-            }),
-            FieldValue: { serverTimestamp: () => new Date() }
+        // --- 1. CONFIGURACIÓN FIREBASE REAL (CIRINEO) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
         };
 
-        // --- 2. LÓGICA DE GITHUB (Sin cambios) ---
-        const GITHUB_CONFIG = {
-            owner: 'sweaters-liliana',
-            repo: 'MAES2O26',
-            path: 'Fichas'
-        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // --- 2. LÓGICA DE GITHUB ---
+        const GITHUB_CONFIG = { owner: 'sweaters-liliana', repo: 'MAES2O26', path: 'Fichas' };
 
         const fetchExcelFromGitHub = async (modelName) => {
             if (!modelName) throw new Error("Ingresa un modelo");
             const apiUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
-            
             try {
                 const listResponse = await fetch(apiUrl);
                 if (!listResponse.ok) throw new Error("No se pudo acceder al repositorio");
                 const files = await listResponse.json();
-
                 const targetFile = files.find(f => f.name.toLowerCase().includes(modelName.toLowerCase()) && f.name.endsWith('.xlsx'));
                 if (!targetFile) throw new Error(`No se encontró ficha para "${modelName}"`);
-
                 const fileResponse = await fetch(targetFile.download_url);
                 const blob = await fileResponse.blob();
                 const arrayBuffer = await blob.arrayBuffer();
-
                 const workbook = XLSX.read(arrayBuffer);
                 const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
-                
-                return { fileName: targetFile.name, worksheet: worksheet };
-
-            } catch (error) {
-                console.error(error);
-                throw error;
-            }
+                return { fileName: targetFile.name, worksheet: workbook.Sheets[firstSheetName] };
+            } catch (error) { console.error(error); throw error; }
         };
 
         // --- 3. COMPONENTES DE UI ---
@@ -156,51 +117,24 @@
             return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        // --- VISOR DE EXCEL FLOTANTE Y REDIMENSIONABLE ---
+        // --- VISOR DE EXCEL FLOTANTE ---
         const FloatingExcelViewer = ({ worksheet, fileName, onClose }) => {
-            // Posición inicial y tamaño (calculado según el viewport)
             const [winState, setWinState] = useState(() => {
                 const isMobile = window.innerWidth < 768;
-                return {
-                    x: isMobile ? 10 : 50,
-                    y: isMobile ? 60 : 80,
-                    w: isMobile ? window.innerWidth - 20 : 600,
-                    h: isMobile ? 300 : 400
-                };
+                return { x: isMobile ? 10 : 50, y: isMobile ? 60 : 80, w: isMobile ? window.innerWidth - 20 : 600, h: isMobile ? 300 : 400 };
             });
-
             const [zoom, setZoom] = useState(() => window.innerWidth < 768 ? 0.55 : 0.85); 
             const [isDragging, setIsDragging] = useState(false);
             const [isResizing, setIsResizing] = useState(false);
-            
-            // Referencias para cálculos de drag
             const dragRef = useRef({ startX: 0, startY: 0, initialX: 0, initialY: 0, initialW: 0, initialH: 0 });
 
-            // --- Lógica de Arrastre (Drag) ---
-            const startDrag = (clientX, clientY) => {
-                setIsDragging(true);
-                dragRef.current = { 
-                    startX: clientX, startY: clientY, 
-                    initialX: winState.x, initialY: winState.y 
-                };
-            };
+            const startDrag = (clientX, clientY) => { setIsDragging(true); dragRef.current = { startX: clientX, startY: clientY, initialX: winState.x, initialY: winState.y }; };
+            const startResize = (clientX, clientY, e) => { e.stopPropagation(); setIsResizing(true); dragRef.current = { startX: clientX, startY: clientY, initialW: winState.w, initialH: winState.h }; };
 
-            // --- Lógica de Redimensión (Resize) ---
-            const startResize = (clientX, clientY, e) => {
-                e.stopPropagation(); // Evitar drag
-                setIsResizing(true);
-                dragRef.current = { 
-                    startX: clientX, startY: clientY, 
-                    initialW: winState.w, initialH: winState.h 
-                };
-            };
-
-            // --- Efecto global para Mouse Move / Up ---
             useEffect(() => {
                 const handleMove = (e) => {
                     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
                     const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
                     if (isDragging) {
                         const dx = clientX - dragRef.current.startX;
                         const dy = clientY - dragRef.current.startY;
@@ -212,27 +146,19 @@
                         setWinState(prev => ({ ...prev, w: Math.max(200, dragRef.current.initialW + dx), h: Math.max(150, dragRef.current.initialH + dy) }));
                     }
                 };
-
                 const handleUp = () => { setIsDragging(false); setIsResizing(false); };
-
                 if (isDragging || isResizing) {
-                    window.addEventListener('mousemove', handleMove);
-                    window.addEventListener('mouseup', handleUp);
-                    window.addEventListener('touchmove', handleMove);
-                    window.addEventListener('touchend', handleUp);
+                    window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleUp);
+                    window.addEventListener('touchmove', handleMove); window.addEventListener('touchend', handleUp);
                 }
                 return () => {
-                    window.removeEventListener('mousemove', handleMove);
-                    window.removeEventListener('mouseup', handleUp);
-                    window.removeEventListener('touchmove', handleMove);
-                    window.removeEventListener('touchend', handleUp);
+                    window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', handleUp);
+                    window.removeEventListener('touchmove', handleMove); window.removeEventListener('touchend', handleUp);
                 };
             }, [isDragging, isResizing]);
 
-            // Procesar Hoja de Cálculo (Memoized)
             const grid = useMemo(() => {
                 if (!worksheet) return null;
-                // ... (Misma lógica de parseo que antes) ...
                 const range = XLSX.utils.decode_range(worksheet['!ref']);
                 const merges = worksheet['!merges'] || [];
                 const rowsInfo = worksheet['!rows'] || [];
@@ -255,25 +181,17 @@
                 const rows = [];
                 for (let R = range.s.r; R <= range.e.r; R++) {
                     const cells = [];
-                    const rawHeight = rowsInfo[R] ? rowsInfo[R].hpx : 20;
-                    const rowHeight = `${rawHeight * zoom}px`; 
-
+                    const rowHeight = `${(rowsInfo[R] ? rowsInfo[R].hpx : 20) * zoom}px`; 
                     for (let C = range.s.c; C <= range.e.c; C++) {
                         const mergeData = mergeMap[R] && mergeMap[R][C];
                         if (mergeData && mergeData.hidden) continue;
                         const cellAddress = XLSX.utils.encode_cell({c: C, r: R});
                         const cell = worksheet[cellAddress];
-                        let value = cell ? (cell.w || cell.v || "") : "";
-                        const rawWidth = colsInfo[C] ? colsInfo[C].wpx : 42; 
-                        const colWidth = `${rawWidth * zoom}px`;
-
+                        const colWidth = `${(colsInfo[C] ? colsInfo[C].wpx : 42) * zoom}px`;
                         cells.push({
-                            key: `${R}-${C}`, value,
-                            rowSpan: mergeData ? mergeData.rowSpan : 1,
-                            colSpan: mergeData ? mergeData.colSpan : 1,
-                            width: colWidth,
-                            isBold: (cell?.s?.font?.bold) || (R < 1), 
-                            align: cell?.s?.alignment?.horizontal || 'left'
+                            key: `${R}-${C}`, value: cell ? (cell.w || cell.v || "") : "",
+                            rowSpan: mergeData ? mergeData.rowSpan : 1, colSpan: mergeData ? mergeData.colSpan : 1,
+                            width: colWidth, isBold: (cell?.s?.font?.bold) || (R < 1), align: cell?.s?.alignment?.horizontal || 'left'
                         });
                     }
                     rows.push({ index: R, cells, height: rowHeight });
@@ -284,20 +202,10 @@
             if (!grid) return null;
 
             return (
-                <div 
-                    className={`floating-window ${isDragging ? 'dragging' : ''}`}
-                    style={{ left: winState.x, top: winState.y, width: winState.w, height: winState.h }}
-                >
-                    {/* Barra de Título (Arrastrable) */}
-                    <div 
-                        className="bg-slate-800 px-3 py-2 flex justify-between items-center border-b border-slate-600 cursor-move select-none"
-                        onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
-                        onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
-                    >
-                        <div className="flex items-center gap-2 overflow-hidden mr-2">
-                            <div className="text-emerald-400"><Icon name="file-spreadsheet" size={18}/></div>
-                            <span className="font-bold text-xs text-slate-200 truncate uppercase">{fileName}</span>
-                        </div>
+                <div className={`floating-window ${isDragging ? 'dragging' : ''}`} style={{ left: winState.x, top: winState.y, width: winState.w, height: winState.h }}>
+                    <div className="bg-slate-800 px-3 py-2 flex justify-between items-center border-b border-slate-600 cursor-move select-none"
+                        onMouseDown={(e) => startDrag(e.clientX, e.clientY)} onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}>
+                        <div className="flex items-center gap-2 overflow-hidden mr-2"><div className="text-emerald-400"><Icon name="file-spreadsheet" size={18}/></div><span className="font-bold text-xs text-slate-200 truncate uppercase">{fileName}</span></div>
                         <div className="flex items-center gap-1 shrink-0">
                             <button onClick={() => setZoom(z => Math.max(z-0.1, 0.3))} className="p-1 text-slate-400 hover:text-white"><Icon name="zoom-out" size={14}/></button>
                             <span className="text-[10px] text-slate-500">{Math.round(zoom*100)}%</span>
@@ -305,64 +213,28 @@
                             <button onClick={onClose} className="text-red-400 hover:bg-red-900/30 p-1 rounded ml-2"><Icon name="x" size={16}/></button>
                         </div>
                     </div>
-
-                    {/* Contenido Excel */}
                     <div className="flex-grow overflow-auto bg-white relative">
                          <div className="excel-viewer-container p-2 min-w-min">
                              <table className="excel-table shadow-sm" style={{ fontSize: `${11 * zoom}pt` }}>
-                                 <tbody>
-                                     {grid.map((row) => (
-                                         <tr key={row.index} style={{ height: row.height }}>
-                                             <td className="bg-slate-100 text-slate-400 select-none text-center border-slate-300" style={{ width: `${30 * zoom}px`, fontSize: `${9 * zoom}pt` }}>{row.index + 1}</td>
-                                             {row.cells.map((cell) => (
-                                                 <td key={cell.key} colSpan={cell.colSpan} rowSpan={cell.rowSpan}
-                                                     style={{ width: cell.width, minWidth: cell.width, maxWidth: cell.width, fontWeight: cell.isBold ? 'bold' : 'normal', textAlign: cell.align }}
-                                                 >
-                                                     {cell.value}
-                                                 </td>
-                                             ))}
-                                         </tr>
-                                     ))}
-                                 </tbody>
+                                 <tbody>{grid.map((row) => (<tr key={row.index} style={{ height: row.height }}><td className="bg-slate-100 text-slate-400 select-none text-center border-slate-300" style={{ width: `${30 * zoom}px`, fontSize: `${9 * zoom}pt` }}>{row.index + 1}</td>{row.cells.map((cell) => (<td key={cell.key} colSpan={cell.colSpan} rowSpan={cell.rowSpan} style={{ width: cell.width, minWidth: cell.width, maxWidth: cell.width, fontWeight: cell.isBold ? 'bold' : 'normal', textAlign: cell.align }}>{cell.value}</td>))}</tr>))}</tbody>
                              </table>
                          </div>
                     </div>
-
-                    {/* Resize Handle */}
-                    <div 
-                        className="resize-handle bg-slate-700 hover:bg-emerald-500 transition-colors rounded-tl-lg"
-                        onMouseDown={(e) => startResize(e.clientX, e.clientY, e)}
-                        onTouchStart={(e) => startResize(e.touches[0].clientX, e.touches[0].clientY, e)}
-                    >
-                        <Icon name="move-diagonal-2" size={16} className="text-white"/>
-                    </div>
+                    <div className="resize-handle bg-slate-700 hover:bg-emerald-500 transition-colors rounded-tl-lg" onMouseDown={(e) => startResize(e.clientX, e.clientY, e)} onTouchStart={(e) => startResize(e.touches[0].clientX, e.touches[0].clientY, e)}><Icon name="move-diagonal-2" size={16} className="text-white"/></div>
                 </div>
             );
         };
 
+        // --- COMPONENTE INPUT TIEMPO ---
         const TimeInput = ({ value, onChange, disabled }) => {
             const [mins, setMins] = useState('');
             const [secs, setSecs] = useState('');
-
             useEffect(() => {
                 if (!value) { setMins(''); setSecs(''); } 
-                else {
-                    const totalMins = parseFloat(value);
-                    const m = Math.floor(totalMins);
-                    const s = Math.round((totalMins - m) * 60);
-                    setMins(m.toString()); setSecs(s < 10 ? '0' + s : s.toString());
-                }
+                else { const totalMins = parseFloat(value); const m = Math.floor(totalMins); const s = Math.round((totalMins - m) * 60); setMins(m.toString()); setSecs(s < 10 ? '0' + s : s.toString()); }
             }, [value]);
-
-            const handleChange = (newM, newS) => {
-                const m = parseInt(newM) || 0;
-                const s = parseInt(newS) || 0;
-                onChange((m + (s / 60)).toFixed(4));
-            };
-
-            const inputClass = `w-full md:w-12 text-center border rounded p-2 md:p-1.5 text-sm font-mono outline-none transition
-                ${disabled ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500'}`;
-
+            const handleChange = (newM, newS) => { const m = parseInt(newM) || 0; const s = parseInt(newS) || 0; onChange((m + (s / 60)).toFixed(4)); };
+            const inputClass = `w-full md:w-12 text-center border rounded p-2 md:p-1.5 text-sm font-mono outline-none transition ${disabled ? 'bg-slate-800 border-slate-700 text-slate-500' : 'bg-slate-900 border-slate-700 text-white focus:border-indigo-500'}`;
             return (
                 <div className="flex items-center gap-1">
                     <input type="number" value={mins} placeholder="00" disabled={disabled} onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} className={inputClass} />
@@ -372,6 +244,7 @@
             );
         };
 
+        // --- MODAL PRINCIPAL: CREADOR DE PLANTILLAS ---
         const TemplateCreatorModal = ({ onClose }) => {
             const [form, setForm] = useState({ modelo: '', cliente: '' });
             const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
@@ -382,8 +255,9 @@
             const [isLoadingExcel, setIsLoadingExcel] = useState(false);
             const [excelError, setExcelError] = useState(null);
 
+            // LEER INVENTARIO REAL
             useEffect(() => {
-                const unsubscribe = dbMock.collection('inventory').doc('main').onSnapshot(doc => { 
+                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => { 
                     if (doc.exists && doc.data().items) setInventory(doc.data().items); 
                 });
                 return () => unsubscribe();
@@ -419,16 +293,17 @@
                 setComponents(n); 
             };
 
+            // GUARDAR EN BASE DE DATOS REAL
             const handleSaveTemplate = async () => {
                 if(!form.modelo || !form.cliente || components.length === 0) return alert("Completa los campos básicos");
                 try {
-                    await dbMock.collection('model_templates').doc(form.modelo.toUpperCase()).set({
+                    await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
                         modelo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(),
                         components: components.map(c => ({...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase(), talla: c.talla.toUpperCase()})),
-                        threading: threading, updatedAt: dbMock.FieldValue.serverTimestamp()
+                        threading: threading, updatedAt: firebase.firestore.FieldValue.serverTimestamp()
                     });
-                    alert("¡Plantilla Guardada!"); onClose();
-                } catch(e) { console.error(e); alert("Error"); }
+                    alert("¡Plantilla Guardada Exitosamente!"); onClose();
+                } catch(e) { console.error(e); alert("Error al guardar: " + e.message); }
             };
 
             const inputStyle = "w-full p-2 border border-slate-700 bg-slate-900 rounded font-bold uppercase focus:border-indigo-500 text-white placeholder-slate-600";
@@ -436,30 +311,19 @@
 
             return (
                 <div className="fixed inset-0 bg-black/90 z-[50] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-sm animate-fade-in">
-                    {/* VISOR FLOTANTE (Fuera del flujo del modal) */}
-                    {excelFile && (
-                        <FloatingExcelViewer 
-                            worksheet={excelFile.worksheet} 
-                            fileName={excelFile.fileName} 
-                            onClose={() => setExcelFile(null)}
-                        />
-                    )}
+                    {/* VISOR FLOTANTE */}
+                    {excelFile && <FloatingExcelViewer worksheet={excelFile.worksheet} fileName={excelFile.fileName} onClose={() => setExcelFile(null)} />}
 
                     <div className="bg-slate-800 md:rounded-xl shadow-2xl w-full h-[95vh] md:h-[90vh] md:max-w-4xl flex flex-col modal-enter overflow-hidden rounded-t-2xl border border-slate-700">
-                        
                         {/* Header */}
                         <div className="bg-slate-900/50 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
                             <div>
-                                <h1 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white">
-                                    <Icon name="cpu" className="text-indigo-400"/> 
-                                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">PLANTILLA MAESTRA</span>
-                                </h1>
-                                <div className="text-xs text-slate-500 hidden md:block font-mono mt-1">SISTEMA INTELIGENTE V2.0 // GITHUB LINKED</div>
+                                <h1 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white"><Icon name="cpu" className="text-indigo-400"/> <span className="bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400">PLANTILLA MAESTRA</span></h1>
+                                <div className="text-xs text-slate-500 hidden md:block font-mono mt-1">SISTEMA INTELIGENTE V2.0 // CONECTADO A DB CIRINEO</div>
                             </div>
                             <button onClick={onClose} className="bg-slate-700 text-slate-300 p-2 rounded-full hover:bg-slate-600 transition"><Icon name="x"/></button>
                         </div>
-
-                        {/* Contenido Scrollable */}
+                        {/* Contenido */}
                         <div className="overflow-y-auto flex-grow bg-slate-900/30 relative custom-scrollbar">
                             <div className="p-4 md:p-6 space-y-6">
                                 {/* Datos Generales */}
@@ -468,9 +332,7 @@
                                         <label className={labelStyle}>Modelo (GitHub Search)</label>
                                         <div className="flex gap-2">
                                             <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} onKeyDown={e => e.key === 'Enter' && handleSearchExcel()} className={inputStyle} placeholder="EJ: POLO-2024" />
-                                            <button onClick={handleSearchExcel} disabled={isLoadingExcel} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 rounded font-bold text-sm flex items-center gap-2 disabled:opacity-50 transition border border-emerald-500 shadow-lg shadow-emerald-900/20">
-                                                {isLoadingExcel ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="search"/>}
-                                            </button>
+                                            <button onClick={handleSearchExcel} disabled={isLoadingExcel} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 rounded font-bold text-sm flex items-center gap-2 disabled:opacity-50 transition border border-emerald-500 shadow-lg shadow-emerald-900/20">{isLoadingExcel ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="search"/>}</button>
                                         </div>
                                         {excelError && <div className="text-red-400 text-xs mt-2 font-bold bg-red-900/20 p-1 rounded px-2 inline-block border border-red-900">{excelError}</div>}
                                     </div>
@@ -479,41 +341,17 @@
                                         <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className={inputStyle}/>
                                     </div>
                                 </div>
-
                                 {/* Receta de Hilos */}
                                 <div className="bg-slate-800 border border-slate-700 rounded-lg p-5 shadow-sm">
-                                    <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2">
-                                        <h2 className="text-sm font-bold text-indigo-300 flex items-center gap-2"><Icon name="scroll-text"/> Receta de Hilos</h2>
-                                        <button onClick={() => setThreading([...threading, {guia: threading.length+1, material: '', porcentaje: '', materialId: null}])} className="text-xs bg-indigo-900/50 hover:bg-indigo-900 text-indigo-300 border border-indigo-700 px-3 py-1.5 rounded font-bold transition">+ Hilo</button>
-                                    </div>
-                                    
+                                    <div className="flex justify-between items-center mb-4 border-b border-slate-700 pb-2"><h2 className="text-sm font-bold text-indigo-300 flex items-center gap-2"><Icon name="scroll-text"/> Receta de Hilos</h2><button onClick={() => setThreading([...threading, {guia: threading.length+1, material: '', porcentaje: '', materialId: null}])} className="text-xs bg-indigo-900/50 hover:bg-indigo-900 text-indigo-300 border border-indigo-700 px-3 py-1.5 rounded font-bold transition">+ Hilo</button></div>
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-xs min-w-[300px]">
-                                            <thead className="bg-slate-900 text-slate-400 font-mono">
-                                                <tr>
-                                                    <th className="p-2 w-12 text-center rounded-l">#</th>
-                                                    <th className="p-2 text-left">Material (Inventario Live)</th>
-                                                    <th className="p-2 w-20 text-center">%</th>
-                                                    <th className="w-10 rounded-r"></th>
-                                                </tr>
-                                            </thead>
+                                            <thead className="bg-slate-900 text-slate-400 font-mono"><tr><th className="p-2 w-12 text-center rounded-l">#</th><th className="p-2 text-left">Material (Inventario Live)</th><th className="p-2 w-20 text-center">%</th><th className="w-10 rounded-r"></th></tr></thead>
                                             <tbody className="divide-y divide-slate-700/50">
                                                 {threading.map((h, i) => (
                                                     <tr key={i} className="hover:bg-slate-700/30 transition">
                                                         <td className="p-2"><input value={h.guia} onChange={e=>{const n=[...threading]; n[i].guia=e.target.value; setThreading(n);}} className="w-full text-center bg-transparent text-slate-300 font-bold outline-none"/></td>
-                                                        <td className="p-2 relative">
-                                                            <input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-slate-200 outline-none focus:border-indigo-500" placeholder="Buscar..."/>
-                                                            {suggestions.index === i && suggestions.items.length > 0 && (
-                                                                <div className="absolute z-50 bg-slate-800 border border-slate-600 shadow-2xl w-full max-h-40 overflow-y-auto left-0 mt-1 rounded text-xs">
-                                                                    {suggestions.items.map(item => (
-                                                                        <div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-900/50 cursor-pointer border-b border-slate-700 last:border-0 flex justify-between items-center text-slate-200">
-                                                                            <span className="font-bold">{item.material}</span>
-                                                                            <span className="text-[9px] bg-emerald-900 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800">Stock: {item.stock}</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            )}
-                                                        </td>
+                                                        <td className="p-2 relative"><input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-slate-200 outline-none focus:border-indigo-500" placeholder="Buscar..."/>{suggestions.index === i && suggestions.items.length > 0 && (<div className="absolute z-50 bg-slate-800 border border-slate-600 shadow-2xl w-full max-h-40 overflow-y-auto left-0 mt-1 rounded text-xs">{suggestions.items.map(item => (<div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-900/50 cursor-pointer border-b border-slate-700 last:border-0 flex justify-between items-center text-slate-200"><span className="font-bold">{item.material}</span><span className="text-[9px] bg-emerald-900 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-800">Stock: {item.stock}</span></div>))}</div>)}</td>
                                                         <td className="p-2"><input value={h.porcentaje} onChange={e=>{const n=[...threading]; n[i].porcentaje=e.target.value; setThreading(n);}} className="w-full text-center bg-slate-900 border border-slate-700 p-2 rounded text-slate-200" placeholder="%"/></td>
                                                         <td className="text-center p-2"><button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-400 hover:text-red-300 p-1"><Icon name="trash-2" size={14}/></button></td>
                                                     </tr>
@@ -522,88 +360,33 @@
                                         </table>
                                     </div>
                                 </div>
-
                                 {/* Componentes */}
                                 <div className="space-y-4 pb-8">
                                     <div className="flex flex-col md:flex-row justify-between md:items-center border-b border-slate-700 pb-2 gap-2">
                                         <h2 className="text-sm font-bold text-slate-300">Configuración de Componentes</h2>
-                                        <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded text-xs font-bold w-full md:w-auto flex justify-center items-center gap-2 shadow-lg shadow-indigo-900/20 transition border border-indigo-500">
-                                            <Icon name="plus" size={16}/> Agregar Pieza
-                                        </button>
+                                        <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded text-xs font-bold w-full md:w-auto flex justify-center items-center gap-2 shadow-lg shadow-indigo-900/20 transition border border-indigo-500"><Icon name="plus" size={16}/> Agregar Pieza</button>
                                     </div>
-
-                                    <div className="hidden md:grid md:grid-cols-12 md:gap-3 px-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono">
-                                        <div className="col-span-3">Pieza</div>
-                                        <div className="col-span-1">Talla</div>
-                                        <div className="col-span-1 text-center">MQ</div>
-                                        <div className="col-span-1 text-center">Sufijo</div>
-                                        <div className="col-span-1 text-center">Mult.</div>
-                                        <div className="col-span-1 text-center">P/Paq</div>
-                                        <div className="col-span-2 text-center text-orange-400">Peso (g)</div>
-                                        <div className="col-span-2 text-center text-orange-400">Tiempo</div>
-                                    </div>
-
+                                    <div className="hidden md:grid md:grid-cols-12 md:gap-3 px-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider font-mono"><div className="col-span-3">Pieza</div><div className="col-span-1">Talla</div><div className="col-span-1 text-center">MQ</div><div className="col-span-1 text-center">Sufijo</div><div className="col-span-1 text-center">Mult.</div><div className="col-span-1 text-center">P/Paq</div><div className="col-span-2 text-center text-orange-400">Peso (g)</div><div className="col-span-2 text-center text-orange-400">Tiempo</div></div>
                                     <div className="space-y-4 md:space-y-2">
                                         {components.map((comp, idx) => (
                                             <div key={idx} className="bg-slate-800 md:bg-slate-800/50 p-4 md:p-2 rounded-lg border border-slate-700 relative flex flex-col md:grid md:grid-cols-12 gap-3 md:gap-3 items-end md:items-center shadow-sm hover:bg-slate-800 hover:border-indigo-500/50 transition group">
-                                                <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 md:relative md:top-auto md:right-auto md:order-12 text-slate-600 hover:text-red-400 transition">
-                                                    <Icon name="x" size={16}/>
-                                                </button>
-
-                                                <div className="w-full md:col-span-3">
-                                                    <label className="md:hidden text-xs font-bold text-slate-500 mb-1 block">Descripción</label>
-                                                    <input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className={`${inputStyle} text-sm md:text-xs font-medium`} placeholder="PIEZA..."/>
-                                                </div>
-                                                
-                                                <div className="w-full md:col-span-1 grid grid-cols-2 gap-2 md:block">
-                                                    <label className="md:hidden text-xs font-bold text-slate-500 mb-1 block self-center">Talla</label>
-                                                    <input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-cyan-300 border-cyan-900 bg-cyan-950/30 focus:border-cyan-500`} placeholder="UNI"/>
-                                                </div>
-
-                                                <div className="w-full flex gap-3 md:contents">
-                                                    <div className="flex-1 md:col-span-1">
-                                                        <label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">MQ</label>
-                                                        <input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-center`}/>
-                                                    </div>
-                                                    <div className="flex-1 md:col-span-1">
-                                                        <label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">Sufijo</label>
-                                                        <input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-center uppercase`}/>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="w-full flex gap-3 md:contents">
-                                                    <div className="flex-1 md:col-span-1">
-                                                        <label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">Mult.</label>
-                                                        <input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className={`${inputStyle} text-sm md:text-xs text-center`}/>
-                                                    </div>
-                                                    <div className="flex-1 md:col-span-1">
-                                                        <label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">P/Paq</label>
-                                                        <input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className={`${inputStyle} text-sm md:text-xs text-center text-indigo-300 border-indigo-900 bg-indigo-950/30`}/>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div className="w-full md:col-span-2">
-                                                    <label className="md:hidden text-xs font-bold text-orange-400 mb-1 block">Peso</label>
-                                                    <input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-center border-orange-900/50 focus:border-orange-500 text-orange-200`} placeholder="0.0"/>
-                                                </div>
-                                                
-                                                <div className="w-full md:col-span-2">
-                                                    <label className="md:hidden text-xs font-bold text-orange-400 mb-1 block">Tiempo</label>
-                                                    <TimeInput value={comp.tiempo} onChange={val => updateComp(idx, 'tiempo', val)} />
-                                                </div>
+                                                <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 md:relative md:top-auto md:right-auto md:order-12 text-slate-600 hover:text-red-400 transition"><Icon name="x" size={16}/></button>
+                                                <div className="w-full md:col-span-3"><label className="md:hidden text-xs font-bold text-slate-500 mb-1 block">Descripción</label><input value={comp.descripcion} onChange={e => updateComp(idx, 'descripcion', e.target.value)} className={`${inputStyle} text-sm md:text-xs font-medium`} placeholder="PIEZA..."/></div>
+                                                <div className="w-full md:col-span-1 grid grid-cols-2 gap-2 md:block"><label className="md:hidden text-xs font-bold text-slate-500 mb-1 block self-center">Talla</label><input value={comp.talla} onChange={e => updateComp(idx, 'talla', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-cyan-300 border-cyan-900 bg-cyan-950/30 focus:border-cyan-500`} placeholder="UNI"/></div>
+                                                <div className="w-full flex gap-3 md:contents"><div className="flex-1 md:col-span-1"><label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">MQ</label><input type="number" value={comp.maquina} onChange={e => updateComp(idx, 'maquina', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-center`}/></div><div className="flex-1 md:col-span-1"><label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">Sufijo</label><input value={comp.sufijo} onChange={e => updateComp(idx, 'sufijo', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-center uppercase`}/></div></div>
+                                                <div className="w-full flex gap-3 md:contents"><div className="flex-1 md:col-span-1"><label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">Mult.</label><input type="number" value={comp.multiplicador} onChange={e => updateComp(idx, 'multiplicador', Number(e.target.value))} className={`${inputStyle} text-sm md:text-xs text-center`}/></div><div className="flex-1 md:col-span-1"><label className="md:hidden text-xs font-bold text-slate-500 mb-1 block text-center">P/Paq</label><input type="number" value={comp.piezasPorPaquete} onChange={e => updateComp(idx, 'piezasPorPaquete', Number(e.target.value))} className={`${inputStyle} text-sm md:text-xs text-center text-indigo-300 border-indigo-900 bg-indigo-950/30`}/></div></div>
+                                                <div className="w-full md:col-span-2"><label className="md:hidden text-xs font-bold text-orange-400 mb-1 block">Peso</label><input type="number" value={comp.peso} onChange={e => updateComp(idx, 'peso', e.target.value)} className={`${inputStyle} text-sm md:text-xs text-center border-orange-900/50 focus:border-orange-500 text-orange-200`} placeholder="0.0"/></div>
+                                                <div className="w-full md:col-span-2"><label className="md:hidden text-xs font-bold text-orange-400 mb-1 block">Tiempo</label><TimeInput value={comp.tiempo} onChange={val => updateComp(idx, 'tiempo', val)} /></div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
                         </div>
-
                         {/* Footer */}
                         <div className="p-4 border-t border-slate-700 bg-slate-800 md:rounded-b-lg flex justify-end gap-3 shrink-0 pb-8 md:pb-4">
                             <button onClick={onClose} className="px-4 py-2 rounded text-slate-400 font-bold hover:bg-slate-700 hover:text-white text-sm transition">Cancelar</button>
-                            <button onClick={handleSaveTemplate} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-8 py-3 md:py-2 rounded shadow-lg shadow-indigo-900/50 flex items-center gap-2 font-bold text-sm md:text-xs transform active:scale-95 transition w-full md:w-auto justify-center border border-indigo-500/50">
-                                <Icon name="save"/> GUARDAR EN MEMORIA
-                            </button>
+                            <button onClick={handleSaveTemplate} className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-8 py-3 md:py-2 rounded shadow-lg shadow-indigo-900/50 flex items-center gap-2 font-bold text-sm md:text-xs transform active:scale-95 transition w-full md:w-auto justify-center border border-indigo-500/50"><Icon name="save"/> GUARDAR EN MEMORIA</button>
                         </div>
                     </div>
                 </div>
@@ -612,27 +395,14 @@
 
         const App = () => {
             const [showModal, setShowModal] = useState(true);
-
             return (
                 <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
-                    <div className="text-center space-y-2">
-                        <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter">NEO FACTORY</h1>
-                        <p className="text-slate-500">Sistema de Gestión de Producción V2</p>
-                    </div>
-                    
-                    <button 
-                        onClick={() => setShowModal(true)} 
-                        className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold shadow-2xl hover:bg-indigo-500 hover:scale-105 transition-all flex gap-3 items-center border border-indigo-400/20 group"
-                    >
-                        <Icon name="layout-template" className="group-hover:rotate-12 transition-transform"/> 
-                        ABRIR GENERADOR
-                    </button>
-                    
+                    <div className="text-center space-y-2"><h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter">NEO FACTORY</h1><p className="text-slate-500">Sistema de Gestión de Producción V2</p></div>
+                    <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold shadow-2xl hover:bg-indigo-500 hover:scale-105 transition-all flex gap-3 items-center border border-indigo-400/20 group"><Icon name="layout-template" className="group-hover:rotate-12 transition-transform"/> ABRIR GENERADOR</button>
                     {showModal && <TemplateCreatorModal onClose={() => setShowModal(false)} />}
                 </div>
             )
         }
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
