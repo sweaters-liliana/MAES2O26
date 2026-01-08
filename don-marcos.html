@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>DON MARCOS ADMIN - Sistema Retro</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&family=Oswald:wght@700&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- ESTÉTICA RETRO DON MARCOS --- */
+        :root {
+            --retro-bg: #0a0a0a;
+            --retro-primary: #ffb000; /* Ámbar */
+            --retro-secondary: #a36200;
+            --retro-dark-panel: #000000;
+            --crt-scanline-color: rgba(18, 16, 16, 0.3);
+        }
+
+        body { 
+            background-color: var(--retro-bg);
+            color: var(--retro-primary); 
+            font-family: 'Share Tech Mono', monospace;
+            min-height: 100vh;
+            /* Efecto CRT fondo */
+            background-image: linear-gradient(var(--crt-scanline-color) 50%, transparent 50%);
+            background-size: 100% 4px;
+            background-repeat: repeat-y;
+        }
+
+        /* Panel Retro en lugar de Glass */
+        .retro-panel { 
+            background: var(--retro-dark-panel); 
+            border: 3px solid var(--retro-primary);
+            box-shadow: inset 0 0 10px var(--retro-secondary);
+            position: relative;
+        }
+        .retro-panel::before {
+            content: ''; position: absolute; top:0; left:0; right:0; bottom:0;
+            background: repeating-linear-gradient(transparent 0px, transparent 2px, var(--crt-scanline-color) 3px);
+            pointer-events: none; opacity: 0.5;
+        }
+
+        /* Botones Retro */
+        .btn-retro {
+            background: var(--retro-dark-panel);
+            border: 2px solid var(--retro-primary);
+            color: var(--retro-primary);
+            font-family: 'VT323', monospace;
+            text-transform: uppercase;
+            font-size: 1.2rem;
+            padding: 0.5rem 1rem;
+            box-shadow: 3px 3px 0px var(--retro-secondary);
+            transition: all 0.1s;
+        }
+        .btn-retro:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0px var(--retro-secondary);
+        }
+        .btn-retro-danger { border-color: red; color: red; box-shadow: 3px 3px 0px #500000; }
+        
+        .font-pixel { font-family: 'VT323', monospace; }
+
+        /* --- ESTILOS DE LA PAPELETA (ORIGINALES MANTENIDOS PARA INTEGRIDAD) --- */
+        .label-layout { width: 100%; height: 100%; display: flex; border: 2px solid #000; padding: 0.15in; box-sizing: border-box; background: white; color: black; font-family: 'Roboto Condensed', sans-serif; page-break-inside: avoid; }
+        .col-img { width: 25%; display: flex; align-items: center; justify-content: center; border-right: 2px solid #000; padding-right: 5px; overflow: hidden; }
+        .col-img img { width: 100%; height: 100%; object-fit: contain; }
+        .col-data { width: 60%; display: flex; flex-direction: column; border-right: 2px solid #000; }
+        .col-barcode { width: 15%; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+        .lbl-row { display: flex; border-bottom: 2px solid #000; width: 100%; }
+        .lbl-row:last-child { border-bottom: none; }
+        .lbl-col { border-right: 2px solid #000; padding: 2px 4px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+        .lbl-col:last-child { border-right: none; }
+        .lbl-title { font-size: 10px; font-weight: 700; color: #555; text-transform: uppercase; line-height: 1; margin-bottom: 1px; }
+        .lbl-big { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 32px; line-height: 0.9; color: #000; }
+        .lbl-medium { font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 20px; line-height: 1; color: #000; }
+        .lbl-std { font-size: 14px; font-weight: 700; color: #000; line-height: 1.1; }
+        .pdf-page-container { width: 8.5in; background: white; display: flex; flex-direction: column; gap: 20px; padding: 20px; }
+        .papeleta-wrapper { width: 100%; height: 4in; border: 1px dashed #ccc; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        
+        const firebaseConfig = { apiKey: "AIzaSyCngQL1pdqghv2vbjkPycT1Xf0C46f7jYs", authDomain: "cirineo-cec21.firebaseapp.com", projectId: "cirineo-cec21", storageBucket: "cirineo-cec21.firebasestorage.app", messagingSenderId: "620210618284", appId: "1:620210618284:web:482bab9bf74650fff18409" };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const Icon = ({ name, size=20, className="" }) => {
+            const r = useRef(null);
+            useEffect(() => { if (r.current && lucide.icons[name]) r.current.innerHTML = lucide.icons[name].toSvg({ width: size, height: size }); }, [name, size]);
+            return <span ref={r} className={`inline-flex items-center justify-center ${className}`}/>;
+        };
+
+        // --- COMPONENTE VISUAL DE LA PAPELETA (SIN CAMBIOS PARA MANTENER INTEGRIDAD) ---
+        const ProductionLabel = ({ labelData }) => {
+            const svgRef = useRef(null);
+            const order = labelData; 
+            const subPiece = order.subPiecesData ? order.subPiecesData.find(sp => sp.pieza === order.piezaNombre) : (order.subPiecesData?.[0] || {});
+            const barcodeValue = order.packageCode || order.kitId; 
+            const tiempo = parseFloat(subPiece?.tiempo);
+            const hours = 12; 
+            const pzas1hr = tiempo > 0 ? Math.round(60 / tiempo) : '-'; 
+            const pzasShift = tiempo > 0 ? Math.round((hours * 60) / tiempo) : '-'; 
+            const rawPieza = order.piezaNombre || 'ESTANDAR';
+            const piezaVisual = rawPieza.split(' ')[0]; 
+            let piezaFontSize = '28px';
+            if (piezaVisual.length <= 6) piezaFontSize = '64px';
+            else if (piezaVisual.length <= 10) piezaFontSize = '52px';
+            else piezaFontSize = '38px';
+            const getImageUrl = (modelo) => `https://raw.githubusercontent.com/sweaters-liliana/MAES2O26/refs/heads/main/IMAGENES/${modelo}.png`;
+            useEffect(() => {
+                if (svgRef.current && barcodeValue) {
+                    try { JsBarcode(svgRef.current, barcodeValue, { format: "CODE128", lineColor: "#000", width: 1.6, height: 55, displayValue: false, margin: 3 }); } catch (e) { console.error("Error barcode", e); }
+                }
+            }, [barcodeValue]);
+
+            return (
+                <div className="label-layout">
+                    <div className="col-img"><img src={getImageUrl(order.modelo)} onError={(e) => { e.target.onerror = null; e.target.style.display='none'; }} alt={order.modelo}/></div>
+                    <div className="col-data">
+                        <div className="lbl-row" style={{height: '17%'}}><div className="lbl-col" style={{width: '65%'}}><div className="lbl-title">MODELO</div><div className="lbl-big">{order.modelo}</div></div><div className="lbl-col" style={{width: '35%'}}><div className="lbl-title">TOTAL PEDIDO</div><div className="lbl-medium">{order.totalPedido || '---'}</div></div></div>
+                        <div className="lbl-row" style={{height: '13%'}}><div className="lbl-col" style={{width: '70%'}}><div className="lbl-title">CLIENTE</div><div className="lbl-std truncate">{order.cliente}</div></div><div className="lbl-col" style={{width: '30%'}}><div className="lbl-title">PARTIDA</div><div className="lbl-std">{order.partida}</div></div></div>
+                        <div className="lbl-row" style={{height: '24%', backgroundColor: '#000', color: '#FFF'}}><div className="lbl-col" style={{width: '100%', border: 'none', alignItems: 'center', justifyContent: 'center', padding: '0', display: 'flex'}}><span style={{fontFamily: "'Oswald', sans-serif", fontWeight: '700', fontSize: piezaFontSize, lineHeight: '1', textAlign: 'center', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{piezaVisual}</span></div></div>
+                        <div className="lbl-row" style={{height: '24%'}}><div className="lbl-col" style={{width: '33%', textAlign: 'center'}}><div className="lbl-title">PAQUETE</div><div className="lbl-big" style={{fontSize: '36px'}}>{order.paqueteNum}</div></div><div className="lbl-col" style={{width: '34%', backgroundColor: '#eee', textAlign: 'center'}}><div className="lbl-title">CANTIDAD</div><div className="lbl-big" style={{fontSize: '36px'}}>{order.cantidad}</div></div><div className="lbl-col" style={{width: '33%', textAlign: 'center', backgroundColor: '#000', color: '#fff'}}><div className="lbl-title" style={{color: '#ccc'}}>MAQUINA</div><div className="lbl-big" style={{fontSize: '48px', color: '#fff'}}>{order.maquina || '0'}</div></div></div>
+                        <div className="lbl-row" style={{height: '11%'}}><div className="lbl-col" style={{width: '25%'}}><div className="lbl-title" style={{fontSize:'9px'}}>TALLA</div><div className="lbl-medium" style={{fontSize:'16px'}}>{subPiece?.talla || 'U'}</div></div><div className="lbl-col" style={{width: '25%'}}><div className="lbl-title" style={{fontSize:'9px'}}>PESO(g)</div><div className="lbl-std" style={{fontSize:'14px'}}>{subPiece?.peso || '-'}</div></div><div className="lbl-col" style={{width: '25%'}}><div className="lbl-title" style={{fontSize:'9px'}}>PZS/HR</div><div className="lbl-std" style={{fontSize:'16px'}}>{pzas1hr}</div></div><div className="lbl-col" style={{width: '25%'}}><div className="lbl-title" style={{fontSize:'9px'}}>12 HRS</div><div className="lbl-std" style={{fontSize:'16px'}}>{pzasShift}</div></div></div>
+                        <div className="lbl-row" style={{flexGrow: 1, borderBottom: 'none', alignItems: 'center'}}><div style={{fontSize: '9px', width: '100%', textAlign: 'center', fontWeight: 'bold'}}>AUDITORIA ID: {order.kitId}</div></div>
+                    </div>
+                    <div className="col-barcode"><div style={{transform: 'rotate(90deg)', transformOrigin: 'center', width: '3.5in', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}><svg ref={svgRef} style={{width: '100%', height: 'auto'}}></svg><div style={{fontSize: '10px', fontFamily: 'monospace', marginTop: '5px'}}>{barcodeValue}</div></div></div>
+                </div>
+            );
+        };
+
+        const App = () => {
+            const [scannedKitData, setScannedKitData] = useState(null);
+            const [mergedLabels, setMergedLabels] = useState([]);
+            const [isScanning, setIsScanning] = useState(false);
+            const [loading, setLoading] = useState(false);
+            
+            // ESTADO PARA EL ZOOM
+            const [zoomLevel, setZoomLevel] = useState(1.0);
+
+            const scannerRef = useRef(null);
+            const pdfExportRef = useRef();
+
+            // FUNCIONES DE ZOOM
+            const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.2, 2.0));
+            const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.2, 0.6));
+
+            const startScanner = () => {
+                setIsScanning(true); setScannedKitData(null); setMergedLabels([]);
+                setTimeout(() => {
+                    const html5QrCode = new Html5Qrcode("reader"); scannerRef.current = html5QrCode;
+                    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 } }, (decodedText) => { lookupKit(decodedText); stopScanner(); });
+                }, 300);
+            };
+
+            const stopScanner = () => { if (scannerRef.current) scannerRef.current.stop().then(() => setIsScanning(false)); };
+
+            const lookupKit = async (kitId) => {
+                setLoading(true);
+                try {
+                    const kitDoc = await db.collection('kits_produccion').doc(kitId).get();
+                    if (kitDoc.exists) {
+                        const kitData = kitDoc.data(); setScannedKitData(kitData);
+                        let masterOrder = {};
+                        try { const orderSnap = await db.collection('orders').where('codigo', '==', kitData.modelo).limit(1).get(); if (!orderSnap.empty) masterOrder = orderSnap.docs[0].data(); } catch (err) { console.warn("No master order", err); }
+                        const labels = kitData.piezas.map((piezaDelKit, index) => ({
+                            kitId: kitData.kitId, modelo: kitData.modelo, cliente: kitData.cliente, partida: kitData.partida, fechaKit: kitData.fecha,
+                            paqueteNum: piezaDelKit.paqueteNum, cantidad: piezaDelKit.cantidad, piezaNombre: piezaDelKit.piezaNombre, maquina: piezaDelKit.maquina, packageCode: piezaDelKit.codigoUnico || `${kitData.kitId}-${index}`,
+                            totalPedido: masterOrder.totalPedido, subPiecesData: masterOrder.subPiecesData,
+                        }));
+                        setMergedLabels(labels);
+                    } else { alert("Código no encontrado en la base de datos administrativa."); }
+                } catch (e) { console.error(e); alert("Error de conexión"); }
+                setLoading(false);
+            };
+
+            const generatePDF = () => {
+                const element = pdfExportRef.current;
+                const opt = { margin: 0.2, filename: `AUDIT_${scannedKitData.kitId}.pdf`, image: { type: 'jpeg', quality: 0.98 }, html2canvas: { scale: 2, useCORS: true, logging: false }, jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' } };
+                html2pdf().set(opt).from(element).save();
+            };
+
+            return (
+                <div className="max-w-6xl mx-auto p-4 flex flex-col min-h-screen relative">
+                    {/* HEADER RETRO DON MARCOS */}
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 retro-panel p-6 gap-4 sticky top-2 z-20 bg-black">
+                        <div>
+                            <h1 className="text-4xl font-pixel tracking-widest text-amber-500 neon-text">DON MARCOS ADMIN</h1>
+                            <p className="text-sm font-bold opacity-70 uppercase tracking-[0.3em] font-mono">> SISTEMA DE AUDITORÍA V.1.0</p>
+                        </div>
+                        <div className="flex gap-4 items-center">
+                            {/* CONTROLES DE ZOOM RETRO */}
+                            <div className="flex mr-4 border-2 border-amber-700 p-1 bg-black/50 gap-1">
+                                <button onClick={handleZoomOut} className="btn-retro px-3 py-1 text-sm">[ - ZM ]</button>
+                                <span className="font-pixel flex items-center px-2">{Math.round(zoomLevel * 100)}%</span>
+                                <button onClick={handleZoomIn} className="btn-retro px-3 py-1 text-sm">[ + ZM ]</button>
+                            </div>
+
+                            {!isScanning && (
+                                <button onClick={startScanner} className="btn-retro flex items-center gap-2">
+                                    <Icon name="camera" size={18} /> INICIAR ESCÁNER
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ÁREA DE ESCÁNER RETRO */}
+                    {isScanning && (
+                        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-6">
+                            <div id="reader" className="w-full max-w-md overflow-hidden border-4 border-amber-500 shadow-[0_0_20px_rgba(255,176,0,0.5)]"></div>
+                            <button onClick={stopScanner} className="mt-8 btn-retro btn-retro-danger">CANCELAR OPERACIÓN</button>
+                        </div>
+                    )}
+
+                    {/* LOADING RETRO */}
+                    {loading && <div className="flex-1 flex items-center justify-center font-pixel text-2xl animate-pulse">> PROCESANDO DATOS DEL KIT... ESPERE.</div>}
+
+                    {/* RESULTADOS VISUALES CON ZOOM */}
+                    {scannedKitData && mergedLabels.length > 0 && (
+                        <div className="flex-1 overflow-hidden">
+                            <div className="flex justify-between items-end mb-4 retro-panel p-3">
+                                <div>
+                                    <h2 className="text-xl font-pixel">> KIT IDENTIFICADO: {scannedKitData.kitId}</h2>
+                                    <p className="text-sm opacity-70 font-mono">Paquetes encontrados: [{mergedLabels.length}]</p>
+                                </div>
+                                <button onClick={generatePDF} className="btn-retro flex items-center gap-2 text-sm">
+                                    <Icon name="file-down" size={16} /> EXPORTAR PDF
+                                </button>
+                            </div>
+
+                            {/* CONTENEDOR CON ZOOM APLICADO */}
+                            <div style={{ 
+                                transform: `scale(${zoomLevel})`, 
+                                transformOrigin: 'top center',
+                                transition: 'transform 0.2s ease-out'
+                            }}>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-20">
+                                    {mergedLabels.map((labelData, idx) => (
+                                        <div key={idx} className="relative group retro-panel p-1">
+                                            <div className="absolute -top-4 -left-2 bg-amber-600 text-black px-2 py-1 font-pixel text-sm border border-amber-400 shadow-md z-10">
+                                                ITEM #{idx + 1}
+                                            </div>
+                                            {/* La papeleta interna sigue siendo blanca para mantener integridad visual de la etiqueta real */}
+                                            <div className="h-64 w-full overflow-hidden relative bg-zinc-200 border-2 border-amber-900/50">
+                                                <div style={{ width: '125%', height: '125%', transform: 'scale(0.8)', transformOrigin: 'top left' }}>
+                                                     <ProductionLabel labelData={labelData} />
+                                                </div>
+                                                {/* Overlay para oscurecer un poco la papeleta blanca y que no desentone tanto */}
+                                                 <div className="absolute inset-0 bg-amber-900/10 pointer-events-none mix-blend-multiply"></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {!scannedKitData && !loading && !isScanning && (
+                        <div className="flex-1 flex flex-col items-center justify-center text-amber-700 border-4 border-dashed border-amber-900/50 rounded-lg m-4 p-10 retro-panel opacity-50">
+                            <Icon name="qr-code" size={80} className="opacity-50 mb-4 animate-pulse" />
+                            <p className="font-pixel text-2xl text-center">> SISTEMA EN ESPERA.</p>
+                            <p className="font-mono text-sm text-center mt-2">Inicie el escáner para leer un código.</p>
+                        </div>
+                    )}
+
+                    {/* PDF HIDDEN CONTENT */}
+                    <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+                        <div ref={pdfExportRef} className="pdf-page-container">
+                            <div className="text-center border-b pb-2 mb-2">
+                                <h1 className="text-xl font-bold text-black uppercase">Desglose de Kit {scannedKitData?.kitId} - DON MARCOS ADMIN</h1>
+                            </div>
+                            {mergedLabels.map((labelData, idx) => (
+                                <div key={idx} className="papeleta-wrapper">
+                                    <ProductionLabel labelData={labelData} />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
