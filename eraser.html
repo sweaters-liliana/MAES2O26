@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Limpieza de Archivo (Orders)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-red-50 text-slate-800 font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const App = () => {
+            const [orders, setOrders] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                // BUSCAMOS DIRECTAMENTE EN LA COLECCIÓN 'orders'
+                // FILTRANDO SOLO LAS QUE ESTÁN ARCHIVADAS
+                const unsubscribe = db.collection('orders')
+                    .where('status', '==', 'ARCHIVADO') 
+                    .onSnapshot(snapshot => {
+                        const docs = snapshot.docs.map(d => ({...d.data(), uid: d.id}));
+                        setOrders(docs);
+                        setLoading(false);
+                    }, error => {
+                        console.error("Error buscando en orders:", error);
+                        setLoading(false);
+                    });
+                return () => unsubscribe();
+            }, []);
+
+            const handleDelete = async (id, codigo) => {
+                if(confirm(`¿Estás seguro de borrar definitivamente la orden ${codigo} de la base de datos 'orders'?`)) {
+                    try {
+                        await db.collection('orders').doc(String(id)).delete();
+                    } catch (e) { alert("Error: " + e.message); }
+                }
+            };
+
+            const getProgress = (progreso) => {
+                if(!progreso) return 0;
+                const done = progreso.filter(p => p.finished).length;
+                return Math.round((done / progreso.length) * 100);
+            };
+
+            return (
+                <div className="max-w-4xl mx-auto p-6">
+                    <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-red-200">
+                        <div className="bg-red-700 p-4 text-white flex justify-between items-center">
+                            <h1 className="font-bold text-lg flex items-center gap-2"><i data-lucide="trash-2"></i> LIMPIEZA DE BASE DE DATOS</h1>
+                            <span className="text-xs bg-red-900 px-2 py-1 rounded">Colección: orders</span>
+                        </div>
+                        <div className="p-4 bg-red-50 text-red-800 text-sm mb-0">
+                            Mostrando solo órdenes con <strong>status: "ARCHIVADO"</strong>. 
+                            <br/>Las que tienen <strong>0%</strong> son probablemente errores o pruebas.
+                        </div>
+                        
+                        {loading && <div className="p-4 text-center">Cargando colección orders...</div>}
+                        
+                        {!loading && orders.length === 0 && <div className="p-10 text-center text-gray-400">No hay órdenes archivadas en la base de datos.</div>}
+
+                        <div className="divide-y divide-gray-100">
+                            {orders.map(o => {
+                                const pct = getProgress(o.progreso);
+                                return (
+                                    <div key={o.uid} className="p-4 hover:bg-gray-50 flex items-center justify-between group">
+                                        <div>
+                                            <div className="font-bold text-lg text-slate-700">{o.codigo}</div>
+                                            <div className="text-xs text-gray-500">Cliente: {o.cliente} | Partida: {o.partida}</div>
+                                            <div className="text-[10px] text-gray-400 font-mono">ID: {o.uid}</div>
+                                        </div>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`text-sm font-bold px-2 py-1 rounded ${pct === 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                                {pct}% Completado
+                                            </div>
+                                            <button onClick={() => handleDelete(o.uid, o.codigo)} className="bg-white border border-red-200 text-red-500 hover:bg-red-600 hover:text-white px-3 py-2 rounded font-bold text-xs flex items-center gap-2 transition shadow-sm">
+                                                <i data-lucide="x"></i> ELIMINAR
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        setTimeout(() => lucide.createIcons(), 1000);
+    </script>
+</body>
+</html>
