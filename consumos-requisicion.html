@@ -33,10 +33,17 @@
             100% { opacity: 1; transform: scale(1); border-radius: 0px; }
         }
 
-        /* Checkbox personalizado */
-        .custom-checkbox:checked {
-            background-color: #4f46e5;
-            border-color: #4f46e5;
+        /* Inputs editables que parecen texto */
+        .editable-input {
+            background: transparent;
+            border-bottom: 1px dashed #a5b4fc;
+            width: 100%;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .editable-input:focus {
+            border-bottom: 2px solid #4f46e5;
+            background: rgba(255, 255, 255, 0.5);
         }
     </style>
 </head>
@@ -67,8 +74,8 @@
         const App = () => {
             // --- Estados de Datos ---
             const [rawOrders, setRawOrders] = useState([]);
-            const [requisitions, setRequisitions] = useState([]); // Historial de requisiciones
-            const [reqMap, setReqMap] = useState({}); // Mapa: OrderID -> RequisitionID
+            const [requisitions, setRequisitions] = useState([]); 
+            const [reqMap, setReqMap] = useState({}); 
 
             // --- Estados de UI ---
             const [view, setView] = useState('active');
@@ -76,23 +83,31 @@
             
             // --- Estados de Expansión ---
             const [expandedPackages, setExpandedPackages] = useState({});
-            const [expandedMaterials, setExpandedMaterials] = useState({});
-            const [expandedFactory, setExpandedFactory] = useState({}); // Nuevo menú 3 (Hilaturas)
+            const [expandedFactory, setExpandedFactory] = useState({}); 
 
             // --- Lógica de Selección y Modal ---
             const [isSelectionMode, setIsSelectionMode] = useState(false);
-            const [filterCriteria, setFilterCriteria] = useState(null); // { codigo: '...', partida: '...' }
+            const [filterCriteria, setFilterCriteria] = useState(null); 
             const [selectedOrderIds, setSelectedOrderIds] = useState([]);
             const [showModal, setShowModal] = useState(false);
             
             // --- Datos para el Modal / PDF ---
             const [modalData, setModalData] = useState({
                 orders: [],
-                totalKg: 0,
-                materialInfo: { name: '', calibre: '', estiraje: '' } // Se llenará al confirmar
+                candidates: [], 
+                selectedIdx: 0
             });
+
+            // Estado para los valores EDITABLES
+            const [editValues, setEditValues] = useState({
+                name: '',
+                calibre: '',
+                estiraje: '',
+                totalKg: 0
+            });
+
             const [manualOrderId, setManualOrderId] = useState('');
-            const [manualTare, setManualTare] = useState(1.7); // Tara por defecto (Kg)
+            const [manualTare, setManualTare] = useState(1.7); 
 
             // 1. Cargar Órdenes
             useEffect(() => {
@@ -102,13 +117,12 @@
                 return () => unsub();
             }, []);
 
-            // 2. Cargar Requisiciones y Mapear
+            // 2. Cargar Requisiciones
             useEffect(() => {
                 const unsub = db.collection('requisitions').onSnapshot(snap => {
                     const reqs = snap.docs.map(d => ({...d.data(), id: d.id}));
                     setRequisitions(reqs);
                     
-                    // Crear mapa para saber rápido si una orden tiene req activa
                     const map = {};
                     reqs.forEach(r => {
                         if (r.status !== 'COMPLETED_AND_STOCKED') {
@@ -122,20 +136,31 @@
                 return () => unsub();
             }, []);
 
+            // 3. Efecto para actualizar los inputs editables cuando cambia el dropdown
+            useEffect(() => {
+                if (showModal && modalData.candidates.length > 0) {
+                    const cand = modalData.candidates[modalData.selectedIdx];
+                    setEditValues({
+                        name: cand.name,
+                        calibre: cand.calibre,
+                        estiraje: cand.estiraje,
+                        totalKg: Number(cand.totalKg.toFixed(2)) // Redondear inicial
+                    });
+                }
+            }, [showModal, modalData.selectedIdx]);
+
             // Filtrado Principal
             const displayedOrders = useMemo(() => {
                 let filtered = view === 'active' 
                     ? rawOrders.filter(o => o.status !== 'ARCHIVADO') 
                     : rawOrders.filter(o => o.status === 'ARCHIVADO');
                 
-                // Si estamos filtrando para selección
                 if (isSelectionMode && filterCriteria) {
                     filtered = filtered.filter(o => 
                         o.codigo === filterCriteria.codigo && 
                         o.partida === filterCriteria.partida
                     );
                 }
-
                 return filtered.sort((a,b) => (b.id || 0) - (a.id || 0));
             }, [rawOrders, view, isSelectionMode, filterCriteria]);
 
@@ -148,17 +173,12 @@
 
             const handleRowClick = (order) => {
                 if (!isSelectionMode) return;
-                
-                // Si la orden ya tiene requisición, no hacer nada (bloqueada)
                 if (reqMap[order.uid]) return;
 
-                // Si no hay criterio, esta fila define el criterio
                 if (!filterCriteria) {
                     setFilterCriteria({ codigo: order.codigo, partida: order.partida });
-                    // Auto-seleccionar la primera
                     setSelectedOrderIds([order.uid]);
                 } else {
-                    // Toggle selección
                     if (selectedOrderIds.includes(order.uid)) {
                         setSelectedOrderIds(prev => prev.filter(id => id !== order.uid));
                     } else {
@@ -168,116 +188,104 @@
             };
 
             const selectAllFiltered = () => {
-                // Seleccionar solo las que no tienen req activa
                 const validIds = displayedOrders
                     .filter(o => !reqMap[o.uid])
                     .map(o => o.uid);
                 setSelectedOrderIds(validIds);
             };
 
-            // --- Preparar Datos para Modal ---
+            // --- Abrir Modal ---
             const handleOpenModal = () => {
                 if (selectedOrderIds.length === 0) return;
 
                 const selectedOrders = rawOrders.filter(o => selectedOrderIds.includes(o.uid));
-                
-                // Buscar la Licra en la primera orden (asumimos uniformidad por el filtro)
-                let foundMat = { name: 'NO ESPECIFICADO', calibre: '?', estiraje: '?' };
-                let matPercentage = 0;
+                const referenceOrder = selectedOrders[0]; 
 
-                const first = selectedOrders[0];
-                if (first.threading) {
-                    const licraHilo = first.threading.find(h => 
-                        (h.material && (h.material.toUpperCase().includes('LICRA') || h.material.toUpperCase().includes('SPANDEX')))
-                    );
-                    if (licraHilo) {
-                        foundMat = { 
-                            name: licraHilo.material, 
-                            calibre: licraHilo.calibre || 'Std', 
-                            estiraje: licraHilo.estiraje || 'Std' 
-                        };
-                        matPercentage = Number(licraHilo.porcentaje) || 0;
-                    }
+                if (!referenceOrder.threading || referenceOrder.threading.length === 0) {
+                    alert("El pedido seleccionado no tiene configuración de hilos (threading).");
+                    return;
                 }
 
-                // Calcular Kg totales
-                let grandTotalKg = 0;
-                selectedOrders.forEach(o => {
-                    let pesoOrden = 0;
-                    o.progreso?.forEach(p => {
-                        const def = o.subPiecesData?.find(sp => sp.pieza === p.piezaNombre);
-                        pesoOrden += (Number(def?.peso || 0) * Number(p.cantidad));
+                // Generar lista de materiales candidatos
+                const candidates = referenceOrder.threading.map((hilo) => {
+                    const matName = hilo.material || "Sin Nombre";
+                    const pct = Number(hilo.porcentaje) || 0;
+                    
+                    let totalMatKg = 0;
+                    selectedOrders.forEach(o => {
+                        let pesoOrden = 0;
+                        o.progreso?.forEach(p => {
+                            const def = o.subPiecesData?.find(sp => sp.pieza === p.piezaNombre);
+                            pesoOrden += (Number(def?.peso || 0) * Number(p.cantidad));
+                        });
+                        totalMatKg += (pesoOrden * (pct / 100)) / 1000;
                     });
-                    const licraKg = (pesoOrden * (matPercentage / 100)) / 1000;
-                    grandTotalKg += licraKg;
+
+                    return {
+                        name: matName,
+                        calibre: hilo.calibre || 'S/C',
+                        estiraje: hilo.estiraje || 'Std',
+                        pct: pct,
+                        totalKg: totalMatKg
+                    };
                 });
 
                 setModalData({
                     orders: selectedOrders,
-                    totalKg: grandTotalKg,
-                    materialInfo: foundMat
+                    candidates: candidates,
+                    selectedIdx: 0 
                 });
                 setManualOrderId('');
                 setShowModal(true);
             };
 
-            // --- Generar PDF y Guardar BD ---
-            const handleSaveAndPrint = async () => {
+            // --- Guardar en BD (y Opcional PDF) ---
+            const handleProcessRequisition = async (shouldPrint) => {
                 if (!manualOrderId) {
                     alert("Debes ingresar un folio o ID manual para la requisición.");
                     return;
                 }
 
-                // 1. Guardar en Firestore (Estructura preparada para Hilaturas)
+                // Usamos los valores EDITADOS, no los calculados
                 const payload = {
                     createdAt: new Date().toISOString(),
-                    status: 'PENDING', // PENDING -> IN_PROGRESS -> COMPLETED
+                    status: 'PENDING', 
                     manualOrderId: manualOrderId,
-                    tareWeight: Number(manualTare), // Para que Hilaturas sepa cuánto descontar
+                    tareWeight: Number(manualTare),
                     
-                    // Datos del Material
-                    material: modalData.materialInfo.name,
-                    calibre: modalData.materialInfo.calibre,
-                    estiraje: modalData.materialInfo.estiraje,
-                    requestedKg: Number(modalData.totalKg),
+                    // Datos EDITADOS
+                    material: editValues.name,
+                    calibre: editValues.calibre,
+                    estiraje: editValues.estiraje,
+                    requestedKg: Number(editValues.totalKg),
                     
-                    // Ordenes involucradas (para bloquearlas en la UI)
                     orders: modalData.orders.map(o => ({ uid: o.uid, codigo: o.codigo, partida: o.partida })),
-                    
-                    // ESTRUCTURA FUTURA HILATURAS (Arrays vacíos por ahora)
-                    productionLog: {
-                        s: [], // { date, grossWeight, netWeight, packageId }
-                        z: []
-                    },
+                    productionLog: { s: [], z: [] },
                     deliveredKg: 0
                 };
 
                 try {
                     await db.collection('requisitions').add(payload);
                     
-                    // 2. Generar PDF (1/3 Carta)
-                    generatePDF(payload);
+                    if (shouldPrint) {
+                        generatePDF(payload);
+                    } else {
+                        alert("Requisición guardada en el sistema correctamente.");
+                    }
 
                     // Limpieza
                     setShowModal(false);
                     setIsSelectionMode(false);
                     setFilterCriteria(null);
                     setSelectedOrderIds([]);
-
                 } catch (e) {
                     alert("Error: " + e.message);
                 }
             };
 
             const generatePDF = (data) => {
-                // Tamaño personalizado: Ancho Letter (215.9mm) x 1/3 Alto (93mm)
-                const doc = new jsPDF({
-                    orientation: 'landscape',
-                    unit: 'mm',
-                    format: [216, 93]
-                });
+                const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [216, 93] });
 
-                // Header
                 doc.setFont("helvetica", "bold");
                 doc.setFontSize(14);
                 doc.text("REQUISICIÓN DE HILO - VIVA ROUSS", 10, 10);
@@ -285,9 +293,8 @@
                 doc.setFontSize(10);
                 doc.setFont("helvetica", "normal");
                 doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 10, 16);
-                doc.text(`Folio Hilatura: ${data.manualOrderId}`, 150, 10); // Alineado a derecha
+                doc.text(`Folio Hilatura: ${data.manualOrderId}`, 150, 10);
 
-                // Info Material
                 doc.setDrawColor(0);
                 doc.setFillColor(240, 240, 240);
                 doc.rect(10, 20, 196, 18, 'F');
@@ -304,7 +311,6 @@
                 doc.setFont("helvetica", "bold");
                 doc.text(`${data.requestedKg.toFixed(2)} Kg`, 190, 30, { align: 'right' });
 
-                // Torsiones
                 const half = (data.requestedKg / 2).toFixed(2);
                 doc.setFontSize(10);
                 doc.text(`Torsión S: ${half} Kg`, 10, 48);
@@ -312,7 +318,6 @@
                 doc.setFont("helvetica", "normal");
                 doc.text(`(Tara Ref: ${data.tareWeight} kg)`, 150, 48);
 
-                // Tabla de Pedidos (Simple)
                 const bodyData = data.orders.map(o => [o.codigo, o.partida]);
                 doc.autoTable({
                     startY: 52,
@@ -400,11 +405,10 @@
                                             <tr><td colSpan="7" className="p-8 text-center text-slate-400">No hay pedidos que coincidan.</td></tr>
                                         )}
                                         {displayedOrders.map(o => {
-                                            const activeReq = reqMap[o.uid]; // ¿Tiene req activa?
+                                            const activeReq = reqMap[o.uid]; 
                                             const isSelected = selectedOrderIds.includes(o.uid);
-                                            const isLocked = activeReq && isSelectionMode; // Bloquear si ya tiene req
+                                            const isLocked = activeReq && isSelectionMode; 
 
-                                            // Stats simples
                                             let pesoTotal = 0;
                                             o.progreso?.forEach(p => {
                                                 const d = o.subPiecesData?.find(x=>x.pieza===p.piezaNombre);
@@ -449,7 +453,6 @@
                                                             <div className="flex justify-end gap-1">
                                                                 <button onClick={(e) => { e.stopPropagation(); setExpandedPackages(prev => ({...prev, [o.uid]: !prev[o.uid]})); }} className="p-2 hover:bg-slate-100 rounded text-indigo-600"><Icon name="package" size={16}/></button>
                                                                 
-                                                                {/* 3ER BOTÓN: ESTADO HILATURAS (Solo si hay req) */}
                                                                 {activeReq && (
                                                                     <button 
                                                                         onClick={(e) => { e.stopPropagation(); setExpandedFactory(prev => ({...prev, [o.uid]: !prev[o.uid]})); }}
@@ -478,12 +481,11 @@
                                                         </tr>
                                                     )}
 
-                                                    {/* EXPANSION 3: HILATURAS ROUSS (Nuevo) */}
+                                                    {/* EXPANSION 3: HILATURAS ROUSS */}
                                                     {expandedFactory[o.uid] && activeReq && (
                                                         <tr className="bg-amber-50 shadow-inner border-y border-amber-200">
                                                             <td colSpan={isSelectionMode ? 7 : 6} className="p-0">
                                                                 <div className="p-4 flex flex-col md:flex-row gap-6">
-                                                                    {/* Info General */}
                                                                     <div className="w-full md:w-1/3 border-r border-amber-200 pr-4">
                                                                         <h4 className="font-black text-amber-900 text-sm flex items-center gap-2 mb-2">
                                                                             <Icon name="truck" size={16}/> ESTATUS HILATURA
@@ -495,10 +497,8 @@
                                                                         <div className="text-2xl font-black text-slate-800">{activeReq.requestedKg.toFixed(2)} <span className="text-sm text-slate-500">Kg</span></div>
                                                                     </div>
 
-                                                                    {/* Barras de Progreso (Calculadas con datos futuros) */}
                                                                     <div className="w-full md:w-2/3 flex flex-col justify-center space-y-4">
                                                                         {(() => {
-                                                                            // Simulación de cálculo (ya que arrays están vacíos por ahora)
                                                                             const prodS = activeReq.productionLog?.s || [];
                                                                             const prodZ = activeReq.productionLog?.z || [];
                                                                             
@@ -511,7 +511,6 @@
 
                                                                             return (
                                                                                 <>
-                                                                                    {/* Torsión S */}
                                                                                     <div>
                                                                                         <div className="flex justify-between text-xs font-bold mb-1">
                                                                                             <span className="text-indigo-700">Torsión S</span>
@@ -522,7 +521,6 @@
                                                                                         </div>
                                                                                     </div>
                                                                                     
-                                                                                    {/* Torsión Z */}
                                                                                     <div>
                                                                                         <div className="flex justify-between text-xs font-bold mb-1">
                                                                                             <span className="text-emerald-700">Torsión Z</span>
@@ -531,10 +529,6 @@
                                                                                         <div className="w-full bg-white h-3 rounded-full border border-amber-200 overflow-hidden">
                                                                                             <div className="h-full bg-emerald-500 transition-all duration-1000" style={{width: `${pctZ}%`}}></div>
                                                                                         </div>
-                                                                                    </div>
-
-                                                                                    <div className="mt-2 text-[10px] text-center text-slate-400 italic">
-                                                                                        * Datos actualizados por Hilaturas Rouss
                                                                                     </div>
                                                                                 </>
                                                                             );
@@ -560,7 +554,7 @@
                                 <div className="bg-slate-900 p-6 text-white relative">
                                     <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><Icon name="x"/></button>
                                     <h2 className="text-2xl font-black italic">HACER PEDIDO</h2>
-                                    <p className="text-slate-400 text-xs mt-1">Generar PDF y notificar a Hilaturas</p>
+                                    <p className="text-slate-400 text-xs mt-1">Selecciona y edita los datos antes de guardar</p>
                                 </div>
                                 
                                 <div className="p-6 space-y-6">
@@ -577,20 +571,68 @@
                                         />
                                     </div>
 
-                                    {/* Resumen Material */}
-                                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 flex justify-between items-center">
-                                        <div>
-                                            <div className="text-[10px] uppercase font-bold text-indigo-400">Material a Pedir</div>
-                                            <div className="font-black text-indigo-900 text-lg">{modalData.materialInfo.name}</div>
-                                            <div className="text-xs text-indigo-700">{modalData.materialInfo.calibre} - {modalData.materialInfo.estiraje}</div>
+                                    {/* SELECCIONADOR DE HILO */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Selecciona la Licra a pedir:</label>
+                                        <select 
+                                            value={modalData.selectedIdx}
+                                            onChange={(e) => setModalData({...modalData, selectedIdx: Number(e.target.value)})}
+                                            className="w-full p-3 bg-white border-2 border-indigo-100 rounded-lg font-bold text-slate-800 focus:border-indigo-500 outline-none mb-4">
+                                            {modalData.candidates.map((cand, idx) => (
+                                                <option key={idx} value={idx}>
+                                                    {cand.name} (Calculado: {cand.totalKg.toFixed(2)} Kg)
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* CAMPOS EDITABLES */}
+                                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100 transition-all">
+                                        <div className="flex justify-between items-start gap-4 mb-2">
+                                            <div className="flex-1">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400 mb-1">Nombre Material</div>
+                                                <input 
+                                                    type="text" 
+                                                    value={editValues.name}
+                                                    onChange={e => setEditValues({...editValues, name: e.target.value})}
+                                                    className="editable-input font-black text-indigo-900 text-sm"
+                                                />
+                                            </div>
+                                            <div className="w-24 text-right">
+                                                <div className="text-[10px] font-bold text-slate-400 mb-1">TOTAL KG</div>
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01"
+                                                    value={editValues.totalKg}
+                                                    onChange={e => setEditValues({...editValues, totalKg: e.target.value})}
+                                                    className="editable-input text-3xl font-black text-slate-800 text-right p-0"
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-3xl font-black text-slate-800">{modalData.totalKg.toFixed(2)}</div>
-                                            <div className="text-[10px] font-bold text-slate-400">KILOGRAMOS TOTALES</div>
+
+                                        <div className="grid grid-cols-2 gap-4 mt-3">
+                                            <div>
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400 mb-1">Calibre</div>
+                                                <input 
+                                                    type="text" 
+                                                    value={editValues.calibre}
+                                                    onChange={e => setEditValues({...editValues, calibre: e.target.value})}
+                                                    className="editable-input text-xs font-bold text-indigo-900"
+                                                />
+                                            </div>
+                                            <div>
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400 mb-1">Estiraje</div>
+                                                <input 
+                                                    type="text" 
+                                                    value={editValues.estiraje}
+                                                    onChange={e => setEditValues({...editValues, estiraje: e.target.value})}
+                                                    className="editable-input text-xs font-bold text-indigo-900"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Tara Config (Hidden feature for now, visible for admin) */}
+                                    {/* Tara Config */}
                                     <div className="flex items-center justify-between p-3 border rounded bg-slate-50">
                                         <span className="text-xs text-slate-500 font-bold">Peso Tara (Bobina + Cartón)</span>
                                         <div className="flex items-center gap-2">
@@ -608,21 +650,28 @@
                                     <div className="grid grid-cols-2 gap-4 text-center">
                                         <div className="bg-slate-100 p-2 rounded">
                                             <div className="text-[10px] text-slate-400 uppercase">Torsión S</div>
-                                            <div className="font-bold">{(modalData.totalKg / 2).toFixed(2)} Kg</div>
+                                            <div className="font-bold">{(editValues.totalKg / 2).toFixed(2)} Kg</div>
                                         </div>
                                         <div className="bg-slate-100 p-2 rounded">
                                             <div className="text-[10px] text-slate-400 uppercase">Torsión Z</div>
-                                            <div className="font-bold">{(modalData.totalKg / 2).toFixed(2)} Kg</div>
+                                            <div className="font-bold">{(editValues.totalKg / 2).toFixed(2)} Kg</div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-slate-50 border-t flex justify-end gap-3">
+                                <div className="p-6 bg-slate-50 border-t flex flex-col sm:flex-row justify-end gap-3">
                                     <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">CANCELAR</button>
+                                    
                                     <button 
-                                        onClick={handleSaveAndPrint}
-                                        className="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-xl hover:bg-slate-800 flex items-center gap-2 active:scale-95 transition-transform">
-                                        <Icon name="file-down" size={18}/> GUARDAR Y DESCARGAR PDF
+                                        onClick={() => handleProcessRequisition(false)}
+                                        className="bg-white border-2 border-slate-900 text-slate-900 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-50 flex justify-center items-center gap-2">
+                                        <Icon name="save" size={16}/> SOLO GUARDAR
+                                    </button>
+
+                                    <button 
+                                        onClick={() => handleProcessRequisition(true)}
+                                        className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-xl hover:bg-slate-800 flex justify-center items-center gap-2 active:scale-95 transition-transform">
+                                        <Icon name="file-down" size={16}/> GUARDAR Y PDF
                                     </button>
                                 </div>
                             </div>
