@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor de Consumos - Viva Rouss</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Estilos de scrollbar suaves */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        @media print {
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans overflow-x-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const Icon = ({ name, size=18, className="" }) => {
+            useEffect(() => { lucide.createIcons(); }, [name]); 
+            return <i data-lucide={name} className={className} style={{fontSize: size, width: size, height: size}}></i>;
+        };
+
+        const App = () => {
+            const [rawOrders, setRawOrders] = useState([]);
+            const [view, setView] = useState('active'); 
+            const [expandedPackages, setExpandedPackages] = useState({}); 
+            const [expandedMaterials, setExpandedMaterials] = useState({}); 
+            const [zoom, setZoom] = useState(1);
+
+            useEffect(() => {
+                const unsubscribe = db.collection('orders').onSnapshot(snap => {
+                    const data = snap.docs.map(d => ({...d.data(), uid: d.id}));
+                    setRawOrders(data);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            const displayedOrders = useMemo(() => {
+                const filtered = view === 'active' 
+                    ? rawOrders.filter(o => o.status !== 'ARCHIVADO') 
+                    : rawOrders.filter(o => o.status === 'ARCHIVADO');
+                return filtered.sort((a,b) => (b.id || 0) - (a.id || 0));
+            }, [rawOrders, view]);
+
+            const stats = useMemo(() => {
+                let totalKgReal = 0; let totalKgPend = 0;
+                let totalHrReal = 0; let totalHrPend = 0;
+
+                displayedOrders.forEach(o => {
+                    let pesoOrdenReal = 0; let pesoOrdenPend = 0;
+                    if (o.progreso && Array.isArray(o.progreso)) {
+                        o.progreso.forEach(pkg => {
+                            const piezaDef = o.subPiecesData?.find(sp => sp.pieza === pkg.piezaNombre);
+                            const pesoUnitario = piezaDef ? (Number(piezaDef.peso) || 0) : 0;
+                            const tiempoUnitario = piezaDef ? (Number(piezaDef.tiempo) || 0) : 0;
+                            const cantidad = Number(pkg.cantidad) || 0;
+                            const pesoPaquete = cantidad * pesoUnitario;
+                            const tiempoPaquete = cantidad * tiempoUnitario;
+
+                            if (pkg.finished === true) {
+                                totalHrReal += (tiempoPaquete / 60);
+                                pesoOrdenReal += pesoPaquete;
+                            } else {
+                                totalHrPend += (tiempoPaquete / 60);
+                                pesoOrdenPend += pesoPaquete;
+                            }
+                        });
+                    }
+                    totalKgReal += pesoOrdenReal / 1000;
+                    totalKgPend += pesoOrdenPend / 1000;
+                });
+                return { kg: { real: totalKgReal, pend: totalKgPend }, horas: { real: totalHrReal, pend: totalHrPend }};
+            }, [displayedOrders]);
+
+            const OrderRow = ({ o }) => {
+                const totalPaquetes = o.progreso?.length || 0;
+                const paquetesListos = o.progreso?.filter(p => p.finished === true).length || 0;
+                let pesoTotalG = 0;
+                o.progreso?.forEach(pkg => {
+                    const def = o.subPiecesData?.find(sp => sp.pieza === pkg.piezaNombre);
+                    pesoTotalG += (Number(def?.peso || 0) * Number(pkg.cantidad));
+                });
+                
+                const avance = totalPaquetes > 0 ? Math.round((paquetesListos/totalPaquetes)*100) : 0;
+                const isPkgOpen = expandedPackages[o.uid];
+                const isMatOpen = expandedMaterials[o.uid];
+
+                return (
+                    <React.Fragment>
+                        {/* VISTA DESKTOP (Tabla) */}
+                        <tr className={`hidden md:table-row hover:bg-indigo-50 transition-colors ${(isPkgOpen || isMatOpen) ? 'bg-slate-50' : ''}`}>
+                            <td className="p-4 font-black text-indigo-700 uppercase whitespace-nowrap">{o.codigo}</td>
+                            <td className="p-4 text-slate-600 font-medium">{o.partida}</td>
+                            <td className="p-4 text-center font-bold text-slate-700">{totalPaquetes}</td>
+                            <td className="p-4 text-center font-mono text-slate-600">{(pesoTotalG/1000).toFixed(2)}</td>
+                            <td className="p-4 min-w-[120px]">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-full bg-slate-200 rounded-full h-1.5">
+                                        <div className={`h-1.5 rounded-full ${avance === 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{width: `${avance}%`}}></div>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-500">{avance}%</span>
+                                </div>
+                            </td>
+                            <td className="p-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                    <button onClick={() => setExpandedPackages(prev => ({...prev, [o.uid]: !prev[o.uid]}))} className={`p-2 rounded transition-all ${isPkgOpen ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'}`}><Icon name="package" size={16}/></button>
+                                    <button onClick={() => setExpandedMaterials(prev => ({...prev, [o.uid]: !prev[o.uid]}))} className={`p-2 rounded transition-all ${isMatOpen ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'}`}><Icon name="scroll" size={16}/></button>
+                                </div>
+                            </td>
+                        </tr>
+
+                        {/* VISTA MÓVIL (Cards) */}
+                        <div className="md:hidden bg-white border-b p-4 space-y-3">
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="text-lg font-black text-indigo-700 uppercase">{o.codigo}</div>
+                                    <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">{o.partida}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-lg font-mono font-bold text-slate-700">{(pesoTotalG/1000).toFixed(2)}<span className="text-xs ml-1 text-slate-400">Kg</span></div>
+                                    <div className="text-[10px] font-bold text-slate-400 uppercase">{totalPaquetes} Paquetes</div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-lg">
+                                <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                                    <div className={`h-full transition-all duration-500 ${avance === 100 ? 'bg-emerald-500' : 'bg-indigo-600'}`} style={{width: `${avance}%`}}></div>
+                                </div>
+                                <span className="text-xs font-black text-slate-600">{avance}%</span>
+                            </div>
+
+                            <div className="flex gap-2">
+                                <button onClick={() => setExpandedPackages(prev => ({...prev, [o.uid]: !prev[o.uid]}))} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${isPkgOpen ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-indigo-600'}`}>
+                                    <Icon name="package" size={14}/> {isPkgOpen ? 'Cerrar' : 'Paquetes'}
+                                </button>
+                                <button onClick={() => setExpandedMaterials(prev => ({...prev, [o.uid]: !prev[o.uid]}))} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-xs transition-all ${isMatOpen ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-emerald-600'}`}>
+                                    <Icon name="scroll" size={14}/> {isMatOpen ? 'Cerrar' : 'Hilos'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Desgloses Expandibles (Comunes) */}
+                        {(isPkgOpen || isMatOpen) && (
+                            <tr className="bg-slate-50/50 md:table-row block">
+                                <td colSpan="6" className="p-2 md:p-4">
+                                    {isPkgOpen && (
+                                        <div className="mb-4 fade-in bg-white rounded-xl border border-indigo-100 shadow-sm overflow-hidden">
+                                            <div className="bg-indigo-50 px-4 py-2 border-b border-indigo-100 flex items-center gap-2 text-indigo-800 font-bold text-xs uppercase tracking-wider">
+                                                <Icon name="package" size={14}/> Detalle de Producción
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-[11px] md:text-xs">
+                                                    <thead className="bg-slate-50 text-slate-400 uppercase text-[9px]">
+                                                        <tr>
+                                                            <th className="p-2 text-left">Pieza</th>
+                                                            <th className="p-2 text-center">Cant.</th>
+                                                            <th className="p-2 text-center">Estado</th>
+                                                            <th className="p-2 text-right">Tejedor/Fecha</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-50">
+                                                        {o.progreso?.map((p, idx) => (
+                                                            <tr key={idx} className={p.finished ? 'bg-emerald-50/40' : ''}>
+                                                                <td className="p-2 font-bold">{p.piezaNombre}</td>
+                                                                <td className="p-2 text-center font-mono">{p.cantidad}</td>
+                                                                <td className="p-2 text-center">
+                                                                    {p.finished ? <span className="text-emerald-600 font-bold">✓</span> : <span className="text-slate-300">...</span>}
+                                                                </td>
+                                                                <td className="p-2 text-right text-slate-500">
+                                                                    {p.finished ? `${p.tejedor || 'S/T'} • ${p.fecha || ''}` : '--'}
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {isMatOpen && (
+                                        <div className="fade-in bg-white rounded-xl border border-emerald-100 shadow-sm overflow-hidden">
+                                            <div className="bg-emerald-50 px-4 py-2 border-b border-emerald-100 flex items-center gap-2 text-emerald-800 font-bold text-xs uppercase tracking-wider">
+                                                <Icon name="scroll" size={14}/> Consumo Estimado de Hilos
+                                            </div>
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-[11px] md:text-xs">
+                                                    <thead className="bg-slate-50 text-slate-400 uppercase text-[9px]">
+                                                        <tr>
+                                                            <th className="p-2 text-left">Material</th>
+                                                            <th className="p-2 text-right">Total Kg</th>
+                                                            <th className="p-2 text-right text-emerald-600">Listo</th>
+                                                            <th className="p-2 text-right text-orange-400">Falta</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-50">
+                                                        {o.threading?.map((h, hIdx) => {
+                                                            if(!h.material) return null;
+                                                            const pct = Number(h.porcentaje) / 100;
+                                                            const totalHiloKg = (pesoTotalG / 1000) * pct;
+                                                            let pesoConsumidoG = 0;
+                                                            o.progreso?.forEach(pkg => {
+                                                                if(pkg.finished) {
+                                                                    const def = o.subPiecesData?.find(sp => sp.pieza === pkg.piezaNombre);
+                                                                    pesoConsumidoG += (Number(def?.peso || 0) * Number(pkg.cantidad));
+                                                                }
+                                                            });
+                                                            const consumidoKg = (pesoConsumidoG / 1000) * pct;
+                                                            return (
+                                                                <tr key={hIdx}>
+                                                                    <td className="p-2">
+                                                                        <div className="font-bold">{h.material}</div>
+                                                                        <div className="text-[9px] text-slate-400">{h.calibre} | {h.estiraje || 'Std'}</div>
+                                                                    </td>
+                                                                    <td className="p-2 text-right font-mono">{totalHiloKg.toFixed(2)}</td>
+                                                                    <td className="p-2 text-right font-mono font-bold text-emerald-600">{consumidoKg.toFixed(2)}</td>
+                                                                    <td className="p-2 text-right font-mono text-orange-500">{(totalHiloKg - consumidoKg).toFixed(2)}</td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+                                </td>
+                            </tr>
+                        )}
+                    </React.Fragment>
+                );
+            };
+
+            return (
+                <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center', transition: 'transform 0.2s' }} className="min-h-screen pb-20 md:pb-8">
+                    {/* Controles Flotantes */}
+                    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-40 no-print">
+                        <button onClick={() => setZoom(prev => Math.min(prev + 0.1, 1.5))} className="bg-white p-3 rounded-full shadow-xl border text-indigo-600 active:scale-90 transition-transform"><Icon name="zoom-in" size={24}/></button>
+                        <button onClick={() => setZoom(prev => Math.max(prev - 0.1, 0.5))} className="bg-white p-3 rounded-full shadow-xl border text-indigo-600 active:scale-90 transition-transform"><Icon name="zoom-out" size={24}/></button>
+                    </div>
+
+                    <div className="p-4 md:p-8 max-w-7xl mx-auto">
+                        <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                            <div>
+                                <h1 className="text-2xl md:text-3xl font-black text-slate-800 flex items-center gap-3">
+                                    <Icon name="bar-chart-2" size={32} className="text-indigo-600"/> 
+                                    CONTROL DE CONSUMOS
+                                </h1>
+                                <p className="text-slate-500 text-xs md:text-sm mt-1 font-bold bg-white inline-block px-2 py-1 rounded shadow-sm border border-slate-200 uppercase tracking-tighter">Sincronización en tiempo real</p>
+                            </div>
+                            <div className="bg-white p-1 rounded-xl shadow-md border flex w-full md:w-auto">
+                                <button onClick={()=>setView('active')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg font-black text-xs transition-all ${view==='active' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200' : 'text-slate-400 hover:bg-slate-50'}`}>EN PROCESO</button>
+                                <button onClick={()=>setView('archived')} className={`flex-1 md:flex-none px-6 py-2.5 rounded-lg font-black text-xs transition-all ${view==='archived' ? 'bg-slate-800 text-white shadow-lg shadow-slate-300' : 'text-slate-400 hover:bg-slate-50'}`}>ARCHIVADOS</button>
+                            </div>
+                        </header>
+
+                        {/* Cards de Estadísticas */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-indigo-500">
+                                <div className="text-slate-400 text-[10px] font-black uppercase mb-1 tracking-widest">Órdenes</div>
+                                <div className="text-3xl font-black text-slate-800">{displayedOrders.length}</div>
+                            </div>
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-emerald-500">
+                                <div className="text-slate-400 text-[10px] font-black uppercase mb-1 tracking-widest text-emerald-600">Consumo Total (Kg)</div>
+                                <div className="text-3xl font-black text-emerald-600">{stats.kg.real.toFixed(1)}</div>
+                                <div className="text-slate-400 font-bold text-[11px] mt-1 italic">Pendiente: +{stats.kg.pend.toFixed(1)}</div>
+                            </div>
+                            <div className="bg-white p-5 rounded-2xl shadow-sm border-b-4 border-purple-500">
+                                <div className="text-slate-400 text-[10px] font-black uppercase mb-1 tracking-widest text-purple-600">Tiempo Máquina (Hrs)</div>
+                                <div className="text-3xl font-black text-purple-600">{stats.horas.real.toFixed(0)}</div>
+                                <div className="text-slate-400 font-bold text-[11px] mt-1 italic">Restante: +{stats.horas.pend.toFixed(0)}</div>
+                            </div>
+                        </div>
+
+                        {/* Contenedor Principal */}
+                        <div className="bg-white md:rounded-2xl shadow-xl md:border border-slate-200 overflow-hidden">
+                            <table className="w-full text-left">
+                                <thead className="hidden md:table-header-group bg-slate-50 text-slate-400 uppercase text-[10px] font-black tracking-widest border-b">
+                                    <tr>
+                                        <th className="p-4">Modelo / Estilo</th>
+                                        <th className="p-4">Partida</th>
+                                        <th className="p-4 text-center">Paquetes</th>
+                                        <th className="p-4 text-center">Peso Kg</th>
+                                        <th className="p-4 text-center">Avance</th>
+                                        <th className="p-4 text-right">Detalle</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 block md:table-row-group">
+                                    {displayedOrders.map(o => <OrderRow key={o.uid} o={o} />)}
+                                </tbody>
+                            </table>
+                            {displayedOrders.length === 0 && (
+                                <div className="p-20 text-center text-slate-300">
+                                    <Icon name="inbox" size={48} className="mx-auto mb-4 opacity-20"/>
+                                    <p className="font-bold uppercase tracking-widest text-xs">No hay órdenes en esta vista</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
