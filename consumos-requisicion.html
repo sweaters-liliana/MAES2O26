@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viva Rouss - Control & Requisiciones</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.1/jspdf.plugin.autotable.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .absorb-enter { animation: absorbAnim 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes absorbAnim {
+            0% { opacity: 0; transform: scale(0.1) rotate(5deg); border-radius: 100%; }
+            60% { opacity: 1; transform: scale(1.02) rotate(-1deg); border-radius: 10px; }
+            100% { opacity: 1; transform: scale(1); border-radius: 0px; }
+        }
+
+        .editable-input {
+            background: transparent;
+            border-bottom: 1px dashed #a5b4fc;
+            width: 100%;
+            outline: none;
+            transition: all 0.2s;
+        }
+        .editable-input:focus {
+            border-bottom: 2px solid #4f46e5;
+            background: rgba(255, 255, 255, 0.5);
+        }
+    </style>
+</head>
+<body class="text-slate-800 overflow-x-hidden">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const { jsPDF } = window.jspdf;
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const Icon = ({ name, size=18, className="" }) => {
+            useEffect(() => { lucide.createIcons(); }, [name]); 
+            return <i data-lucide={name} className={className} style={{fontSize: size, width: size, height: size}}></i>;
+        };
+
+        const App = () => {
+            // --- Estados de Datos ---
+            const [rawOrders, setRawOrders] = useState([]);
+            const [requisitions, setRequisitions] = useState([]); 
+            const [reqMap, setReqMap] = useState({}); 
+
+            // --- Estados de UI ---
+            const [view, setView] = useState('active');
+            const [zoom, setZoom] = useState(1);
+            
+            const [expandedPackages, setExpandedPackages] = useState({});
+            const [expandedFactory, setExpandedFactory] = useState({}); 
+            const [isSelectionMode, setIsSelectionMode] = useState(false);
+            const [filterCriteria, setFilterCriteria] = useState(null); 
+            const [selectedOrderIds, setSelectedOrderIds] = useState([]);
+            const [showModal, setShowModal] = useState(false);
+            
+            // --- Datos para el Modal ---
+            const [modalData, setModalData] = useState({
+                orders: [],
+                candidates: [], 
+                selectedIdx: 0
+            });
+            
+            const [inputMode, setInputMode] = useState('auto'); 
+            const [manualOrderId, setManualOrderId] = useState('');
+            const [manualTare, setManualTare] = useState(1.7); 
+
+            // --- CARRITO DE ITEMS ---
+            const [reqItems, setReqItems] = useState([]); 
+            
+            // Campos temporales
+            const [tempValues, setTempValues] = useState({
+                name: '',
+                calibre: '',
+                estiraje: '',
+                totalKg: 0,
+                isTorsion: true // Nuevo check para S/Z
+            });
+
+            // Carga de datos
+            useEffect(() => {
+                const unsub = db.collection('orders').onSnapshot(snap => setRawOrders(snap.docs.map(d => ({...d.data(), uid: d.id}))));
+                return () => unsub();
+            }, []);
+
+            useEffect(() => {
+                const unsub = db.collection('requisitions').onSnapshot(snap => {
+                    const reqs = snap.docs.map(d => ({...d.data(), id: d.id}));
+                    setRequisitions(reqs);
+                    const map = {};
+                    reqs.forEach(r => {
+                        if (r.status !== 'COMPLETED_AND_STOCKED' && r.orders) {
+                            r.orders.forEach(o => map[o.uid] = r);
+                        }
+                    });
+                    setReqMap(map);
+                });
+                return () => unsub();
+            }, []);
+
+            // Filtros
+            const displayedOrders = useMemo(() => {
+                let filtered = view === 'active' ? rawOrders.filter(o => o.status !== 'ARCHIVADO') : rawOrders.filter(o => o.status === 'ARCHIVADO');
+                if (isSelectionMode && filterCriteria) {
+                    filtered = filtered.filter(o => o.codigo === filterCriteria.codigo && o.partida === filterCriteria.partida);
+                }
+                return filtered.sort((a,b) => (b.id || 0) - (a.id || 0));
+            }, [rawOrders, view, isSelectionMode, filterCriteria]);
+
+            // Handlers
+            const toggleSelectionMode = () => { setIsSelectionMode(!isSelectionMode); setFilterCriteria(null); setSelectedOrderIds([]); };
+            
+            const handleRowClick = (order) => {
+                if (!isSelectionMode || reqMap[order.uid]) return;
+                if (!filterCriteria) {
+                    setFilterCriteria({ codigo: order.codigo, partida: order.partida });
+                    setSelectedOrderIds([order.uid]);
+                } else {
+                    setSelectedOrderIds(prev => prev.includes(order.uid) ? prev.filter(id => id !== order.uid) : [...prev, order.uid]);
+                }
+            };
+
+            const selectAllFiltered = () => setSelectedOrderIds(displayedOrders.filter(o => !reqMap[o.uid]).map(o => o.uid));
+
+            const handleOpenModal = () => {
+                if (selectedOrderIds.length === 0) return;
+                const selectedOrders = rawOrders.filter(o => selectedOrderIds.includes(o.uid));
+                const referenceOrder = selectedOrders[0]; 
+
+                let candidates = [];
+                if (referenceOrder.threading && referenceOrder.threading.length > 0) {
+                    candidates = referenceOrder.threading.map((hilo) => {
+                        const pct = Number(hilo.porcentaje) || 0;
+                        let totalMatKg = 0;
+                        selectedOrders.forEach(o => {
+                            let pesoOrden = 0;
+                            o.progreso?.forEach(p => {
+                                const def = o.subPiecesData?.find(sp => sp.pieza === p.piezaNombre);
+                                pesoOrden += (Number(def?.peso || 0) * Number(p.cantidad));
+                            });
+                            totalMatKg += (pesoOrden * (pct / 100)) / 1000;
+                        });
+                        return {
+                            name: hilo.material || "Sin Nombre",
+                            calibre: hilo.calibre || 'S/C',
+                            estiraje: hilo.estiraje || 'Std',
+                            pct: pct,
+                            totalKg: totalMatKg
+                        };
+                    });
+                }
+
+                setModalData({ orders: selectedOrders, candidates, selectedIdx: 0 });
+                setManualOrderId('');
+                setReqItems([]); 
+                
+                if (candidates.length > 0) {
+                    setInputMode('auto');
+                    const first = candidates[0];
+                    setTempValues({ name: first.name, calibre: first.calibre, estiraje: first.estiraje, totalKg: Number(first.totalKg.toFixed(2)), isTorsion: true });
+                } else {
+                    setInputMode('manual');
+                    setTempValues({ name: '', calibre: '', estiraje: '', totalKg: 0, isTorsion: true });
+                }
+                setShowModal(true);
+            };
+
+            const handleCandidateChange = (idx) => {
+                const index = Number(idx);
+                setModalData(prev => ({ ...prev, selectedIdx: index }));
+                const cand = modalData.candidates[index];
+                setTempValues({
+                    name: cand.name,
+                    calibre: cand.calibre,
+                    estiraje: cand.estiraje,
+                    totalKg: Number(cand.totalKg.toFixed(2)),
+                    isTorsion: true
+                });
+            };
+
+            const handleAddItem = () => {
+                if (!tempValues.name || tempValues.name.trim() === '') { alert("Falta nombre del material"); return; }
+                if (Number(tempValues.totalKg) <= 0) { alert("Kilos deben ser mayor a 0"); return; }
+
+                const newItem = {
+                    material: tempValues.name,
+                    calibre: tempValues.calibre || 'S/C',
+                    estiraje: tempValues.estiraje || 'Std',
+                    requestedKg: Number(tempValues.totalKg),
+                    isTorsion: tempValues.isTorsion,
+                    id: Date.now()
+                };
+                setReqItems(prev => [...prev, newItem]);
+                
+                // Limpiar solo si es manual para facilitar entrada rápida
+                if (inputMode === 'manual') setTempValues({ name: '', calibre: '', estiraje: '', totalKg: 0, isTorsion: true });
+            };
+
+            const handleProcessRequisition = async (shouldPrint) => {
+                if (!manualOrderId) { alert("Ingresa Folio"); return; }
+                if (reqItems.length === 0) { alert("Agrega al menos un material"); return; }
+
+                const payload = {
+                    createdAt: new Date().toISOString(),
+                    status: 'PENDING', 
+                    manualOrderId: manualOrderId,
+                    tareWeight: Number(manualTare),
+                    items: reqItems,
+                    material: reqItems.length > 1 ? "VARIOS" : reqItems[0].material, // Backward compatibility
+                    requestedKg: reqItems.reduce((a,b) => a + b.requestedKg, 0),
+                    orders: modalData.orders.map(o => ({ uid: o.uid, codigo: o.codigo, partida: o.partida })),
+                    productionLog: { s: [], z: [] },
+                    deliveredKg: 0
+                };
+
+                try {
+                    await db.collection('requisitions').add(payload);
+                    if (shouldPrint) generatePDF(payload);
+                    setShowModal(false);
+                    setIsSelectionMode(false);
+                    setFilterCriteria(null);
+                    setSelectedOrderIds([]);
+                } catch (e) { alert("Error: " + e.message); }
+            };
+
+            // --- PDF GENERATOR (1/3 Letter, Multi-page) ---
+            const generatePDF = (data) => {
+                // Formato 1/3 Carta Horizontal: 216mm x 93mm
+                const doc = new jsPDF({ 
+                    orientation: 'landscape', 
+                    unit: 'mm', 
+                    format: [216, 93] 
+                });
+
+                data.items.forEach((item, index) => {
+                    if (index > 0) doc.addPage([216, 93], 'landscape'); // Nueva página para cada material
+
+                    // Header
+                    doc.setFont("helvetica", "bold");
+                    doc.setFontSize(14);
+                    doc.text("REQUISICIÓN DE HILO - VIVA ROUSS", 10, 10);
+                    
+                    doc.setFontSize(10);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`Fecha: ${new Date().toLocaleDateString()}`, 10, 16);
+                    doc.text(`Folio Hilatura: ${data.manualOrderId}`, 150, 10);
+
+                    // Material Info Box
+                    doc.setDrawColor(0);
+                    doc.setFillColor(240, 240, 240);
+                    doc.rect(10, 20, 196, 18, 'F');
+                    
+                    doc.setFontSize(11);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(item.material, 15, 28);
+                    
+                    doc.setFontSize(9);
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`Calibre: ${item.calibre}  |  Estiraje: ${item.estiraje}`, 15, 34);
+                    
+                    // Total Kg for this item
+                    doc.setFontSize(14);
+                    doc.setFont("helvetica", "bold");
+                    doc.text(`${item.requestedKg.toFixed(2)} Kg`, 190, 30, { align: 'right' });
+
+                    // Torsion logic
+                    doc.setFontSize(10);
+                    if (item.isTorsion) {
+                        const half = (item.requestedKg / 2).toFixed(2);
+                        doc.text(`Torsión S: ${half} Kg`, 10, 48);
+                        doc.text(`Torsión Z: ${half} Kg`, 80, 48);
+                    } else {
+                        doc.setFont("helvetica", "bold");
+                        doc.text("MATERIAL DIRECTO / SIN TORSIÓN", 10, 48);
+                    }
+                    
+                    doc.setFont("helvetica", "normal");
+                    doc.text(`(Tara Ref: ${data.tareWeight} kg)`, 150, 48);
+
+                    // Orders Reference
+                    const bodyData = data.orders.map(o => [o.codigo, o.partida]);
+                    doc.autoTable({
+                        startY: 52,
+                        head: [['Modelo', 'Partida']],
+                        body: bodyData,
+                        theme: 'grid',
+                        styles: { fontSize: 8, cellPadding: 1 },
+                        headStyles: { fillColor: [40, 40, 40] },
+                        margin: { left: 10, right: 10 }
+                    });
+                    
+                    // Paginación (Item X de Y)
+                    doc.setFontSize(8);
+                    doc.text(`Hoja ${index + 1} de ${data.items.length}`, 190, 88);
+                });
+
+                doc.save(`REQ_${data.manualOrderId}.pdf`);
+            };
+
+            return (
+                <div style={{ transform: `scale(${zoom})`, transformOrigin: 'top center' }} className="min-h-screen pb-20">
+                    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 no-print">
+                        <button onClick={() => setZoom(z => Math.min(z+0.1, 1.3))} className="bg-white p-3 rounded-full shadow border hover:bg-slate-50"><Icon name="zoom-in"/></button>
+                        <button onClick={() => setZoom(z => Math.max(z-0.1, 0.6))} className="bg-white p-3 rounded-full shadow border hover:bg-slate-50"><Icon name="zoom-out"/></button>
+                    </div>
+
+                    <div className="bg-white shadow-sm border-b sticky top-0 z-40 p-4">
+                        <div className="max-w-7xl mx-auto flex justify-between items-center">
+                            <h1 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                                <Icon name="layout-grid" className="text-indigo-600"/> PRODUCCIÓN
+                            </h1>
+                            <div className="flex gap-3">
+                                {!isSelectionMode ? (
+                                    <button onClick={toggleSelectionMode} className="bg-slate-900 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-slate-700 flex items-center gap-2"><Icon name="check-square" size={16}/> SELECCIONAR PEDIDOS</button>
+                                ) : (
+                                    <div className="flex items-center gap-3 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100">
+                                        <span className="text-xs font-bold text-indigo-800 uppercase pl-2">{filterCriteria ? `Filtrando: ${filterCriteria.codigo}` : 'Selecciona un pedido'}</span>
+                                        {filterCriteria && (
+                                            <>
+                                                <button onClick={selectAllFiltered} className="text-xs font-bold bg-white border px-2 py-1 rounded hover:bg-indigo-100">Todas</button>
+                                                <button onClick={handleOpenModal} disabled={selectedOrderIds.length === 0} className="bg-indigo-600 text-white px-3 py-1.5 rounded font-bold text-xs hover:bg-indigo-700 disabled:opacity-50">CREAR REQUISICIÓN ({selectedOrderIds.length})</button>
+                                            </>
+                                        )}
+                                        <button onClick={toggleSelectionMode} className="p-1 hover:bg-red-100 rounded text-red-500"><Icon name="x" size={16}/></button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-4 max-w-7xl mx-auto">
+                        <div className="bg-white rounded-xl shadow-sm border overflow-hidden min-h-[500px]">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase font-bold">
+                                        <tr>
+                                            {isSelectionMode && <th className="p-3 w-10 text-center">Select</th>}
+                                            <th className="p-3">Modelo</th>
+                                            <th className="p-3">Partida</th>
+                                            <th className="p-3 text-center">Pzas</th>
+                                            <th className="p-3 text-center">Peso</th>
+                                            <th className="p-3 text-center">Estado</th>
+                                            <th className="p-3 text-right"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {displayedOrders.map(o => {
+                                            const activeReq = reqMap[o.uid]; 
+                                            const isSelected = selectedOrderIds.includes(o.uid);
+                                            const isLocked = activeReq && isSelectionMode; 
+                                            let pesoTotal = o.progreso?.reduce((acc, p) => acc + ((Number(o.subPiecesData?.find(x=>x.pieza===p.piezaNombre)?.peso||0) * Number(p.cantidad))), 0) || 0;
+
+                                            return (
+                                                <React.Fragment key={o.uid}>
+                                                    <tr onClick={() => !isLocked && handleRowClick(o)} className={`border-b last:border-0 ${isSelectionMode && !isLocked ? 'cursor-pointer hover:bg-indigo-50' : ''} ${isSelected ? 'bg-indigo-50' : 'bg-white'} ${isLocked ? 'opacity-50 bg-slate-50 grayscale' : ''}`}>
+                                                        {isSelectionMode && <td className="p-3 text-center">{!isLocked ? <div className={`w-5 h-5 rounded border mx-auto flex items-center justify-center ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300'}`}>{isSelected && <Icon name="check" size={14} className="text-white"/>}</div> : <Icon name="lock" size={14} className="text-slate-400 mx-auto"/>}</td>}
+                                                        <td className="p-3 font-black text-slate-700">{o.codigo}</td>
+                                                        <td className="p-3 text-slate-500">{o.partida}</td>
+                                                        <td className="p-3 text-center font-bold">{o.progreso?.length || 0}</td>
+                                                        <td className="p-3 text-center font-mono">{(pesoTotal/1000).toFixed(2)}</td>
+                                                        <td className="p-3 text-center">{activeReq ? <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-1 rounded">EN HILATURA</span> : <span className="text-[10px] text-slate-400">S/P</span>}</td>
+                                                        <td className="p-3 text-right">
+                                                            <div className="flex justify-end gap-1">
+                                                                <button onClick={(e) => { e.stopPropagation(); setExpandedPackages(prev => ({...prev, [o.uid]: !prev[o.uid]})); }} className="p-2 hover:bg-slate-100 rounded text-indigo-600"><Icon name="package" size={16}/></button>
+                                                                {activeReq && <button onClick={(e) => { e.stopPropagation(); setExpandedFactory(prev => ({...prev, [o.uid]: !prev[o.uid]})); }} className="p-2 hover:bg-amber-100 bg-amber-50 rounded text-amber-600 animate-pulse"><Icon name="factory" size={16}/></button>}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {expandedPackages[o.uid] && (
+                                                        <tr className="bg-slate-50 shadow-inner"><td colSpan={isSelectionMode?7:6} className="p-4"><div className="grid grid-cols-4 md:grid-cols-8 gap-2">{o.progreso?.map((p, i) => <div key={i} className={`p-2 rounded border text-center text-xs ${p.finished?'bg-emerald-100 border-emerald-300':'bg-white'}`}><div className="font-bold">{p.piezaNombre}</div><div>{p.cantidad} pzas</div></div>)}</div></td></tr>
+                                                    )}
+                                                    {expandedFactory[o.uid] && activeReq && (
+                                                        <tr className="bg-amber-50 shadow-inner border-y border-amber-200"><td colSpan={isSelectionMode?7:6} className="p-4">
+                                                            <div className="flex gap-4 items-center">
+                                                                <Icon name="truck" className="text-amber-800"/>
+                                                                <div>
+                                                                    <div className="font-bold text-amber-900">Hilatura Activa: {activeReq.manualOrderId}</div>
+                                                                    <div className="text-xs text-amber-800">
+                                                                        {activeReq.items?.map(i => `${i.material} (${i.requestedKg}kg)`).join(', ') || activeReq.material}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td></tr>
+                                                    )}
+                                                </React.Fragment>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* MODAL HACER PEDIDO (MULTI MATERIAL + TORSION SELECT) */}
+                    {showModal && (
+                        <div className="fixed inset-0 z-[100] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden absorb-enter border border-slate-200 flex flex-col max-h-[90vh]">
+                                <div className="bg-slate-900 p-6 text-white relative flex-shrink-0">
+                                    <button onClick={() => setShowModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white"><Icon name="x"/></button>
+                                    <h2 className="text-2xl font-black italic">HACER PEDIDO</h2>
+                                    <p className="text-slate-400 text-xs mt-1">Separa cada material. Se generará una hoja PDF por cada uno.</p>
+                                </div>
+                                
+                                <div className="p-6 space-y-4 overflow-y-auto">
+                                    <div className="flex gap-4 items-end">
+                                        <div className="flex-1">
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Folio Requisición</label>
+                                            <input autoFocus type="text" value={manualOrderId} onChange={e => setManualOrderId(e.target.value)} placeholder="Ej: REQ-001" className="w-full p-2 bg-slate-50 border-2 border-slate-200 rounded-lg font-mono font-bold text-slate-800 focus:border-indigo-500 outline-none"/>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tara</label>
+                                            <input type="number" step="0.1" value={manualTare} onChange={e => setManualTare(e.target.value)} className="w-20 p-2 text-center border-2 border-slate-200 rounded-lg font-bold"/>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                                        <div className="flex rounded-lg bg-white p-1 mb-3 border border-indigo-100">
+                                            <button onClick={() => { setInputMode('auto'); if(modalData.candidates.length) handleCandidateChange(modalData.selectedIdx); }} disabled={modalData.candidates.length === 0} className={`flex-1 py-1 text-[10px] font-bold rounded transition-all ${inputMode === 'auto' ? 'bg-indigo-600 text-white' : 'text-slate-400'} ${modalData.candidates.length === 0 ? 'opacity-50' : ''}`}>DESDE FICHA</button>
+                                            <button onClick={() => { setInputMode('manual'); setTempValues({name:'', calibre:'', estiraje:'', totalKg:0, isTorsion:true}); }} className={`flex-1 py-1 text-[10px] font-bold rounded transition-all ${inputMode === 'manual' ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}>MANUAL</button>
+                                        </div>
+
+                                        {inputMode === 'auto' && (
+                                            <select value={modalData.selectedIdx} onChange={(e) => handleCandidateChange(e.target.value)} className="w-full p-2 bg-white border border-indigo-200 rounded mb-3 text-sm font-bold">
+                                                {modalData.candidates.map((cand, idx) => <option key={idx} value={idx}>{cand.name} (Sug: {cand.totalKg.toFixed(2)} Kg)</option>)}
+                                            </select>
+                                        )}
+
+                                        {/* Inputs Temporales + Check Torsion */}
+                                        <div className="grid grid-cols-12 gap-2 items-end">
+                                            <div className="col-span-12 md:col-span-5">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400">Material</div>
+                                                <input type="text" value={tempValues.name} onChange={e => setTempValues({...tempValues, name: e.target.value})} className="editable-input text-sm font-bold text-indigo-900"/>
+                                            </div>
+                                            <div className="col-span-4 md:col-span-2">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400">Calibre</div>
+                                                <input type="text" value={tempValues.calibre} onChange={e => setTempValues({...tempValues, calibre: e.target.value})} className="editable-input text-xs"/>
+                                            </div>
+                                            <div className="col-span-4 md:col-span-2">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400">Estiraje</div>
+                                                <input type="text" value={tempValues.estiraje} onChange={e => setTempValues({...tempValues, estiraje: e.target.value})} className="editable-input text-xs"/>
+                                            </div>
+                                            <div className="col-span-4 md:col-span-2">
+                                                <div className="text-[10px] uppercase font-bold text-indigo-400">KG</div>
+                                                <input type="number" step="0.01" value={tempValues.totalKg} onChange={e => setTempValues({...tempValues, totalKg: e.target.value})} className="editable-input text-sm font-black"/>
+                                            </div>
+                                            
+                                            {/* CHECKBOX TORSION */}
+                                            <div className="col-span-12 flex items-center gap-2 mt-2 bg-white p-2 rounded border border-indigo-100">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={tempValues.isTorsion} 
+                                                    onChange={e => setTempValues({...tempValues, isTorsion: e.target.checked})}
+                                                    className="w-4 h-4 text-indigo-600 rounded"
+                                                />
+                                                <span className="text-xs text-slate-600 font-bold">Requiere Torsión (S/Z)</span>
+                                                <div className="flex-1 text-right">
+                                                    <button onClick={handleAddItem} className="bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700 shadow text-xs font-bold">
+                                                        <Icon name="plus" size={12} className="inline mr-1"/> AGREGAR
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* LISTA DE HILATURAS AGREGADAS */}
+                                    <div className="border rounded-lg overflow-hidden">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-slate-100 text-slate-500 font-bold uppercase">
+                                                <tr>
+                                                    <th className="p-2">Material</th>
+                                                    <th className="p-2">Detalles</th>
+                                                    <th className="p-2 text-center">Tipo</th>
+                                                    <th className="p-2 text-right">Kg</th>
+                                                    <th className="p-2 w-8"></th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {reqItems.length === 0 && <tr><td colSpan="5" className="p-4 text-center text-slate-400 italic">Lista vacía. Agrega materiales arriba.</td></tr>}
+                                                {reqItems.map((item) => (
+                                                    <tr key={item.id}>
+                                                        <td className="p-2 font-bold text-slate-700">{item.material}</td>
+                                                        <td className="p-2 text-slate-500">{item.calibre} | {item.estiraje}</td>
+                                                        <td className="p-2 text-center">
+                                                            {item.isTorsion 
+                                                                ? <span className="bg-indigo-100 text-indigo-700 px-1 rounded text-[10px] font-bold">S / Z</span>
+                                                                : <span className="bg-slate-100 text-slate-500 px-1 rounded text-[10px] font-bold">Directo</span>
+                                                            }
+                                                        </td>
+                                                        <td className="p-2 text-right font-mono font-bold">{item.requestedKg.toFixed(2)}</td>
+                                                        <td className="p-2 text-right"><button onClick={() => setReqItems(prev => prev.filter(i => i.id !== item.id))} className="text-red-400 hover:text-red-600"><Icon name="trash-2" size={14}/></button></td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <div className="p-6 bg-slate-50 border-t flex flex-col sm:flex-row justify-end gap-3 flex-shrink-0">
+                                    <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-800">CANCELAR</button>
+                                    <button onClick={() => handleProcessRequisition(false)} disabled={reqItems.length === 0} className="bg-white border-2 border-slate-900 text-slate-900 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-50 disabled:opacity-50">SOLO GUARDAR</button>
+                                    <button onClick={() => handleProcessRequisition(true)} disabled={reqItems.length === 0} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-xl hover:bg-slate-800 flex justify-center items-center gap-2 disabled:opacity-50"><Icon name="file-down" size={16}/> GUARDAR Y PDF</button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

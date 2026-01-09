@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hilaturas Rouss - Terminal de Operador</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style>
+        body { background-color: #0f172a; color: white; font-family: sans-serif; }
+        .input-focus:focus { border-color: #38bdf8; outline: none; box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Configuración Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const App = () => {
+            const [requisitions, setRequisitions] = useState([]);
+            const [selectedId, setSelectedId] = useState(null);
+            const [gross, setGross] = useState("");
+            const [tare, setTare] = useState("");
+            const [torsion, setTorsion] = useState("s");
+
+            // Cargar datos
+            useEffect(() => {
+                const unsub = db.collection('requisitions')
+                    .where('status', 'in', ['PENDING', 'IN_PROGRESS'])
+                    .onSnapshot(snap => {
+                        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setRequisitions(list);
+                    }, err => console.error("Error Firebase:", err));
+                return () => unsub();
+            }, []);
+
+            // Encontrar la requisición seleccionada
+            const selectedReq = requisitions.find(r => r.id === selectedId);
+
+            const handleSave = async () => {
+                if (!gross || !tare || !selectedReq) return alert("Llena todos los campos");
+                
+                const valGross = parseFloat(gross);
+                const valTare = parseFloat(tare);
+                const valNet = valGross - valTare;
+
+                if (valNet <= 0) return alert("El peso de envase no puede ser mayor al peso total");
+
+                const newEntry = {
+                    timestamp: new Date().toISOString(),
+                    gross: valGross,
+                    tare: valTare,
+                    net: valNet
+                };
+
+                // Estructura segura de log
+                const currentLog = selectedReq.productionLog || { s: [], z: [] };
+                const updatedS = torsion === 's' ? [...(currentLog.s || []), newEntry] : (currentLog.s || []);
+                const updatedZ = torsion === 'z' ? [...(currentLog.z || []), newEntry] : (currentLog.z || []);
+                
+                const totalS = updatedS.reduce((acc, curr) => acc + curr.net, 0);
+                const totalZ = updatedZ.reduce((acc, curr) => acc + curr.net, 0);
+
+                try {
+                    await db.collection('requisitions').doc(selectedId).update({
+                        productionLog: { s: updatedS, z: updatedZ },
+                        deliveredKg: totalS + totalZ,
+                        status: 'IN_PROGRESS'
+                    });
+                    setGross("");
+                    setTare("");
+                    alert("Pesaje guardado correctamente");
+                } catch (e) {
+                    alert("Error al guardar");
+                }
+            };
+
+            const finalize = async () => {
+                if (!confirm("¿Finalizar pedido?")) return;
+                await db.collection('requisitions').doc(selectedId).update({ status: 'COMPLETED_AND_STOCKED' });
+                setSelectedId(null);
+            };
+
+            return (
+                <div className="flex h-screen overflow-hidden">
+                    {/* Lista Lateral */}
+                    <div className="w-1/3 border-r border-slate-700 bg-slate-900 p-4 overflow-y-auto">
+                        <h2 className="text-sky-400 font-bold text-xs uppercase mb-4 tracking-widest">Requisiciones Pendientes</h2>
+                        <div className="space-y-2">
+                            {requisitions.map(r => (
+                                <div 
+                                    key={r.id} 
+                                    onClick={() => setSelectedId(r.id)}
+                                    className={`p-4 rounded-lg cursor-pointer transition ${selectedId === r.id ? 'bg-sky-600' : 'bg-slate-800 hover:bg-slate-700'}`}
+                                >
+                                    <div className="text-[10px] opacity-60">ID: {r.manualOrderId || 'S/F'}</div>
+                                    <div className="font-bold">{r.material || 'Sin nombre'}</div>
+                                    <div className="text-xs mt-1">{r.requestedKg} kg solicitados</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Área de trabajo */}
+                    <div className="w-2/3 p-8 overflow-y-auto bg-slate-950">
+                        {selectedReq ? (
+                            <div className="max-w-xl mx-auto space-y-8">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h1 className="text-3xl font-black">{selectedReq.material}</h1>
+                                        <p className="text-slate-400">Calibre: {selectedReq.calibre} | Estiraje: {selectedReq.estiraje}</p>
+                                    </div>
+                                    <button onClick={finalize} className="bg-emerald-600 px-4 py-2 rounded font-bold text-xs">FINALIZAR</button>
+                                </div>
+
+                                {/* Formulario */}
+                                <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 space-y-6">
+                                    <div className="flex bg-slate-800 p-1 rounded-xl">
+                                        <button 
+                                            onClick={() => setTorsion('s')}
+                                            className={`flex-1 py-2 rounded-lg font-bold text-sm ${torsion === 's' ? 'bg-indigo-600' : ''}`}
+                                        >Torsión S</button>
+                                        <button 
+                                            onClick={() => setTorsion('z')}
+                                            className={`flex-1 py-2 rounded-lg font-bold text-sm ${torsion === 'z' ? 'bg-indigo-600' : ''}`}
+                                        >Torsión Z</button>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 block mb-2">1. PESO BRUTO (BÁSCULA)</label>
+                                        <input 
+                                            type="number" 
+                                            value={gross} 
+                                            onChange={e => setGross(e.target.value)}
+                                            className="w-full bg-slate-800 border-2 border-transparent p-4 rounded-xl text-3xl font-mono input-focus"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 block mb-2">2. PESO ENVASES (BOBINAS/CARTÓN)</label>
+                                        <input 
+                                            type="number" 
+                                            value={tare} 
+                                            onChange={e => setTare(e.target.value)}
+                                            className="w-full bg-slate-800 border-2 border-transparent p-4 rounded-xl text-xl font-mono input-focus"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+
+                                    <button 
+                                        onClick={handleSave}
+                                        className="w-full bg-sky-500 text-slate-950 py-4 rounded-xl font-black text-lg hover:bg-sky-400"
+                                    >GUARDAR PESAJE</button>
+                                </div>
+
+                                {/* Progreso */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    {['s', 'z'].map(t => {
+                                        const log = (selectedReq.productionLog?.[t] || []);
+                                        const total = log.reduce((a, b) => a + b.net, 0);
+                                        const meta = (selectedReq.requestedKg / 2);
+                                        return (
+                                            <div key={t} className="bg-slate-900 p-4 rounded-xl border border-slate-800">
+                                                <div className="text-xs font-bold text-slate-500 uppercase">Torsión {t}</div>
+                                                <div className="text-2xl font-mono">{total.toFixed(2)} kg</div>
+                                                <div className="text-[10px] text-slate-500">Meta: {meta.toFixed(2)}</div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-slate-700 font-bold uppercase tracking-widest">
+                                Selecciona una requisición de la izquierda
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
