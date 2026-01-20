@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Santoni Master Pro - Fichas Flexibles</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;900&family=JetBrains+Mono:wght@500&display=swap');
+        body { background-color: #020617; color: #f1f5f9; font-family: 'Inter', sans-serif; }
+        
+        /* Animaciones suaves */
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+
+        /* Estilos de Impresión Profesional */
+        @media print {
+            @page { size: letter; margin: 0; }
+            body { background: white !important; color: black !important; }
+            .no-print { display: none !important; }
+            .print-container { 
+                width: 21.59cm; height: 27.94cm; 
+                padding: 1.5cm; margin: 0 auto;
+                background: white !important; color: black !important;
+            }
+            .border-print { border: 1.5pt solid black !important; }
+            .bg-print-gray { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
+        }
+
+        .canvas-preview {
+            width: 21.59cm; min-height: 27.94cm;
+            background: white; color: black;
+            padding: 1.5cm; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Inputs minimalistas para edición rápida */
+        .inline-input {
+            background: transparent; border-bottom: 1px dashed #cbd5e1;
+            outline: none; transition: all 0.2s;
+        }
+        .inline-input:focus { border-bottom-color: #6366f1; background: #f8fafc; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        // --- FIREBASE CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409"
+        };
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const COL_TEMPLATES = 'model_templates';
+        const COL_PRODUCTION = 'technical_sheets_production';
+        const COL_CONFIG = 'app-config';
+
+        // --- COMPONENTES ATÓMICOS ---
+        const Icon = ({ name, size = 18, className }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
+
+        // --- MODAL DE REPOSITORIOS (Copiado y adaptado de index.html) ---
+        const RepositoryModal = ({ onClose }) => {
+            const [rutas, setRutas] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                db.collection(COL_CONFIG).doc('imagenes').get().then(doc => {
+                    if (doc.exists) setRutas(doc.data().rutas || []);
+                    setLoading(false);
+                });
+            }, []);
+
+            const save = async () => {
+                await db.collection(COL_CONFIG).doc('imagenes').set({ rutas });
+                onClose();
+            };
+
+            return (
+                <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+                        <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
+                            <h3 className="font-bold flex items-center gap-2"><Icon name="database"/> Repositorios de Imágenes</h3>
+                            <button onClick={onClose}><Icon name="x"/></button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-xs text-slate-400">Agregue las URLs de la API de GitHub donde el sistema buscará las fotos de los modelos.</p>
+                            {rutas.map((r, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <input value={r} onChange={e => {
+                                        const n = [...rutas]; n[i] = e.target.value; setRutas(n);
+                                    }} className="flex-grow bg-slate-800 border border-slate-600 rounded px-3 py-1 text-sm text-white focus:border-indigo-500 outline-none"/>
+                                    <button onClick={() => setRutas(rutas.filter((_, idx) => idx !== i))} className="text-red-400"><Icon name="trash-2" size={16}/></button>
+                                </div>
+                            ))}
+                            <button onClick={() => setRutas([...rutas, ""])} className="w-full py-2 border border-dashed border-slate-600 rounded text-xs hover:bg-slate-800 transition">+ Agregar Ruta</button>
+                        </div>
+                        <div className="p-4 bg-slate-800/50 flex justify-end gap-2">
+                            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400">Cancelar</button>
+                            <button onClick={save} className="bg-indigo-600 px-6 py-2 rounded-lg text-sm font-bold">Guardar Cambios</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- EDITOR DE FICHA ---
+        const SheetEditor = ({ initialData, onClose }) => {
+            const [ficha, setFicha] = useState(initialData || {
+                modelo: '', cliente: '', descripcion: '', talla: 'UNITALLA',
+                components: [{ maquina: '', sufijo: '', descripcion: '', multiplicador: 1, peso: '', tiempo: '' }],
+                threading: [{ guia: 1, material: '', porcentaje: '', sist: 'TODOS' }],
+                imageUrl: null, crop: { scale: 1, x: 0, y: 0 }
+            });
+            const [searching, setSearching] = useState(false);
+
+            const buscarFoto = async (mod) => {
+                if (!mod) return null;
+                const config = await db.collection(COL_CONFIG).doc('imagenes').get();
+                if (!config.exists) return null;
+                const { rutas } = config.data();
+                const exts = ['.png', '.jpg', '.jpeg', '.webp'];
+                
+                for (const url of rutas) {
+                    try {
+                        const res = await fetch(url);
+                        const files = await res.json();
+                        for (const ext of exts) {
+                            const found = files.find(f => f.name.toLowerCase().includes(mod.toLowerCase()) && f.name.toLowerCase().endsWith(ext));
+                            if (found) return found.download_url;
+                        }
+                    } catch (e) { console.error(e); }
+                }
+                return null;
+            };
+
+            const importar = async () => {
+                setSearching(true);
+                const modRef = ficha.modelo.toUpperCase();
+                const doc = await db.collection(COL_TEMPLATES).doc(modRef).get();
+                const img = await buscarFoto(modRef);
+                
+                if (doc.exists) {
+                    setFicha(prev => ({ ...prev, ...doc.data(), imageUrl: img || doc.data().imageUrl, modelo: modRef }));
+                } else {
+                    setFicha(prev => ({ ...prev, imageUrl: img, modelo: modRef }));
+                }
+                setSearching(false);
+            };
+
+            const totalPeso = ficha.components.reduce((acc, c) => acc + (parseFloat(c.peso) || 0) * (c.multiplicador || 1), 0);
+            
+            return (
+                <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col md:flex-row fade-in">
+                    {/* Panel de Control */}
+                    <div className="w-full md:w-[400px] bg-slate-900 border-r border-slate-800 flex flex-col no-print shadow-2xl">
+                        <div className="p-4 border-b border-slate-800 flex justify-between items-center">
+                            <h2 className="text-indigo-400 font-black tracking-tighter text-xl">EDITOR FLEXIBLE</h2>
+                            <button onClick={onClose} className="text-slate-500 hover:text-white"><Icon name="x"/></button>
+                        </div>
+                        
+                        <div className="flex-grow overflow-y-auto p-4 space-y-6">
+                            {/* Inputs Básicos */}
+                            <section className="space-y-3">
+                                <div className="flex gap-2">
+                                    <div className="flex-grow">
+                                        <label className="text-[10px] font-bold text-slate-500 block">MODELO MASTER</label>
+                                        <input value={ficha.modelo} onChange={e=>setFicha({...ficha, modelo: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold uppercase focus:border-indigo-500 outline-none"/>
+                                    </div>
+                                    <button onClick={importar} disabled={searching} className="mt-5 bg-indigo-600 px-4 rounded hover:bg-indigo-500 transition">
+                                        {searching ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="download"/>}
+                                    </button>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 block">CLIENTE</label>
+                                    <input value={ficha.cliente} onChange={e=>setFicha({...ficha, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"/>
+                                </div>
+                            </section>
+
+                            {/* Gestión de Componentes */}
+                            <section>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-[10px] font-bold text-indigo-400 uppercase">Componentes / Piezas</label>
+                                    <button onClick={() => setFicha({...ficha, components: [...ficha.components, { maquina:'', sufijo:'', descripcion:'', multiplicador: 1, peso:'', tiempo:'' }]})} className="text-[10px] bg-indigo-600/20 text-indigo-400 px-2 py-1 rounded">+ Agregar</button>
+                                </div>
+                                <div className="space-y-2">
+                                    {ficha.components.map((c, i) => (
+                                        <div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700 relative group">
+                                            <button onClick={() => setFicha({...ficha, components: ficha.components.filter((_, idx) => idx !== i)})} className="absolute -right-2 -top-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"><Icon name="x" size={10}/></button>
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <input placeholder="Máq" value={c.maquina} onChange={e=>{const n=[...ficha.components]; n[i].maquina=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                                <input placeholder="Suf" value={c.sufijo} onChange={e=>{const n=[...ficha.components]; n[i].sufijo=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                                <input placeholder="Cant" type="number" value={c.multiplicador} onChange={e=>{const n=[...ficha.components]; n[i].multiplicador=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                                <input placeholder="Pieza" value={c.descripcion} onChange={e=>{const n=[...ficha.components]; n[i].descripcion=e.target.value; setFicha({...ficha, components:n})}} className="col-span-3 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                                <input placeholder="Peso (g)" value={c.peso} onChange={e=>{const n=[...ficha.components]; n[i].peso=e.target.value; setFicha({...ficha, components:n})}} className="col-span-1.5 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                                <input placeholder="Tiempo" value={c.tiempo} onChange={e=>{const n=[...ficha.components]; n[i].tiempo=e.target.value; setFicha({...ficha, components:n})}} className="col-span-1.5 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            {/* Enhebrado */}
+                            <section>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-[10px] font-bold text-emerald-400 uppercase">Enhebrado / Hilos</label>
+                                    <button onClick={() => setFicha({...ficha, threading: [...ficha.threading, { guia: ficha.threading.length+1, material:'', porcentaje:'', sist:'TODOS' }]})} className="text-[10px] bg-emerald-600/20 text-emerald-400 px-2 py-1 rounded">+ Agregar</button>
+                                </div>
+                                <div className="space-y-2">
+                                    {ficha.threading.map((t, i) => (
+                                        <div key={i} className="grid grid-cols-4 gap-2 bg-slate-800/50 p-2 rounded border border-slate-700">
+                                            <input placeholder="G" value={t.guia} className="bg-slate-700 rounded text-center text-xs text-white"/>
+                                            <input placeholder="Material" value={t.material} onChange={e=>{const n=[...ficha.threading]; n[i].material=e.target.value; setFicha({...ficha, threading:n})}} className="col-span-2 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                            <input placeholder="%" value={t.porcentaje} onChange={e=>{const n=[...ficha.threading]; n[i].porcentaje=e.target.value; setFicha({...ficha, threading:n})}} className="bg-slate-700 rounded text-xs text-white text-center"/>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        </div>
+
+                        <div className="p-4 bg-slate-900 border-t border-slate-800 grid grid-cols-2 gap-2">
+                            <button onClick={() => window.print()} className="bg-slate-800 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-700 transition"><Icon name="printer"/> IMPRIMIR</button>
+                            <button onClick={async () => {
+                                await db.collection(COL_PRODUCTION).add({ ...ficha, createdAt: new Date(), updatedAt: new Date() });
+                                onClose();
+                            }} className="bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-500 shadow-lg shadow-indigo-600/20 transition"><Icon name="save"/> GUARDAR</button>
+                        </div>
+                    </div>
+
+                    {/* Lienzo de Impresión (Preview) */}
+                    <div className="flex-grow bg-slate-800 overflow-y-auto p-8 flex justify-center">
+                        <div className="canvas-preview print-container relative flex flex-col">
+                            {/* Encabezado Dinámico */}
+                            <div className="border-[3px] border-black p-4 flex justify-between items-start mb-6">
+                                <div>
+                                    <h1 className="text-4xl font-[950] tracking-tighter leading-none italic uppercase">Santoni <span className="text-slate-400">Master</span></h1>
+                                    <div className="text-[10px] font-black tracking-widest mt-1 uppercase">Ficha de Especificaciones de Producción</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-5xl font-black bg-black text-white px-4 py-1 inline-block">{ficha.modelo || "MOD-XX"}</div>
+                                    <div className="text-xl font-bold mt-2 text-slate-700 italic border-b-2 border-slate-200">{ficha.cliente || "CLIENTE GENERAL"}</div>
+                                </div>
+                            </div>
+
+                            {/* Sección Visual y Descriptiva */}
+                            <div className="flex gap-6 h-[400px] mb-6">
+                                <div className="w-2/3 border-[2px] border-black flex items-center justify-center overflow-hidden bg-slate-50 relative">
+                                    {ficha.imageUrl ? (
+                                        <img src={ficha.imageUrl} style={{transform: `scale(${ficha.crop.scale}) translate(${ficha.crop.x}px, ${ficha.crop.y}px)`}} className="max-w-full max-h-full object-contain"/>
+                                    ) : <Icon name="image" size={48} className="text-slate-200"/>}
+                                    <div className="absolute bottom-2 left-2 bg-black text-white text-[8px] px-2 py-0.5">VISTA PREVIA DE DISEÑO</div>
+                                </div>
+                                <div className="w-1/3 flex flex-col gap-4">
+                                    <div className="flex-grow border-[2px] border-black p-3 relative">
+                                        <label className="text-[10px] font-black absolute -top-2 bg-white px-2">NOTAS TÉCNICAS</label>
+                                        <textarea value={ficha.descripcion} onChange={e=>setFicha({...ficha, descripcion: e.target.value})} className="w-full h-full text-xs font-medium border-none outline-none bg-transparent resize-none leading-relaxed" placeholder="Escriba aquí los detalles del drapeado, puntada, etc."/>
+                                    </div>
+                                    <div className="h-28 border-[2px] border-black flex flex-col items-center justify-center bg-slate-50 bg-print-gray">
+                                        <span className="text-[10px] font-black uppercase tracking-tighter">Talla Base</span>
+                                        <input value={ficha.talla} onChange={e=>setFicha({...ficha, talla: e.target.value})} className="text-4xl font-black text-center w-full bg-transparent border-none outline-none"/>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Tabla de Componentes Adaptativa */}
+                            <div className="mb-6">
+                                <table className="w-full border-collapse border-[2px] border-black text-xs">
+                                    <thead className="bg-slate-100 bg-print-gray border-b-[2px] border-black">
+                                        <tr className="font-black">
+                                            <th className="p-2 border-r border-black w-12 text-center">MAQ</th>
+                                            <th className="p-2 border-r border-black w-12 text-center">SUF</th>
+                                            <th className="p-2 border-r border-black text-left pl-4">DESCRIPCIÓN DE PIEZA</th>
+                                            <th className="p-2 border-r border-black w-32">CÓDIGO PROG.</th>
+                                            <th className="p-2 border-r border-black w-20">PESO (g)</th>
+                                            <th className="p-2 w-20">TIEMPO</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {ficha.components.map((c, i) => (
+                                            <tr key={i} className="border-b border-black font-medium">
+                                                <td className="p-2 border-r border-black text-center font-bold italic">{c.maquina}</td>
+                                                <td className="p-2 border-r border-black text-center">{c.sufijo}</td>
+                                                <td className="p-2 border-r border-black pl-4 uppercase">{c.descripcion}</td>
+                                                <td className="p-2 border-r border-black text-center font-mono font-bold text-[10px] bg-slate-50 bg-print-gray">
+                                                    {ficha.modelo}{c.sufijo}{c.maquina}{ficha.cliente?.charAt(0)}
+                                                </td>
+                                                <td className="p-2 border-r border-black text-center">{c.peso}</td>
+                                                <td className="p-2 text-center">{c.tiempo}</td>
+                                            </tr>
+                                        ))}
+                                        <tr className="bg-black text-white font-black">
+                                            <td colSpan={4} className="p-2 text-right tracking-widest text-[9px]">SUMATORIA TOTAL DE PIEZAS</td>
+                                            <td className="p-2 text-center">{totalPeso.toFixed(1)}g</td>
+                                            <td className="p-2 text-center">-</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Hilos y Firmas */}
+                            <div className="flex gap-6 flex-grow">
+                                <div className="w-1/2">
+                                    <table className="w-full border-[2px] border-black text-[11px]">
+                                        <thead className="bg-slate-100 bg-print-gray border-b-[2px] border-black font-black">
+                                            <tr>
+                                                <th className="p-1 border-r border-black w-8">G</th>
+                                                <th className="p-1 border-r border-black text-left pl-2">HILO / MATERIAL</th>
+                                                <th className="p-1 w-10">%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {ficha.threading.map((t, i) => (
+                                                <tr key={i} className="border-b border-black">
+                                                    <td className="p-1 text-center font-bold border-r border-black">{t.guia}</td>
+                                                    <td className="p-1 pl-2 border-r border-black uppercase italic">{t.material}</td>
+                                                    <td className="p-1 text-center font-black">{t.porcentaje}%</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="w-1/2 border-[2px] border-black p-4 flex flex-col justify-between">
+                                    <div className="text-[9px] font-black border-b border-black pb-1 mb-8">VALIDACIÓN DE CALIDAD Y DISEÑO</div>
+                                    <div className="flex justify-between gap-4">
+                                        <div className="flex-1 text-center"><div className="border-b border-black h-8 mb-1"></div><span className="text-[8px] font-bold">REVISIÓN</span></div>
+                                        <div className="flex-1 text-center"><div className="border-b border-black h-8 mb-1"></div><span className="text-[8px] font-bold">AUTORIZÓ</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="text-[8px] text-center mt-6 text-slate-400 font-mono italic">
+                                Sistema Santoni Cloud v6.2 - Impreso el {new Date().toLocaleString()}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- DASHBOARD PRINCIPAL ---
+        const App = () => {
+            const [fichas, setFichas] = useState([]);
+            const [editor, setEditor] = useState(false);
+            const [config, setConfig] = useState(false);
+            const [selected, setSelected] = useState(null);
+
+            useEffect(() => {
+                const unsub = db.collection(COL_PRODUCTION).orderBy('createdAt', 'desc').onSnapshot(snap => {
+                    setFichas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+                });
+                return () => unsub();
+            }, []);
+
+            return (
+                <div className="min-h-screen p-6 max-w-7xl mx-auto">
+                    <header className="flex justify-between items-center mb-10 bg-slate-900/50 p-6 rounded-3xl border border-slate-800 backdrop-blur-xl">
+                        <div>
+                            <h1 className="text-3xl font-black text-white tracking-tighter">SANTONI <span className="text-indigo-500 underline decoration-indigo-500/30">PRODUCTION</span></h1>
+                            <p className="text-slate-500 text-sm font-medium">Gestión de Fichas Técnicas Flexibles</p>
+                        </div>
+                        <div className="flex gap-3">
+                            <button onClick={()=>setConfig(true)} className="p-3 bg-slate-800 text-slate-400 rounded-xl hover:text-white transition"><Icon name="settings"/></button>
+                            <button onClick={()=>{setSelected(null); setEditor(true)}} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition transform hover:scale-105">
+                                <Icon name="plus-circle"/> CREAR FICHA
+                            </button>
+                        </div>
+                    </header>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {fichas.map(f => (
+                            <div key={f.id} onClick={()=>{setSelected(f); setEditor(true)}} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden cursor-pointer hover:border-indigo-500/50 group transition-all duration-300">
+                                <div className="h-48 bg-black relative flex items-center justify-center overflow-hidden">
+                                    {f.imageUrl ? <img src={f.imageUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition duration-500" style={f.crop ? {objectPosition:`${f.crop.x}px ${f.crop.y}px`, transform:`scale(${f.crop.scale})`} : {}}/> : <Icon name="image-off" className="text-slate-800" size={32}/>}
+                                    <div className="absolute top-4 left-4 bg-indigo-600 text-white text-[10px] px-3 py-1 rounded-full font-black shadow-lg">{f.cliente}</div>
+                                </div>
+                                <div className="p-5">
+                                    <h3 className="text-2xl font-black text-white group-hover:text-indigo-400 transition">{f.modelo}</h3>
+                                    <p className="text-xs text-slate-500 mt-2 line-clamp-1">{f.descripcion || "Sin descripción adicional"}</p>
+                                    <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between text-[10px] font-bold text-slate-500 uppercase">
+                                        <span>{f.components?.length} Piezas</span>
+                                        <span>{new Date(f.updatedAt?.seconds*1000).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {editor && <SheetEditor initialData={selected} onClose={()=>setEditor(false)}/>}
+                    {config && <RepositoryModal onClose={()=>setConfig(false)}/>}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
