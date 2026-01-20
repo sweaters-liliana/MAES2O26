@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Santoni Master Pro - Fichas Flexibles</title>
+    <title>Santoni Master Pro - Versión RAW & Flexible</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -15,23 +15,21 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;900&family=JetBrains+Mono:wght@500&display=swap');
-        body { background-color: #020617; color: #f1f5f9; font-family: 'Inter', sans-serif; }
+        body { background-color: #020617; color: #f1f5f9; font-family: 'Inter', sans-serif; margin: 0; }
         
-        /* Animaciones suaves */
         .fade-in { animation: fadeIn 0.2s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
 
-        /* Estilos de Impresión Profesional */
         @media print {
             @page { size: letter; margin: 0; }
             body { background: white !important; color: black !important; }
             .no-print { display: none !important; }
             .print-container { 
                 width: 21.59cm; height: 27.94cm; 
-                padding: 1.5cm; margin: 0 auto;
+                padding: 1cm; margin: 0 auto;
                 background: white !important; color: black !important;
             }
-            .border-print { border: 1.5pt solid black !important; }
+            .border-print { border: 2px solid black !important; }
             .bg-print-gray { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; }
         }
 
@@ -40,20 +38,13 @@
             background: white; color: black;
             padding: 1.5cm; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
-
-        /* Inputs minimalistas para edición rápida */
-        .inline-input {
-            background: transparent; border-bottom: 1px dashed #cbd5e1;
-            outline: none; transition: all 0.2s;
-        }
-        .inline-input:focus { border-bottom-color: #6366f1; background: #f8fafc; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect } = React;
 
         // --- FIREBASE CONFIG ---
         const firebaseConfig = {
@@ -71,21 +62,17 @@
         const COL_PRODUCTION = 'technical_sheets_production';
         const COL_CONFIG = 'app-config';
 
-        // --- COMPONENTES ATÓMICOS ---
         const Icon = ({ name, size = 18, className }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
             return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        // --- MODAL DE REPOSITORIOS (Copiado y adaptado de index.html) ---
+        // --- MODAL DE REPOSITORIOS (RUTAS RAW/RED) ---
         const RepositoryModal = ({ onClose }) => {
             const [rutas, setRutas] = useState([]);
-            const [loading, setLoading] = useState(true);
-
             useEffect(() => {
                 db.collection(COL_CONFIG).doc('imagenes').get().then(doc => {
                     if (doc.exists) setRutas(doc.data().rutas || []);
-                    setLoading(false);
                 });
             }, []);
 
@@ -96,33 +83,64 @@
 
             return (
                 <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+                    <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden">
                         <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50">
-                            <h3 className="font-bold flex items-center gap-2"><Icon name="database"/> Repositorios de Imágenes</h3>
+                            <h3 className="font-bold flex items-center gap-2"><Icon name="link-2"/> Rutas de Red / Raw</h3>
                             <button onClick={onClose}><Icon name="x"/></button>
                         </div>
                         <div className="p-6 space-y-4">
-                            <p className="text-xs text-slate-400">Agregue las URLs de la API de GitHub donde el sistema buscará las fotos de los modelos.</p>
+                            <p className="text-xs text-slate-400 font-medium italic">Ej: https://raw.githubusercontent.com/usuario/repo/main/IMAGENES/</p>
                             {rutas.map((r, i) => (
                                 <div key={i} className="flex gap-2">
                                     <input value={r} onChange={e => {
                                         const n = [...rutas]; n[i] = e.target.value; setRutas(n);
-                                    }} className="flex-grow bg-slate-800 border border-slate-600 rounded px-3 py-1 text-sm text-white focus:border-indigo-500 outline-none"/>
-                                    <button onClick={() => setRutas(rutas.filter((_, idx) => idx !== i))} className="text-red-400"><Icon name="trash-2" size={16}/></button>
+                                    }} className="flex-grow bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none" placeholder="Ruta base..."/>
+                                    <button onClick={() => setRutas(rutas.filter((_, idx) => idx !== i))} className="text-red-400 px-2"><Icon name="trash-2" size={16}/></button>
                                 </div>
                             ))}
-                            <button onClick={() => setRutas([...rutas, ""])} className="w-full py-2 border border-dashed border-slate-600 rounded text-xs hover:bg-slate-800 transition">+ Agregar Ruta</button>
+                            <button onClick={() => setRutas([...rutas, ""])} className="w-full py-2 border border-dashed border-slate-600 rounded text-xs text-slate-400 hover:bg-slate-800">+ Añadir Nueva Ruta</button>
                         </div>
                         <div className="p-4 bg-slate-800/50 flex justify-end gap-2">
                             <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400">Cancelar</button>
-                            <button onClick={save} className="bg-indigo-600 px-6 py-2 rounded-lg text-sm font-bold">Guardar Cambios</button>
+                            <button onClick={save} className="bg-indigo-600 px-6 py-2 rounded-lg text-sm font-bold text-white">Actualizar Rutas</button>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // --- EDITOR DE FICHA ---
+        // --- LÓGICA DE BÚSQUEDA RAW ---
+        const testImageUrl = (url) => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.onload = () => resolve(true);
+                img.onerror = () => resolve(false);
+                img.src = url;
+            });
+        };
+
+        const buscarFotoRaw = async (modelo) => {
+            if (!modelo) return null;
+            const config = await db.collection(COL_CONFIG).doc('imagenes').get();
+            if (!config.exists) return null;
+            
+            const { rutas } = config.data();
+            const extensiones = ['.png', '.jpg', '.jpeg', '.webp', '.PNG', '.JPG'];
+            const modClean = modelo.trim().toUpperCase();
+
+            for (let base of rutas) {
+                // Asegurar que la base termine en /
+                const baseUrl = base.endsWith('/') ? base : base + '/';
+                for (let ext of extensiones) {
+                    const fullUrl = `${baseUrl}${modClean}${ext}`;
+                    const exists = await testImageUrl(fullUrl);
+                    if (exists) return fullUrl;
+                }
+            }
+            return null;
+        };
+
+        // --- EDITOR ---
         const SheetEditor = ({ initialData, onClose }) => {
             const [ficha, setFicha] = useState(initialData || {
                 modelo: '', cliente: '', descripcion: '', talla: 'UNITALLA',
@@ -132,104 +150,90 @@
             });
             const [searching, setSearching] = useState(false);
 
-            const buscarFoto = async (mod) => {
-                if (!mod) return null;
-                const config = await db.collection(COL_CONFIG).doc('imagenes').get();
-                if (!config.exists) return null;
-                const { rutas } = config.data();
-                const exts = ['.png', '.jpg', '.jpeg', '.webp'];
-                
-                for (const url of rutas) {
-                    try {
-                        const res = await fetch(url);
-                        const files = await res.json();
-                        for (const ext of exts) {
-                            const found = files.find(f => f.name.toLowerCase().includes(mod.toLowerCase()) && f.name.toLowerCase().endsWith(ext));
-                            if (found) return found.download_url;
-                        }
-                    } catch (e) { console.error(e); }
-                }
-                return null;
-            };
-
-            const importar = async () => {
+            const handleImport = async () => {
+                if (!ficha.modelo) return;
                 setSearching(true);
                 const modRef = ficha.modelo.toUpperCase();
-                const doc = await db.collection(COL_TEMPLATES).doc(modRef).get();
-                const img = await buscarFoto(modRef);
                 
-                if (doc.exists) {
-                    setFicha(prev => ({ ...prev, ...doc.data(), imageUrl: img || doc.data().imageUrl, modelo: modRef }));
-                } else {
-                    setFicha(prev => ({ ...prev, imageUrl: img, modelo: modRef }));
-                }
+                // 1. Datos técnicos de Firebase
+                const doc = await db.collection(COL_TEMPLATES).doc(modRef).get();
+                let techData = doc.exists ? doc.data() : {};
+
+                // 2. Búsqueda de imagen RAW con prioridad PNG
+                const imgUrl = await buscarFotoRaw(modRef);
+
+                setFicha(prev => ({
+                    ...prev,
+                    ...techData,
+                    modelo: modRef,
+                    imageUrl: imgUrl || techData.imageUrl || prev.imageUrl
+                }));
                 setSearching(false);
             };
 
             const totalPeso = ficha.components.reduce((acc, c) => acc + (parseFloat(c.peso) || 0) * (c.multiplicador || 1), 0);
-            
+
             return (
-                <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col md:flex-row fade-in">
-                    {/* Panel de Control */}
-                    <div className="w-full md:w-[400px] bg-slate-900 border-r border-slate-800 flex flex-col no-print shadow-2xl">
+                <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col md:flex-row fade-in overflow-hidden">
+                    {/* Lateral de Edición */}
+                    <div className="w-full md:w-[400px] bg-slate-900 border-r border-slate-800 flex flex-col no-print">
                         <div className="p-4 border-b border-slate-800 flex justify-between items-center">
-                            <h2 className="text-indigo-400 font-black tracking-tighter text-xl">EDITOR FLEXIBLE</h2>
+                            <h2 className="text-indigo-400 font-black tracking-tighter text-xl">EDITOR MAESTRO</h2>
                             <button onClick={onClose} className="text-slate-500 hover:text-white"><Icon name="x"/></button>
                         </div>
-                        
+
                         <div className="flex-grow overflow-y-auto p-4 space-y-6">
-                            {/* Inputs Básicos */}
-                            <section className="space-y-3">
-                                <div className="flex gap-2">
-                                    <div className="flex-grow">
-                                        <label className="text-[10px] font-bold text-slate-500 block">MODELO MASTER</label>
-                                        <input value={ficha.modelo} onChange={e=>setFicha({...ficha, modelo: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold uppercase focus:border-indigo-500 outline-none"/>
+                            <section className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">IDENTIFICADOR DE MODELO</label>
+                                    <div className="flex gap-2">
+                                        <input value={ficha.modelo} onChange={e=>setFicha({...ficha, modelo: e.target.value.toUpperCase()})} className="flex-grow bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white font-bold outline-none focus:border-indigo-500" placeholder="Ej: M028"/>
+                                        <button onClick={handleImport} className="bg-indigo-600 px-4 rounded hover:bg-indigo-500 transition shadow-lg shadow-indigo-500/20">
+                                            {searching ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="search"/>}
+                                        </button>
                                     </div>
-                                    <button onClick={importar} disabled={searching} className="mt-5 bg-indigo-600 px-4 rounded hover:bg-indigo-500 transition">
-                                        {searching ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="download"/>}
-                                    </button>
                                 </div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-500 block">CLIENTE</label>
-                                    <input value={ficha.cliente} onChange={e=>setFicha({...ficha, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white"/>
+                                    <label className="text-[10px] font-bold text-slate-500 block mb-1">CLIENTE / MARCA</label>
+                                    <input value={ficha.cliente} onChange={e=>setFicha({...ficha, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-white outline-none focus:border-indigo-500"/>
                                 </div>
                             </section>
 
-                            {/* Gestión de Componentes */}
                             <section>
                                 <div className="flex justify-between items-center mb-2">
-                                    <label className="text-[10px] font-bold text-indigo-400 uppercase">Componentes / Piezas</label>
-                                    <button onClick={() => setFicha({...ficha, components: [...ficha.components, { maquina:'', sufijo:'', descripcion:'', multiplicador: 1, peso:'', tiempo:'' }]})} className="text-[10px] bg-indigo-600/20 text-indigo-400 px-2 py-1 rounded">+ Agregar</button>
+                                    <label className="text-[10px] font-black text-indigo-400">DESGLOSE DE PIEZAS</label>
+                                    <button onClick={()=>setFicha({...ficha, components: [...ficha.components, { maquina:'', sufijo:'', descripcion:'', multiplicador:1, peso:'', tiempo:'' }]})} className="text-[10px] bg-indigo-600/20 text-indigo-400 px-2 py-1 rounded hover:bg-indigo-600 hover:text-white transition">+ Añadir</button>
                                 </div>
                                 <div className="space-y-2">
                                     {ficha.components.map((c, i) => (
-                                        <div key={i} className="bg-slate-800/50 p-2 rounded border border-slate-700 relative group">
-                                            <button onClick={() => setFicha({...ficha, components: ficha.components.filter((_, idx) => idx !== i)})} className="absolute -right-2 -top-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"><Icon name="x" size={10}/></button>
+                                        <div key={i} className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/50 space-y-2 relative group">
+                                            <button onClick={()=>setFicha({...ficha, components: ficha.components.filter((_, idx)=>idx !== i)})} className="absolute -right-2 -top-2 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"><Icon name="x" size={10}/></button>
                                             <div className="grid grid-cols-3 gap-2">
-                                                <input placeholder="Máq" value={c.maquina} onChange={e=>{const n=[...ficha.components]; n[i].maquina=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
-                                                <input placeholder="Suf" value={c.sufijo} onChange={e=>{const n=[...ficha.components]; n[i].sufijo=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
-                                                <input placeholder="Cant" type="number" value={c.multiplicador} onChange={e=>{const n=[...ficha.components]; n[i].multiplicador=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
-                                                <input placeholder="Pieza" value={c.descripcion} onChange={e=>{const n=[...ficha.components]; n[i].descripcion=e.target.value; setFicha({...ficha, components:n})}} className="col-span-3 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
-                                                <input placeholder="Peso (g)" value={c.peso} onChange={e=>{const n=[...ficha.components]; n[i].peso=e.target.value; setFicha({...ficha, components:n})}} className="col-span-1.5 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
-                                                <input placeholder="Tiempo" value={c.tiempo} onChange={e=>{const n=[...ficha.components]; n[i].tiempo=e.target.value; setFicha({...ficha, components:n})}} className="col-span-1.5 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
+                                                <input placeholder="Maq" value={c.maquina} onChange={e=>{const n=[...ficha.components]; n[i].maquina=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                                <input placeholder="Suf" value={c.sufijo} onChange={e=>{const n=[...ficha.components]; n[i].sufijo=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                                <input placeholder="Cant" type="number" value={c.multiplicador} onChange={e=>{const n=[...ficha.components]; n[i].multiplicador=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                            </div>
+                                            <input placeholder="Descripción de la pieza..." value={c.descripcion} onChange={e=>{const n=[...ficha.components]; n[i].descripcion=e.target.value; setFicha({...ficha, components:n})}} className="w-full bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input placeholder="Peso (g)" value={c.peso} onChange={e=>{const n=[...ficha.components]; n[i].peso=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                                <input placeholder="Tiempo" value={c.tiempo} onChange={e=>{const n=[...ficha.components]; n[i].tiempo=e.target.value; setFicha({...ficha, components:n})}} className="bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             </section>
 
-                            {/* Enhebrado */}
                             <section>
                                 <div className="flex justify-between items-center mb-2">
-                                    <label className="text-[10px] font-bold text-emerald-400 uppercase">Enhebrado / Hilos</label>
-                                    <button onClick={() => setFicha({...ficha, threading: [...ficha.threading, { guia: ficha.threading.length+1, material:'', porcentaje:'', sist:'TODOS' }]})} className="text-[10px] bg-emerald-600/20 text-emerald-400 px-2 py-1 rounded">+ Agregar</button>
+                                    <label className="text-[10px] font-black text-emerald-400">ENHEBRADO DE MÁQUINA</label>
+                                    <button onClick={()=>setFicha({...ficha, threading: [...ficha.threading, { guia: ficha.threading.length+1, material:'', porcentaje:'', sist:'TODOS' }]})} className="text-[10px] bg-emerald-600/20 text-emerald-400 px-2 py-1 rounded hover:bg-emerald-600 hover:text-white transition">+ Añadir</button>
                                 </div>
                                 <div className="space-y-2">
                                     {ficha.threading.map((t, i) => (
-                                        <div key={i} className="grid grid-cols-4 gap-2 bg-slate-800/50 p-2 rounded border border-slate-700">
-                                            <input placeholder="G" value={t.guia} className="bg-slate-700 rounded text-center text-xs text-white"/>
-                                            <input placeholder="Material" value={t.material} onChange={e=>{const n=[...ficha.threading]; n[i].material=e.target.value; setFicha({...ficha, threading:n})}} className="col-span-2 bg-slate-700 rounded px-2 py-1 text-xs text-white"/>
-                                            <input placeholder="%" value={t.porcentaje} onChange={e=>{const n=[...ficha.threading]; n[i].porcentaje=e.target.value; setFicha({...ficha, threading:n})}} className="bg-slate-700 rounded text-xs text-white text-center"/>
+                                        <div key={i} className="grid grid-cols-4 gap-2 bg-slate-800/40 p-2 rounded-lg border border-slate-700/50">
+                                            <input placeholder="G" value={t.guia} onChange={e=>{const n=[...ficha.threading]; n[i].guia=e.target.value; setFicha({...ficha, threading:n})}} className="bg-slate-700 rounded text-center text-xs text-white py-1"/>
+                                            <input placeholder="Material" value={t.material} onChange={e=>{const n=[...ficha.threading]; n[i].material=e.target.value; setFicha({...ficha, threading:n})}} className="col-span-2 bg-slate-700 rounded px-2 py-1 text-xs text-white outline-none"/>
+                                            <input placeholder="%" value={t.porcentaje} onChange={e=>{const n=[...ficha.threading]; n[i].porcentaje=e.target.value; setFicha({...ficha, threading:n})}} className="bg-slate-700 rounded text-center text-xs text-white outline-none"/>
                                         </div>
                                     ))}
                                 </div>
@@ -237,78 +241,78 @@
                         </div>
 
                         <div className="p-4 bg-slate-900 border-t border-slate-800 grid grid-cols-2 gap-2">
-                            <button onClick={() => window.print()} className="bg-slate-800 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-700 transition"><Icon name="printer"/> IMPRIMIR</button>
+                            <button onClick={()=>window.print()} className="bg-slate-800 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-slate-700 transition"><Icon name="printer"/> IMPRIMIR</button>
                             <button onClick={async () => {
-                                await db.collection(COL_PRODUCTION).add({ ...ficha, createdAt: new Date(), updatedAt: new Date() });
+                                await db.collection(COL_PRODUCTION).add({ ...ficha, updatedAt: new Date() });
                                 onClose();
                             }} className="bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-500 shadow-lg shadow-indigo-600/20 transition"><Icon name="save"/> GUARDAR</button>
                         </div>
                     </div>
 
-                    {/* Lienzo de Impresión (Preview) */}
-                    <div className="flex-grow bg-slate-800 overflow-y-auto p-8 flex justify-center">
-                        <div className="canvas-preview print-container relative flex flex-col">
-                            {/* Encabezado Dinámico */}
-                            <div className="border-[3px] border-black p-4 flex justify-between items-start mb-6">
+                    {/* Previsualización de Ficha (Papel) */}
+                    <div className="flex-grow bg-slate-800 overflow-y-auto p-8 flex justify-center scrollbar-hide">
+                        <div className="canvas-preview print-container relative flex flex-col bg-white text-black">
+                            {/* Cabecera */}
+                            <div className="border-[4px] border-black p-4 flex justify-between items-start mb-6">
                                 <div>
-                                    <h1 className="text-4xl font-[950] tracking-tighter leading-none italic uppercase">Santoni <span className="text-slate-400">Master</span></h1>
-                                    <div className="text-[10px] font-black tracking-widest mt-1 uppercase">Ficha de Especificaciones de Producción</div>
+                                    <h1 className="text-5xl font-[950] tracking-tighter leading-none italic uppercase">SANTONI <span className="text-slate-400">MASTER</span></h1>
+                                    <div className="text-[11px] font-black tracking-[0.2em] mt-2 uppercase border-t border-black pt-1">Ficha Técnica de Producción Industrial</div>
                                 </div>
                                 <div className="text-right">
-                                    <div className="text-5xl font-black bg-black text-white px-4 py-1 inline-block">{ficha.modelo || "MOD-XX"}</div>
-                                    <div className="text-xl font-bold mt-2 text-slate-700 italic border-b-2 border-slate-200">{ficha.cliente || "CLIENTE GENERAL"}</div>
+                                    <div className="text-6xl font-[1000] bg-black text-white px-5 py-2 inline-block leading-none">{ficha.modelo || "---"}</div>
+                                    <div className="text-xl font-black mt-2 text-slate-700 italic underline decoration-4 decoration-black/10 uppercase tracking-tighter">{ficha.cliente || "CLIENTE"}</div>
                                 </div>
                             </div>
 
-                            {/* Sección Visual y Descriptiva */}
-                            <div className="flex gap-6 h-[400px] mb-6">
-                                <div className="w-2/3 border-[2px] border-black flex items-center justify-center overflow-hidden bg-slate-50 relative">
+                            {/* Fila Central: Foto y Descripción */}
+                            <div className="flex gap-6 h-[420px] mb-6">
+                                <div className="w-[65%] border-[3px] border-black flex items-center justify-center overflow-hidden bg-white relative">
                                     {ficha.imageUrl ? (
                                         <img src={ficha.imageUrl} style={{transform: `scale(${ficha.crop.scale}) translate(${ficha.crop.x}px, ${ficha.crop.y}px)`}} className="max-w-full max-h-full object-contain"/>
-                                    ) : <Icon name="image" size={48} className="text-slate-200"/>}
-                                    <div className="absolute bottom-2 left-2 bg-black text-white text-[8px] px-2 py-0.5">VISTA PREVIA DE DISEÑO</div>
+                                    ) : <div className="flex flex-col items-center text-slate-200"><Icon name="image" size={60}/><span className="text-[10px] font-black mt-2 text-slate-300">SIN REGISTRO FOTOGRÁFICO</span></div>}
+                                    <div className="absolute top-2 left-2 bg-black text-white text-[9px] font-bold px-2 py-0.5">VISTA DE MUESTRA</div>
                                 </div>
-                                <div className="w-1/3 flex flex-col gap-4">
-                                    <div className="flex-grow border-[2px] border-black p-3 relative">
-                                        <label className="text-[10px] font-black absolute -top-2 bg-white px-2">NOTAS TÉCNICAS</label>
-                                        <textarea value={ficha.descripcion} onChange={e=>setFicha({...ficha, descripcion: e.target.value})} className="w-full h-full text-xs font-medium border-none outline-none bg-transparent resize-none leading-relaxed" placeholder="Escriba aquí los detalles del drapeado, puntada, etc."/>
+                                <div className="w-[35%] flex flex-col gap-4">
+                                    <div className="flex-grow border-[3px] border-black p-4 relative bg-slate-50/30">
+                                        <label className="text-[10px] font-[1000] absolute -top-2.5 bg-white px-2 border-x-2 border-black">OBSERVACIONES</label>
+                                        <textarea value={ficha.descripcion} onChange={e=>setFicha({...ficha, descripcion: e.target.value})} className="w-full h-full text-xs font-bold border-none outline-none bg-transparent resize-none leading-relaxed placeholder:text-slate-300" placeholder="Anotaciones sobre drapeado, costura o acabados especiales..."/>
                                     </div>
-                                    <div className="h-28 border-[2px] border-black flex flex-col items-center justify-center bg-slate-50 bg-print-gray">
-                                        <span className="text-[10px] font-black uppercase tracking-tighter">Talla Base</span>
-                                        <input value={ficha.talla} onChange={e=>setFicha({...ficha, talla: e.target.value})} className="text-4xl font-black text-center w-full bg-transparent border-none outline-none"/>
+                                    <div className="h-32 border-[3px] border-black flex flex-col items-center justify-center bg-slate-100 bg-print-gray">
+                                        <span className="text-[10px] font-[1000] uppercase tracking-tighter mb-1">Talla Base</span>
+                                        <input value={ficha.talla} onChange={e=>setFicha({...ficha, talla: e.target.value})} className="text-5xl font-black text-center w-full bg-transparent border-none outline-none uppercase"/>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Tabla de Componentes Adaptativa */}
+                            {/* Tabla de Piezas Adaptativa */}
                             <div className="mb-6">
-                                <table className="w-full border-collapse border-[2px] border-black text-xs">
-                                    <thead className="bg-slate-100 bg-print-gray border-b-[2px] border-black">
-                                        <tr className="font-black">
-                                            <th className="p-2 border-r border-black w-12 text-center">MAQ</th>
-                                            <th className="p-2 border-r border-black w-12 text-center">SUF</th>
-                                            <th className="p-2 border-r border-black text-left pl-4">DESCRIPCIÓN DE PIEZA</th>
-                                            <th className="p-2 border-r border-black w-32">CÓDIGO PROG.</th>
-                                            <th className="p-2 border-r border-black w-20">PESO (g)</th>
-                                            <th className="p-2 w-20">TIEMPO</th>
+                                <table className="w-full border-collapse border-[3px] border-black text-[11px]">
+                                    <thead className="bg-black text-white border-b-[3px] border-black uppercase font-black">
+                                        <tr>
+                                            <th className="p-2 border-r border-white w-14 text-center italic">Maq</th>
+                                            <th className="p-2 border-r border-white w-14 text-center">Suf</th>
+                                            <th className="p-2 border-r border-white text-left pl-4">Descripción de Pieza</th>
+                                            <th className="p-2 border-r border-white w-36">Programa Santoni</th>
+                                            <th className="p-2 border-r border-white w-20">Peso</th>
+                                            <th className="p-2 w-20">Tiempo</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody className="font-bold uppercase tracking-tight">
                                         {ficha.components.map((c, i) => (
-                                            <tr key={i} className="border-b border-black font-medium">
-                                                <td className="p-2 border-r border-black text-center font-bold italic">{c.maquina}</td>
-                                                <td className="p-2 border-r border-black text-center">{c.sufijo}</td>
-                                                <td className="p-2 border-r border-black pl-4 uppercase">{c.descripcion}</td>
-                                                <td className="p-2 border-r border-black text-center font-mono font-bold text-[10px] bg-slate-50 bg-print-gray">
+                                            <tr key={i} className="border-b-2 border-black/10 last:border-b-0">
+                                                <td className="p-2 border-r-2 border-black/10 text-center font-[900] bg-slate-50 bg-print-gray italic">{c.maquina}</td>
+                                                <td className="p-2 border-r-2 border-black/10 text-center">{c.sufijo}</td>
+                                                <td className="p-2 border-r-2 border-black/10 pl-4">{c.descripcion}</td>
+                                                <td className="p-2 border-r-2 border-black/10 text-center font-mono text-[10px] bg-slate-50 bg-print-gray">
                                                     {ficha.modelo}{c.sufijo}{c.maquina}{ficha.cliente?.charAt(0)}
                                                 </td>
-                                                <td className="p-2 border-r border-black text-center">{c.peso}</td>
+                                                <td className="p-2 border-r-2 border-black/10 text-center">{c.peso}g</td>
                                                 <td className="p-2 text-center">{c.tiempo}</td>
                                             </tr>
                                         ))}
-                                        <tr className="bg-black text-white font-black">
-                                            <td colSpan={4} className="p-2 text-right tracking-widest text-[9px]">SUMATORIA TOTAL DE PIEZAS</td>
-                                            <td className="p-2 text-center">{totalPeso.toFixed(1)}g</td>
+                                        <tr className="bg-slate-100 bg-print-gray border-t-[3px] border-black font-[1000]">
+                                            <td colSpan={4} className="p-2 text-right tracking-[0.2em] text-[9px] border-r-2 border-black/10 italic">TOTAL PRENDA TERMINADA</td>
+                                            <td className="p-2 text-center text-sm">{totalPeso.toFixed(1)}g</td>
                                             <td className="p-2 text-center">-</td>
                                         </tr>
                                     </tbody>
@@ -316,46 +320,46 @@
                             </div>
 
                             {/* Hilos y Firmas */}
-                            <div className="flex gap-6 flex-grow">
-                                <div className="w-1/2">
-                                    <table className="w-full border-[2px] border-black text-[11px]">
-                                        <thead className="bg-slate-100 bg-print-gray border-b-[2px] border-black font-black">
+                            <div className="flex gap-6 h-48">
+                                <div className="w-[55%]">
+                                    <table className="w-full border-[3px] border-black text-[10px]">
+                                        <thead className="bg-slate-100 bg-print-gray border-b-[2px] border-black font-black uppercase italic">
                                             <tr>
-                                                <th className="p-1 border-r border-black w-8">G</th>
-                                                <th className="p-1 border-r border-black text-left pl-2">HILO / MATERIAL</th>
-                                                <th className="p-1 w-10">%</th>
+                                                <th className="p-1 border-r-2 border-black w-10">G</th>
+                                                <th className="p-1 border-r-2 border-black text-left pl-3">Materia Prima / Títulos</th>
+                                                <th className="p-1 w-12">%</th>
                                             </tr>
                                         </thead>
-                                        <tbody>
+                                        <tbody className="font-bold italic uppercase">
                                             {ficha.threading.map((t, i) => (
-                                                <tr key={i} className="border-b border-black">
-                                                    <td className="p-1 text-center font-bold border-r border-black">{t.guia}</td>
-                                                    <td className="p-1 pl-2 border-r border-black uppercase italic">{t.material}</td>
+                                                <tr key={i} className="border-b border-black/5 last:border-b-0">
+                                                    <td className="p-1 text-center font-black border-r-2 border-black/10">{t.guia}</td>
+                                                    <td className="p-1 pl-3 border-r-2 border-black/10">{t.material}</td>
                                                     <td className="p-1 text-center font-black">{t.porcentaje}%</td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="w-1/2 border-[2px] border-black p-4 flex flex-col justify-between">
-                                    <div className="text-[9px] font-black border-b border-black pb-1 mb-8">VALIDACIÓN DE CALIDAD Y DISEÑO</div>
-                                    <div className="flex justify-between gap-4">
-                                        <div className="flex-1 text-center"><div className="border-b border-black h-8 mb-1"></div><span className="text-[8px] font-bold">REVISIÓN</span></div>
-                                        <div className="flex-1 text-center"><div className="border-b border-black h-8 mb-1"></div><span className="text-[8px] font-bold">AUTORIZÓ</span></div>
+                                <div className="w-[45%] border-[3px] border-black p-4 flex flex-col justify-between bg-slate-50/30">
+                                    <div className="text-[10px] font-black border-b-2 border-black pb-1 mb-8 italic tracking-widest">Validación de Departamento Técnico</div>
+                                    <div className="flex justify-between gap-6">
+                                        <div className="flex-1 text-center"><div className="border-b-2 border-black h-8 mb-1"></div><span className="text-[9px] font-black uppercase">DISEÑO</span></div>
+                                        <div className="flex-1 text-center"><div className="border-b-2 border-black h-8 mb-1"></div><span className="text-[9px] font-black uppercase">AUTORIZÓ</span></div>
                                     </div>
                                 </div>
                             </div>
                             
-                            <div className="text-[8px] text-center mt-6 text-slate-400 font-mono italic">
-                                Sistema Santoni Cloud v6.2 - Impreso el {new Date().toLocaleString()}
-                            </div>
+                            <footer className="text-[8px] text-center mt-auto pt-6 text-slate-400 font-mono font-bold tracking-widest opacity-50">
+                                SANTONI CLOUD PRODUCTION • GENERA: {new Date().toLocaleString()} • V.6.5-RAW
+                            </footer>
                         </div>
                     </div>
                 </div>
             );
         };
 
-        // --- DASHBOARD PRINCIPAL ---
+        // --- DASHBOARD ---
         const App = () => {
             const [fichas, setFichas] = useState([]);
             const [editor, setEditor] = useState(false);
@@ -363,7 +367,7 @@
             const [selected, setSelected] = useState(null);
 
             useEffect(() => {
-                const unsub = db.collection(COL_PRODUCTION).orderBy('createdAt', 'desc').onSnapshot(snap => {
+                const unsub = db.collection(COL_PRODUCTION).orderBy('updatedAt', 'desc').onSnapshot(snap => {
                     setFichas(snap.docs.map(d => ({ id: d.id, ...d.data() })));
                 });
                 return () => unsub();
@@ -371,33 +375,29 @@
 
             return (
                 <div className="min-h-screen p-6 max-w-7xl mx-auto">
-                    <header className="flex justify-between items-center mb-10 bg-slate-900/50 p-6 rounded-3xl border border-slate-800 backdrop-blur-xl">
+                    <header className="flex justify-between items-center mb-10 bg-slate-900/50 p-8 rounded-[2.5rem] border border-slate-800 backdrop-blur-3xl">
                         <div>
-                            <h1 className="text-3xl font-black text-white tracking-tighter">SANTONI <span className="text-indigo-500 underline decoration-indigo-500/30">PRODUCTION</span></h1>
-                            <p className="text-slate-500 text-sm font-medium">Gestión de Fichas Técnicas Flexibles</p>
+                            <h1 className="text-4xl font-[1000] text-white tracking-tighter leading-none">SANTONI <span className="text-indigo-500">PRO</span></h1>
+                            <p className="text-slate-500 text-sm font-black uppercase tracking-[0.2em] mt-2">Planta de Producción Textil</p>
                         </div>
-                        <div className="flex gap-3">
-                            <button onClick={()=>setConfig(true)} className="p-3 bg-slate-800 text-slate-400 rounded-xl hover:text-white transition"><Icon name="settings"/></button>
-                            <button onClick={()=>{setSelected(null); setEditor(true)}} className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition transform hover:scale-105">
-                                <Icon name="plus-circle"/> CREAR FICHA
+                        <div className="flex gap-4">
+                            <button onClick={()=>setConfig(true)} className="p-4 bg-slate-800 text-slate-400 rounded-2xl hover:text-white transition-all"><Icon name="settings"/></button>
+                            <button onClick={()=>{setSelected(null); setEditor(true)}} className="bg-indigo-600 hover:bg-indigo-500 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-2xl shadow-indigo-600/30 transition transform hover:-translate-y-1 active:scale-95">
+                                Nueva Ficha
                             </button>
                         </div>
                     </header>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                         {fichas.map(f => (
-                            <div key={f.id} onClick={()=>{setSelected(f); setEditor(true)}} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden cursor-pointer hover:border-indigo-500/50 group transition-all duration-300">
-                                <div className="h-48 bg-black relative flex items-center justify-center overflow-hidden">
-                                    {f.imageUrl ? <img src={f.imageUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition duration-500" style={f.crop ? {objectPosition:`${f.crop.x}px ${f.crop.y}px`, transform:`scale(${f.crop.scale})`} : {}}/> : <Icon name="image-off" className="text-slate-800" size={32}/>}
-                                    <div className="absolute top-4 left-4 bg-indigo-600 text-white text-[10px] px-3 py-1 rounded-full font-black shadow-lg">{f.cliente}</div>
+                            <div key={f.id} onClick={()=>{setSelected(f); setEditor(true)}} className="bg-slate-900 border border-slate-800 rounded-[2rem] overflow-hidden cursor-pointer hover:border-indigo-500/50 group transition-all duration-500 hover:shadow-2xl hover:shadow-indigo-500/10">
+                                <div className="h-56 bg-black relative flex items-center justify-center overflow-hidden">
+                                    {f.imageUrl ? <img src={f.imageUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition duration-700 group-hover:scale-110"/> : <Icon name="image-off" className="text-slate-800" size={40}/>}
+                                    <div className="absolute top-5 left-5 bg-white/10 backdrop-blur px-4 py-1.5 rounded-full text-[10px] font-black text-white uppercase tracking-widest border border-white/20">{f.cliente}</div>
                                 </div>
-                                <div className="p-5">
-                                    <h3 className="text-2xl font-black text-white group-hover:text-indigo-400 transition">{f.modelo}</h3>
-                                    <p className="text-xs text-slate-500 mt-2 line-clamp-1">{f.descripcion || "Sin descripción adicional"}</p>
-                                    <div className="mt-4 pt-4 border-t border-slate-800 flex justify-between text-[10px] font-bold text-slate-500 uppercase">
-                                        <span>{f.components?.length} Piezas</span>
-                                        <span>{new Date(f.updatedAt?.seconds*1000).toLocaleDateString()}</span>
-                                    </div>
+                                <div className="p-6">
+                                    <h3 className="text-3xl font-[1000] text-white group-hover:text-indigo-400 transition tracking-tighter uppercase">{f.modelo}</h3>
+                                    <p className="text-xs text-slate-500 mt-2 font-bold uppercase tracking-wider">{f.components?.length} Piezas en ficha</p>
                                 </div>
                             </div>
                         ))}
