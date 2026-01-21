@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tablero de Control - Pedidos y Desarrollos 2026</title>
+    <style>
+        /* ESTILOS VISUALES (CSS) */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        h1, h2 {
+            text-align: center;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        h1 {
+            background-color: #000;
+            color: #fff;
+            padding: 10px;
+            font-size: 24px;
+        }
+
+        h2 {
+            font-size: 20px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 5px;
+        }
+
+        /* Botones de control */
+        .controls {
+            margin: 20px 0;
+            text-align: center;
+            padding: 15px;
+            background: #e0e0e0;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #000;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            margin: 0 5px;
+        }
+
+        button:hover {
+            background-color: #333;
+        }
+
+        button.reset {
+            background-color: #b30000;
+        }
+
+        /* Tablas */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 5px;
+            text-align: center;
+        }
+
+        th {
+            background-color: #eee;
+            font-weight: bold;
+        }
+
+        thead th {
+            background-color: #e0e0e0;
+        }
+
+        /* Inputs dentro de las celdas */
+        input {
+            width: 90%;
+            border: none;
+            text-align: center;
+            background: transparent;
+            font-size: 14px;
+        }
+
+        input:focus {
+            outline: 2px solid #007bff;
+            background: #fff;
+        }
+
+        /* Sección de Referencia (Meses) */
+        .reference-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .ref-box {
+            border: 2px solid #000;
+            padding: 10px;
+        }
+        
+        .month-row {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #ddd;
+            padding: 5px 0;
+            font-weight: bold;
+        }
+        
+        .month-left { font-size: 18px; }
+        .month-right { font-size: 18px; text-transform: uppercase; }
+
+        /* Resumen General */
+        .summary-header th {
+            background-color: #333;
+            color: white;
+        }
+
+        /* Tablas de Clientes Individuales */
+        .client-section {
+            page-break-inside: avoid;
+            margin-top: 40px;
+            border: 2px solid #000;
+            padding: 10px;
+        }
+        
+        .client-title {
+            background-color: #000;
+            color: white;
+            font-size: 28px;
+            text-align: center;
+            padding: 5px;
+            margin-top: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="controls">
+        <button onclick="addNewClient()">+ Agregar Nuevo Cliente</button>
+        <button class="reset" onclick="resetData()">Borrar Todos los Datos</button>
+        <p style="font-size: 12px; margin-top: 10px; color: #555;">* Los cambios se guardan automáticamente en tu navegador.</p>
+    </div>
+
+    <div class="ref-box">
+        <h1>PEDIDOS 2026</h1>
+        <div style="text-align: center; font-size: 12px; margin-bottom: 10px;">
+            OPTIMA - BELLAFORM - SHASA - CUIDADO CON EL PERRO - INTIMEDEA - TIENDAS VIVA ROUSS
+        </div>
+        <div id="referenceTable">
+            </div>
+    </div>
+
+    <br>
+
+    <div class="ref-box">
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#000; color:#fff; padding:5px;">
+            <h2 style="margin:0; border:none; color:white;">Desarrollos 2026 Resumen General</h2>
+        </div>
+        <table id="summaryTable">
+            <thead>
+                </thead>
+            <tbody>
+                </tbody>
+        </table>
+    </div>
+
+    <div id="clientsContainer">
+        </div>
+
+</div>
+
+<script>
+    // --- CONFIGURACIÓN INICIAL ---
+    const months = [
+        "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", 
+        "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+    ];
+    
+    // Referencia de meses de entrega (Basado en imagen 1)
+    const deliveryMap = {
+        "ENERO": "ABRIL", "FEBRERO": "MAYO", "MARZO": "JUNIO",
+        "ABRIL": "JULIO", "MAYO": "AGOSTO", "JUNIO": "SEPTIEMBRE",
+        "JULIO": "OCTUBRE", "AGOSTO": "NOVIEMBRE", "SEPTIEMBRE": "DICIEMBRE",
+        "OCTUBRE": "ENERO", "NOVIEMBRE": "FEBRERO", "DICIEMBRE": "MARZO"
+    };
+
+    // Estado inicial de la aplicación
+    let appData = {
+        clients: ["Andrea", "OPTIMA"], // Clientes por defecto
+        values: {} // Aquí guardaremos los inputs: { "id_del_input": "valor" }
+    };
+
+    // --- FUNCIONES DEL SISTEMA ---
+
+    // 1. Inicialización
+    window.onload = function() {
+        loadData();
+        renderReferenceTable();
+        renderAll();
+    };
+
+    // 2. Renderizar Tabla de Referencia (Estática)
+    function renderReferenceTable() {
+        const container = document.getElementById('referenceTable');
+        let html = '';
+        months.slice(0, 9).forEach(m => { // La imagen muestra hasta Junio->Sept, ajustamos lógica
+             html += `
+                <div class="month-row">
+                    <span style="font-size:12px; color:#555;">LOS DESARROLLOS REALIZADOS EN</span>
+                    <span class="month-left">${m}</span>
+                    <span style="font-size:12px; color:#555;">SE VERÁN REALIZADOS EN</span>
+                    <span class="month-right">${deliveryMap[m] || '...'}</span>
+                </div>
+             `;
+        });
+        container.innerHTML = html;
+    }
+
+    // 3. Renderizar Todo (Resumen y Clientes)
+    function renderAll() {
+        renderSummaryTable();
+        renderClientTables();
+        restoreValues(); // Poner los valores guardados en los inputs
+    }
+
+    // 4. Tabla Resumen General
+    function renderSummaryTable() {
+        const table = document.getElementById('summaryTable');
+        const thead = table.querySelector('thead');
+        const tbody = table.querySelector('tbody');
+
+        // Headers
+        let headerHTML = `
+            <tr class="summary-header">
+                <th>Desarrollos</th>
+                <th>Propuesta</th>
+                <th>Días</th>
+                <th>Modif.</th>
+                <th>Semana</th>
+        `;
+        
+        // Columnas dinámicas por cliente
+        appData.clients.forEach(client => {
+            headerHTML += `<th>${client}</th>`;
+        });
+        
+        headerHTML += `</tr>`;
+        thead.innerHTML = headerHTML;
+
+        // Body
+        let bodyHTML = '';
+        months.forEach((month, index) => {
+            bodyHTML += `<tr>
+                <td><strong>${month}</strong></td>
+                <td><input type="text" id="sum_${month}_prop" value="27" oninput="saveValue(this)"></td>
+                <td><input type="text" id="sum_${month}_dias" value="1.1" oninput="saveValue(this)"></td>
+                <td><input type="text" id="sum_${month}_modif" oninput="saveValue(this)"></td>
+                <td><input type="text" id="sum_${month}_sem" oninput="saveValue(this)"></td>
+            `;
+            
+            // Celdas por cliente en el resumen
+            appData.clients.forEach(client => {
+                const id = `sum_${month}_${client.replace(/\s/g, '')}`;
+                bodyHTML += `<td><input type="text" id="${id}" oninput="saveValue(this)"></td>`;
+            });
+
+            bodyHTML += `</tr>`;
+        });
+        tbody.innerHTML = bodyHTML;
+    }
+
+    // 5. Tablas Individuales
+    function renderClientTables() {
+        const container = document.getElementById('clientsContainer');
+        container.innerHTML = ''; // Limpiar
+
+        appData.clients.forEach(client => {
+            const cleanName = client.replace(/\s/g, ''); // Sin espacios para IDs
+            
+            let html = `
+            <div class="client-section">
+                <div class="client-title">Desarrollos 2026 <strong>${client}</strong></div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Desarrollos</th>
+                            <th>Propuesta</th>
+                            <th>Cantidad</th>
+                            <th>Resurtidos</th>
+                            <th>Prop.#1</th>
+                            <th>Prop.#2</th>
+                            <th>Prop.#3</th>
+                            <th>Prop.#4</th>
+                            <th>Prop.#5</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            months.forEach(month => {
+                html += `
+                    <tr>
+                        <td><strong>${month}</strong></td>
+                        <td><input type="number" id="${cleanName}_${month}_prop" value="4" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_cant" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_res" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_p1" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_p2" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_p3" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_p4" oninput="saveValue(this)"></td>
+                        <td><input type="text" id="${cleanName}_${month}_p5" oninput="saveValue(this)"></td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            </div>
+            `;
+            container.innerHTML += html;
+        });
+    }
+
+    // --- LÓGICA DE GUARDADO (PERSISTENCIA) ---
+
+    function saveValue(input) {
+        appData.values[input.id] = input.value;
+        saveToLocalStorage();
+    }
+
+    function saveToLocalStorage() {
+        localStorage.setItem('tablero2026_data', JSON.stringify(appData));
+    }
+
+    function loadData() {
+        const stored = localStorage.getItem('tablero2026_data');
+        if (stored) {
+            appData = JSON.parse(stored);
+        }
+    }
+
+    function restoreValues() {
+        // Recorrer todos los inputs guardados y restaurar su valor
+        for (const [id, val] of Object.entries(appData.values)) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = val;
+            }
+        }
+    }
+
+    // --- AGREGAR NUEVO CLIENTE ---
+    
+    function addNewClient() {
+        const name = prompt("Nombre del nuevo cliente (Ej: Shasa, Miss R):");
+        if (name && name.trim() !== "") {
+            // Verificar si ya existe
+            if(appData.clients.includes(name)){
+                alert("Este cliente ya existe.");
+                return;
+            }
+            
+            appData.clients.push(name);
+            saveToLocalStorage();
+            renderAll(); // Re-renderizar para mostrar las nuevas columnas y tablas
+        }
+    }
+
+    function resetData() {
+        if(confirm("¿Estás seguro? Esto borrará todos los datos escritos y los clientes agregados.")){
+            localStorage.removeItem('tablero2026_data');
+            location.reload(); // Recargar página para volver al estado inicial
+        }
+    }
+
+</script>
+
+</body>
+</html>
