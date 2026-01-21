@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tablero de Control - Pedidos y Desarrollos 2026 (Firebase)</title>
+    <title>Tablero de Control - Pedidos y Desarrollos 2026</title>
     <style>
         /* --- ESTILOS VISUALES (CSS) --- */
         body { font-family: 'Arial', sans-serif; background-color: #f4f4f4; padding: 20px; margin: 0; }
@@ -16,7 +16,6 @@
         .controls { margin: 20px 0; text-align: center; padding: 15px; background: #e0e0e0; border-radius: 5px; }
         button { padding: 10px 20px; font-size: 16px; cursor: pointer; background-color: #000; color: white; border: none; border-radius: 4px; margin: 0 5px; }
         button:hover { background-color: #333; }
-        button.reset { background-color: #b30000; }
         button.save-modal { background-color: #007bff; }
         button.cancel-modal { background-color: #6c757d; }
 
@@ -26,16 +25,19 @@
         th { background-color: #eee; font-weight: bold; }
         thead th { background-color: #e0e0e0; }
 
-        /* Inputs de la tabla (Ahora son readonly para activar el modal) */
+        /* Inputs de la tabla */
         input.table-input { 
             width: 90%; border: none; text-align: center; background: transparent; font-size: 14px; cursor: pointer; color: #000; font-weight: 500;
         }
         input.table-input:hover { background-color: #eef; outline: 1px dashed #007bff; }
         input.table-input:focus { outline: none; }
         
-        /* Indicador visual si hay notas */
+        /* Indicadores visuales (Notas e Imagen) */
         .has-notes::after {
             content: '★'; position: absolute; top: 0; right: 0; font-size: 10px; color: red;
+        }
+        .has-image::before {
+            content: '📷'; position: absolute; top: 0; left: 0; font-size: 10px; color: blue;
         }
 
         /* Referencia de Meses */
@@ -56,7 +58,7 @@
             background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center;
         }
         .modal-content {
-            background-color: #fff; padding: 25px; border-radius: 8px; width: 400px; max-width: 90%;
+            background-color: #fff; padding: 25px; border-radius: 8px; width: 450px; max-width: 90%; max-height: 90vh; overflow-y: auto;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3); animation: fadeIn 0.3s;
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
@@ -66,7 +68,16 @@
         .form-group input, .form-group textarea {
             width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
         }
-        .modal-actions { text-align: right; margin-top: 20px; }
+        
+        /* Imagen dentro del modal */
+        #modalImagePreview {
+            display: block; margin-top: 10px; max-width: 100%; height: auto; border: 1px solid #ddd; padding: 5px; border-radius: 4px;
+        }
+
+        .modal-actions { text-align: right; margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; }
+        
+        /* Ocultar elementos en modo lectura */
+        .read-only-mode .hide-on-read { display: none; }
     </style>
 </head>
 <body>
@@ -89,6 +100,9 @@
         <div style="display:flex; justify-content:space-between; align-items:center; background:#000; color:#fff; padding:5px;">
             <h2 style="margin:0; border:none; color:white;">Desarrollos 2026 Resumen General</h2>
         </div>
+        <div style="font-size: 11px; text-align:center; padding: 5px; color: #666;">
+            * Las columnas de clientes aquí son de solo lectura y muestran la "Propuesta" de cada cliente. Haz clic para ver detalles e imagen.
+        </div>
         <table id="summaryTable">
             <thead></thead>
             <tbody></tbody>
@@ -99,25 +113,38 @@
 </div>
 
 <div id="dataModal" class="modal-overlay">
-    <div class="modal-content">
+    <div class="modal-content" id="modalContentBox">
         <h2 id="modalTitle" style="border:none; text-align:left; font-size:18px;">Editar Celda</h2>
+        
+        <div style="text-align:center; background:#f9f9f9; margin-bottom:15px;">
+            <img id="modalImagePreview" src="" alt="Sin imagen" style="display:none; margin: 0 auto;">
+        </div>
+
         <div class="form-group">
-            <label for="modalValue">Valor (Número o Texto):</label>
+            <label for="modalValue">Valor / Nombre Desarrollo:</label>
             <input type="text" id="modalValue" placeholder="Escribe el valor aquí..." autofocus>
         </div>
+
         <div class="form-group">
             <label for="modalNotes">Observaciones / Detalles:</label>
-            <textarea id="modalNotes" rows="4" placeholder="Agrega detalles extra si es necesario..."></textarea>
+            <textarea id="modalNotes" rows="3" placeholder="Agrega detalles extra si es necesario..."></textarea>
         </div>
+
+        <div class="form-group hide-on-read">
+            <label for="modalImageUrl">Enlace de Imagen (URL):</label>
+            <input type="text" id="modalImageUrl" placeholder="https://ejemplo.com/foto.jpg" oninput="previewImage(this.value)">
+            <small style="color:#666; font-size:11px;">Copia y pega el link de la imagen aquí.</small>
+        </div>
+
         <div class="modal-actions">
-            <button class="cancel-modal" onclick="closeModal()">Cancelar</button>
-            <button class="save-modal" onclick="saveModalData()">Guardar</button>
+            <button class="cancel-modal" onclick="closeModal()">Cerrar</button>
+            <button class="save-modal hide-on-read" onclick="saveModalData()">Guardar</button>
         </div>
     </div>
 </div>
 
 <script type="module">
-    // 1. IMPORTAR FIREBASE (Versión Modular)
+    // 1. IMPORTAR FIREBASE
     import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
     import { getFirestore, collection, doc, setDoc, onSnapshot, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
@@ -131,26 +158,22 @@
         appId: "1:620210618284:web:482bab9bf74650fff18409"
     };
 
-    // Inicializar
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Variables Globales
-    let currentClients = ["Andrea", "OPTIMA"]; // Iniciales, luego se cargarán de BD
+    let currentClients = ["Andrea", "OPTIMA"]; 
     let currentEditingId = null;
 
     // --- LÓGICA DE TABLAS ---
     const months = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
     const deliveryMap = { "ENERO": "ABRIL", "FEBRERO": "MAYO", "MARZO": "JUNIO", "ABRIL": "JULIO", "MAYO": "AGOSTO", "JUNIO": "SEPTIEMBRE", "JULIO": "OCTUBRE", "AGOSTO": "NOVIEMBRE", "SEPTIEMBRE": "DICIEMBRE", "OCTUBRE": "ENERO", "NOVIEMBRE": "FEBRERO", "DICIEMBRE": "MARZO" };
 
-    // --- CARGA INICIAL ---
     window.addEventListener('DOMContentLoaded', () => {
         renderReferenceTable();
-        listenToConfig(); // Escuchar cambios en la configuración (lista de clientes)
-        listenToData();   // Escuchar cambios en los valores de las celdas
+        listenToConfig(); 
+        listenToData();   
     });
 
-    // --- FUNCIONES DE RENDERIZADO ---
     function renderReferenceTable() {
         const container = document.getElementById('referenceTable');
         let html = '';
@@ -170,7 +193,7 @@
         renderClientTables();
     }
 
-    // Tabla Resumen
+    // --- TABLA RESUMEN (MODIFICADA) ---
     function renderSummaryTable() {
         const table = document.getElementById('summaryTable');
         const thead = table.querySelector('thead');
@@ -190,16 +213,26 @@
                 <td><input class="table-input" readonly id="sum_${month}_dias" onclick="window.openModal(this.id)"></td>
                 <td><input class="table-input" readonly id="sum_${month}_modif" onclick="window.openModal(this.id)"></td>
                 <td><input class="table-input" readonly id="sum_${month}_sem" onclick="window.openModal(this.id)"></td>`;
+            
+            // Columnas de Clientes en Resumen (NO EDITABLES - ESPEJO)
             currentClients.forEach(client => {
-                const id = `sum_${month}_${client.replace(/\s/g, '')}`;
-                bodyHTML += `<td><input class="table-input" readonly id="${id}" onclick="window.openModal(this.id)"></td>`;
+                const cleanName = client.replace(/\s/g, '');
+                // El ID de los datos reales es el de la "Propuesta" del cliente
+                const dataId = `${cleanName}_${month}_prop`; 
+                // Creamos un ID visual único para esta celda espejo
+                const mirrorId = `MIRROR_${dataId}`;
+                
+                // Al hacer click, abrimos el modal con el ID de datos REAL, pero en modo Solo Lectura (true)
+                bodyHTML += `<td><input class="table-input" readonly id="${mirrorId}" 
+                                onclick="window.openModal('${dataId}', true)" 
+                                style="cursor:zoom-in; font-weight:bold; color:#0056b3;"></td>`;
             });
             bodyHTML += `</tr>`;
         });
         tbody.innerHTML = bodyHTML;
     }
 
-    // Tablas Clientes
+    // --- TABLAS CLIENTES ---
     function renderClientTables() {
         const container = document.getElementById('clientsContainer');
         container.innerHTML = ''; 
@@ -208,7 +241,7 @@
             const cleanName = client.replace(/\s/g, '');
             let html = `<div class="client-section"><div class="client-title">Desarrollos 2026 <strong>${client}</strong></div>
                 <table><thead><tr>
-                    <th>Mes</th><th>Propuesta</th><th>Cantidad</th><th>Resurtidos</th>
+                    <th>Mes</th><th>Propuesta (Img)</th><th>Cantidad</th><th>Resurtidos</th>
                     <th>Prop.#1</th><th>Prop.#2</th><th>Prop.#3</th><th>Prop.#4</th><th>Prop.#5</th>
                 </tr></thead><tbody>`;
 
@@ -216,6 +249,7 @@
                 html += `<tr>
                     <td><strong>${month}</strong></td>
                     <td><input class="table-input" readonly id="${cleanName}_${month}_prop" onclick="window.openModal(this.id)"></td>
+                    
                     <td><input class="table-input" readonly id="${cleanName}_${month}_cant" onclick="window.openModal(this.id)"></td>
                     <td><input class="table-input" readonly id="${cleanName}_${month}_res" onclick="window.openModal(this.id)"></td>
                     <td><input class="table-input" readonly id="${cleanName}_${month}_p1" onclick="window.openModal(this.id)"></td>
@@ -230,25 +264,21 @@
         });
     }
 
-    // --- FIREBASE LISTENERS (TIEMPO REAL) ---
+    // --- FIREBASE LISTENERS ---
 
-    // 1. Escuchar lista de clientes
     function listenToConfig() {
         const docRef = doc(db, "tablero_2026", "config_general");
         onSnapshot(docRef, (docSnap) => {
             if (docSnap.exists() && docSnap.data().clients) {
                 currentClients = docSnap.data().clients;
             } else {
-                // Si no existe configuración, creamos la inicial
                 setDoc(docRef, { clients: currentClients });
             }
             renderAllTables();
-            // Después de renderizar, volvemos a poblar los datos porque el HTML se reinició
             fetchCurrentData(); 
         });
     }
 
-    // 2. Escuchar TODA la colección de celdas
     function listenToData() {
         const colRef = collection(db, "tablero_2026");
         onSnapshot(colRef, (snapshot) => {
@@ -257,60 +287,109 @@
                     const data = change.doc.data();
                     const elementId = change.doc.id;
                     
-                    // Solo intentar actualizar si no es la configuración general
                     if(elementId !== "config_general") {
+                        // Actualizamos la celda original (Tabla Clientes)
                         updateDOMCell(elementId, data);
+                        
+                        // Y TAMBIÉN actualizamos la celda espejo en el resumen si existe
+                        updateDOMCell(`MIRROR_${elementId}`, data);
                     }
                 }
             });
         });
     }
 
-    // Función auxiliar para re-pintar datos si se recarga la estructura
     async function fetchCurrentData() {
         const colRef = collection(db, "tablero_2026");
-        // Nota: En una app grande esto se optimizaría, pero para este tablero está bien leer todo.
+        // Nota: Si usas CDN sin await top-level, esto funciona dentro de async function
         const querySnapshot = await import("https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js").then(mod => mod.getDocs(colRef));
         
         querySnapshot.forEach((doc) => {
             if(doc.id !== "config_general") {
                 updateDOMCell(doc.id, doc.data());
+                updateDOMCell(`MIRROR_${doc.id}`, doc.data());
             }
         });
     }
 
-    function updateDOMCell(id, data) {
-        const el = document.getElementById(id);
+    function updateDOMCell(domId, data) {
+        const el = document.getElementById(domId);
         if (el) {
             el.value = data.value || "";
-            // Marcar visualmente si tiene notas
             const parentTd = el.parentElement;
+            
+            // 1. Indicador de Notas (Estrella Roja)
             if (data.notes && data.notes.trim() !== "") {
                 parentTd.classList.add('has-notes');
-                el.title = "Notas: " + data.notes; // Tooltip nativo
             } else {
                 parentTd.classList.remove('has-notes');
-                el.title = "";
             }
+
+            // 2. Indicador de Imagen (Cámara Azul)
+            if (data.imageUrl && data.imageUrl.trim() !== "") {
+                parentTd.classList.add('has-image');
+            } else {
+                parentTd.classList.remove('has-image');
+            }
+            
+            // Tooltip simple
+            let tooltip = "";
+            if(data.value) tooltip += `Valor: ${data.value}\n`;
+            if(data.notes) tooltip += `Notas: ${data.notes}\n`;
+            if(data.imageUrl) tooltip += `[Tiene Imagen]`;
+            el.title = tooltip;
         }
     }
 
     // --- MANEJO DEL MODAL ---
 
-    // Exponer funciones al scope global window para que funcionen con onclick="" del HTML
-    window.openModal = async function(id) {
+    // Función para previsualizar imagen al escribir URL
+    window.previewImage = function(url) {
+        const img = document.getElementById('modalImagePreview');
+        if(url && url.length > 10) {
+            img.src = url;
+            img.style.display = 'block';
+        } else {
+            img.style.display = 'none';
+        }
+    }
+
+    // Abrir Modal
+    // isReadOnly: Si es true, oculta el botón guardar y bloquea inputs
+    window.openModal = async function(id, isReadOnly = false) {
         currentEditingId = id;
         const modal = document.getElementById('dataModal');
+        const contentBox = document.getElementById('modalContentBox');
+        
         const inputVal = document.getElementById('modalValue');
         const inputNotes = document.getElementById('modalNotes');
+        const inputImg = document.getElementById('modalImageUrl');
+        const imgPreview = document.getElementById('modalImagePreview');
         const title = document.getElementById('modalTitle');
 
         // Limpiar inputs
         inputVal.value = "";
         inputNotes.value = "";
-        title.innerText = "Editando: " + id.replace(/_/g, " ");
+        inputImg.value = "";
+        imgPreview.style.display = 'none';
+        imgPreview.src = "";
 
-        // Intentar obtener datos actuales de Firebase para llenar el modal
+        // Configurar Modo Lectura vs Edición
+        if (isReadOnly) {
+            contentBox.classList.add('read-only-mode');
+            inputVal.setAttribute('readonly', true);
+            inputNotes.setAttribute('readonly', true);
+            title.innerText = "Detalle (Solo Lectura)";
+            title.style.color = "#0056b3";
+        } else {
+            contentBox.classList.remove('read-only-mode');
+            inputVal.removeAttribute('readonly');
+            inputNotes.removeAttribute('readonly');
+            title.innerText = "Editar Celda";
+            title.style.color = "#000";
+        }
+
+        // Obtener datos de Firebase
         const docRef = doc(db, "tablero_2026", id);
         try {
             const docSnap = await getDoc(docRef);
@@ -318,13 +397,19 @@
                 const data = docSnap.data();
                 inputVal.value = data.value || "";
                 inputNotes.value = data.notes || "";
+                inputImg.value = data.imageUrl || "";
+                
+                // Mostrar imagen si existe
+                if (data.imageUrl) {
+                    window.previewImage(data.imageUrl);
+                }
             }
         } catch (e) {
-            console.log("Celda nueva o error de lectura", e);
+            console.log("Error leyendo celda", e);
         }
 
         modal.style.display = "flex";
-        inputVal.focus();
+        if(!isReadOnly) inputVal.focus();
     }
 
     window.closeModal = function() {
@@ -337,32 +422,35 @@
 
         const val = document.getElementById('modalValue').value;
         const notes = document.getElementById('modalNotes').value;
+        const imgUrl = document.getElementById('modalImageUrl').value;
 
         // Guardar en Firestore
         const docRef = doc(db, "tablero_2026", currentEditingId);
         await setDoc(docRef, {
             value: val,
             notes: notes,
+            imageUrl: imgUrl,
             lastUpdate: new Date()
         }, { merge: true });
 
         closeModal();
     }
     
-    // Cerrar modal con tecla Escape y guardar con Enter
+    // Teclas
     document.addEventListener('keydown', function(event) {
         if(document.getElementById('dataModal').style.display === "flex") {
             if (event.key === "Escape") {
                 window.closeModal();
             }
-            if (event.key === "Enter" && !event.shiftKey) { // Permitir Enter en textarea con Shift
-                event.preventDefault(); // Evitar salto de línea extra
+            // Solo guardar con Enter si NO estamos en modo lectura
+            const isReadOnly = document.getElementById('modalContentBox').classList.contains('read-only-mode');
+            if (event.key === "Enter" && !event.shiftKey && !isReadOnly) {
+                event.preventDefault();
                 window.saveModalData();
             }
         }
     });
 
-    // --- AGREGAR CLIENTE ---
     window.addNewClientPrompt = async function() {
         const name = prompt("Nombre del nuevo cliente (Ej: Shasa, Miss R):");
         if (name && name.trim() !== "") {
@@ -370,12 +458,9 @@
                 alert("Este cliente ya existe.");
                 return;
             }
-            
-            // Actualizamos la lista local y enviamos a Firebase
             const newClients = [...currentClients, name];
             const docRef = doc(db, "tablero_2026", "config_general");
             await setDoc(docRef, { clients: newClients }, { merge: true });
-            // El listener 'listenToConfig' se encargará de re-renderizar la UI
         }
     }
 
