@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Generador de Flujo por Trazo DinĂ¡mico</title>
+    <style>
+        :root { --accent: #ff0055; --bg: #111; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        .container { background: #222; padding: 25px; border-radius: 15px; box-shadow: 0 10px 40px rgba(0,0,0,0.8); width: 95%; max-width: 1200px; display: grid; grid-template-columns: 320px 1fr; gap: 25px; }
+        .controls { display: flex; flex-direction: column; gap: 15px; }
+        .control-group { background: #333; padding: 15px; border-radius: 10px; border: 1px solid #444; }
+        label { display: block; font-size: 0.85rem; color: #aaa; margin-bottom: 8px; }
+        input[type="range"], select { width: 100%; cursor: pointer; }
+        #svgWrapper { background: white; border-radius: 8px; min-height: 550px; display: flex; align-items: center; justify-content: center; overflow: auto; position: relative; box-shadow: inset 0 0 20px rgba(0,0,0,0.2); }
+        button { background: var(--accent); color: white; border: none; padding: 15px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; text-transform: uppercase; letter-spacing: 1px; }
+        button:hover { filter: brightness(1.2); transform: scale(1.02); }
+        .val { float: right; color: var(--accent); font-weight: bold; }
+        .hint { font-size: 0.75rem; color: #777; margin-top: 5px; line-height: 1.2; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="controls">
+            <h2 style="margin:0 0 10px 0; color:var(--accent)">Generador de Flujo</h2>
+            
+            <div class="control-group">
+                <label>1. Imagen del Logo</label>
+                <input type="file" id="imageInput" accept="image/*">
+            </div>
+
+            <div class="control-group">
+                <label>2. Modo de DistribuciĂ³n</label>
+                <select id="mode">
+                    <option value="adaptive">Trazo Adaptativo (Sigue la curva)</option>
+                    <option value="honeycomb">Panal OrgĂ¡nico</option>
+                    <option value="grid">Ladrillo Sincronizado</option>
+                </select>
+                <p class="hint">"Adaptativo" reparte puntos segĂºn el ancho real de cada parte del logo.</p>
+            </div>
+
+            <div class="control-group">
+                <label>SeparaciĂ³n entre lĂ­neas <span id="yStepVal" class="val">8</span></label>
+                <input type="range" id="yStep" min="4" max="30" value="8">
+            </div>
+
+            <div class="control-group">
+                <label>Densidad de puntos <span id="xStepVal" class="val">8</span></label>
+                <input type="range" id="xStep" min="4" max="30" value="8">
+                <p class="hint">Ajusta quĂ© tan apretados van los puntos en el trazo.</p>
+            </div>
+
+            <div class="control-group">
+                <label>Ăngulo de Flujo <span id="angleVal" class="val">0</span>Â°</label>
+                <input type="range" id="angle" min="-45" max="45" value="0">
+                <p class="hint">Usa esto si el logo es diagonal o curvo.</p>
+            </div>
+
+            <div class="control-group">
+                <label>Grosor de Punto <span id="radiusVal" class="val">2.0</span></label>
+                <input type="range" id="radius" min="0.5" max="10" step="0.5" value="2.0">
+            </div>
+
+            <button onclick="processImage()">Generar Trama Pro</button>
+            <button style="background:#444; margin-top:10px;" onclick="downloadSVG()">Descargar SVG</button>
+        </div>
+
+        <div id="svgWrapper">
+            <div style="color:#bbb; text-align:center">Sube tu imagen para procesar el flujo de puntos.</div>
+        </div>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script>
+        let currentSVG = "";
+
+        document.querySelectorAll('input[type=range]').forEach(input => {
+            input.addEventListener('input', () => {
+                document.getElementById(input.id + 'Val').innerText = input.value;
+            });
+        });
+
+        function processImage() {
+            const input = document.getElementById('imageInput');
+            if (!input.files[0]) return alert("Por favor, selecciona una imagen");
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.getElementById('canvas');
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    
+                    const maxDim = 1000;
+                    const scale = Math.min(maxDim / img.width, maxDim / img.height);
+                    canvas.width = img.width * scale;
+                    canvas.height = img.height * scale;
+                    
+                    ctx.fillStyle = "white";
+                    ctx.fillRect(0,0,canvas.width, canvas.height);
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    
+                    generateFlowDots(ctx, canvas.width, canvas.height);
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+
+        function generateFlowDots(ctx, w, h) {
+            const yStep = parseInt(document.getElementById('yStep').value);
+            const xStep = parseInt(document.getElementById('xStep').value);
+            const angle = parseInt(document.getElementById('angle').value) * (Math.PI / 180);
+            const r = parseFloat(document.getElementById('radius').value);
+            const mode = document.getElementById('mode').value;
+            
+            const imgData = ctx.getImageData(0, 0, w, h);
+            const points = [];
+
+            // Escaneamos con rotaciĂ³n virtual
+            for (let y = -h; y < h * 2; y += yStep) {
+                let inTrace = false;
+                let segment = [];
+
+                for (let x = -w; x < w * 2; x += 1) {
+                    // RotaciĂ³n inversa para leer el pixel real
+                    const rotX = Math.floor(x * Math.cos(angle) - y * Math.sin(angle));
+                    const rotY = Math.floor(x * Math.sin(angle) + y * Math.cos(angle));
+
+                    if (rotX >= 0 && rotX < w && rotY >= 0 && rotY < h) {
+                        const idx = (rotY * w + rotX) * 4;
+                        const isDark = imgData.data[idx] < 150 && imgData.data[idx+3] > 50;
+
+                        if (isDark) {
+                            segment.push({x: rotX, y: rotY});
+                        } else if (segment.length > 0) {
+                            processSegment(segment, points, xStep, mode);
+                            segment = [];
+                        }
+                    }
+                }
+                if (segment.length > 0) processSegment(segment, points, xStep, mode);
+            }
+
+            render(points, w, h, r);
+        }
+
+        function processSegment(seg, points, xStep, mode) {
+            const len = seg.length;
+            if (len < 2) return;
+
+            if (mode === 'adaptive') {
+                // AQUĂ SE "HABLAN": Calculamos cuĂ¡ntos puntos caben en este ancho especĂ­fico
+                // y los centramos perfectamente.
+                const numDots = Math.max(1, Math.round(len / xStep));
+                for (let i = 0; i < numDots; i++) {
+                    const pos = Math.floor((len / (numDots + 1)) * (i + 1));
+                    points.push(seg[pos]);
+                }
+            } else {
+                // Modos tradicionales pero con detecciĂ³n de centro
+                for (let i = 0; i < len; i += xStep) {
+                    points.push(seg[i]);
+                }
+            }
+        }
+
+        function render(points, w, h, r) {
+            let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><g fill="black">`;
+            points.forEach(p => {
+                svg += `<circle cx="${p.x}" cy="${p.y}" r="${r}" />`;
+            });
+            svg += `</g></svg>`;
+            document.getElementById('svgWrapper').innerHTML = svg;
+            currentSVG = svg;
+        }
+
+        function downloadSVG() {
+            if (!currentSVG) return;
+            const blob = new Blob([currentSVG], {type: "image/svg+xml"});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "flujo_mejorado.svg";
+            a.click();
+        }
+    </script>
+</body>
+</html>
