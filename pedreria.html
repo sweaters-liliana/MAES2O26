@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Generador de Flujo por Trazo DinĂ¡mico</title>
+    <title>Generador de Flujo por Trazo Dinámico</title>
     <style>
         :root { --accent: #ff0055; --bg: #111; }
         body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; }
@@ -30,28 +30,28 @@
             </div>
 
             <div class="control-group">
-                <label>2. Modo de DistribuciĂ³n</label>
+                <label>2. Modo de Distribución</label>
                 <select id="mode">
                     <option value="adaptive">Trazo Adaptativo (Sigue la curva)</option>
-                    <option value="honeycomb">Panal OrgĂ¡nico</option>
+                    <option value="honeycomb">Panal Orgánico</option>
                     <option value="grid">Ladrillo Sincronizado</option>
                 </select>
-                <p class="hint">"Adaptativo" reparte puntos segĂºn el ancho real de cada parte del logo.</p>
+                <p class="hint">"Adaptativo" reparte puntos según el ancho real de cada parte del logo.</p>
             </div>
 
             <div class="control-group">
-                <label>SeparaciĂ³n entre lĂ­neas <span id="yStepVal" class="val">8</span></label>
+                <label>Separación entre líneas <span id="yStepVal" class="val">8</span></label>
                 <input type="range" id="yStep" min="4" max="30" value="8">
             </div>
 
             <div class="control-group">
                 <label>Densidad de puntos <span id="xStepVal" class="val">8</span></label>
                 <input type="range" id="xStep" min="4" max="30" value="8">
-                <p class="hint">Ajusta quĂ© tan apretados van los puntos en el trazo.</p>
+                <p class="hint">Ajusta qué tan apretados van los puntos en el trazo.</p>
             </div>
 
             <div class="control-group">
-                <label>Ăngulo de Flujo <span id="angleVal" class="val">0</span>Â°</label>
+                <label>Ángulo de Flujo <span id="angleVal" class="val">0</span>°</label>
                 <input type="range" id="angle" min="-45" max="45" value="0">
                 <p class="hint">Usa esto si el logo es diagonal o curvo.</p>
             </div>
@@ -118,13 +118,13 @@
             const imgData = ctx.getImageData(0, 0, w, h);
             const points = [];
 
-            // Escaneamos con rotaciĂ³n virtual
+            // Escaneamos con rotación virtual
             for (let y = -h; y < h * 2; y += yStep) {
                 let inTrace = false;
                 let segment = [];
 
                 for (let x = -w; x < w * 2; x += 1) {
-                    // RotaciĂ³n inversa para leer el pixel real
+                    // Rotación inversa para leer el pixel real
                     const rotX = Math.floor(x * Math.cos(angle) - y * Math.sin(angle));
                     const rotY = Math.floor(x * Math.sin(angle) + y * Math.cos(angle));
 
@@ -151,7 +151,7 @@
             if (len < 2) return;
 
             if (mode === 'adaptive') {
-                // AQUĂ SE "HABLAN": Calculamos cuĂ¡ntos puntos caben en este ancho especĂ­fico
+                // AQUÍ SE "HABLAN": Calculamos cuántos puntos caben en este ancho específico
                 // y los centramos perfectamente.
                 const numDots = Math.max(1, Math.round(len / xStep));
                 for (let i = 0; i < numDots; i++) {
@@ -159,7 +159,7 @@
                     points.push(seg[pos]);
                 }
             } else {
-                // Modos tradicionales pero con detecciĂ³n de centro
+                // Modos tradicionales pero con detección de centro
                 for (let i = 0; i < len; i += xStep) {
                     points.push(seg[i]);
                 }
