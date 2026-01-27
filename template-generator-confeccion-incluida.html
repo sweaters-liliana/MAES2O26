@@ -3,41 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo Factory - Sistema Modular V3.0</title>
+    <title>Neo Factory - Módulo Confección</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
+        /* Estilos Oscuros (Dark Mode Nativo) */
         body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
-        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
-        input:focus, select:focus { outline: 2px solid #6366f1; outline-offset: 1px; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        ::-webkit-scrollbar-thumb { background: #db2777; border-radius: 4px; } /* Scroll rosa para diferenciar */
+        input:focus, select:focus { outline: 2px solid #db2777; outline-offset: 1px; }
+        
+        .fade-in { animation: fadeIn 0.4s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Clases utilitarias */
-        .btn-primary { background: linear-gradient(to right, #4f46e5, #7c3aed); color: white; padding: 0.5rem 1.5rem; border-radius: 0.5rem; font-weight: bold; transition: all 0.2s; }
-        .btn-primary:hover { transform: scale(1.02); opacity: 0.9; }
-        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; }
-        .input-std { width: 100%; background: #0f172a; border: 1px solid #334155; padding: 0.5rem; border-radius: 0.25rem; color: white; outline: none; transition: border 0.2s; }
-        .input-std:focus { border-color: #6366f1; }
+
+        /* Clases personalizadas */
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .input-dark { background: #020617; border: 1px solid #334155; color: white; padding: 0.5rem; border-radius: 0.375rem; width: 100%; font-size: 0.875rem; transition: border-color 0.2s; text-transform: uppercase; font-weight: 600; }
+        .input-dark:focus { border-color: #f472b6; }
+        .btn-action { background: #be185d; color: white; font-weight: bold; border-radius: 0.5rem; transition: all 0.2s; display: flex; align-items: center; gap: 0.5rem; justify-content: center; }
+        .btn-action:hover { background: #9d174d; transform: translateY(-1px); }
+        .tag-btn { font-size: 0.7rem; padding: 0.25rem 0.5rem; border-radius: 9999px; border: 1px solid #334155; transition: all 0.15s; user-select: none; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // --- CONFIGURACIÓN FIREBASE ---
+        // --- 1. CONFIGURACIÓN FIREBASE (Tu configuración real) ---
         const firebaseConfig = {
             apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
             authDomain: "cirineo-cec21.firebaseapp.com",
@@ -49,328 +52,383 @@
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- COMPONENTE ICONO ---
+        // Icon Helper
         const Icon = ({ name, size = 18, className }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
             return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        // --- PANTALLA DE INICIO (MENÚ) ---
-        const MainMenu = ({ onNavigate }) => (
-            <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-8 bg-slate-900">
-                <div className="text-center space-y-2">
-                    <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">NEO FACTORY</h1>
-                    <p className="text-slate-400 text-sm tracking-widest">SISTEMA MODULAR V3.0</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
-                    <button onClick={() => onNavigate('KNITTING')} className="group bg-slate-800 hover:bg-slate-800/80 border border-slate-700 p-8 rounded-2xl transition-all hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-500/20 flex flex-col items-center gap-4 text-center">
-                        <div className="bg-indigo-900/50 p-4 rounded-full text-indigo-400 group-hover:scale-110 transition-transform"><Icon name="layers" size={40}/></div>
-                        <div><h2 className="text-2xl font-bold text-white mb-2">1. Tejeduría</h2><p className="text-slate-400 text-sm">Crear Ficha Técnica, Piezas y Receta de Hilos.</p></div>
-                    </button>
-
-                    <button onClick={() => onNavigate('CONFECTION')} className="group bg-slate-800 hover:bg-slate-800/80 border border-slate-700 p-8 rounded-2xl transition-all hover:border-pink-500 hover:shadow-2xl hover:shadow-pink-500/20 flex flex-col items-center gap-4 text-center">
-                        <div className="bg-pink-900/50 p-4 rounded-full text-pink-400 group-hover:scale-110 transition-transform"><Icon name="scissors" size={40}/></div>
-                        <div><h2 className="text-2xl font-bold text-white mb-2">2. Confección</h2><p className="text-slate-400 text-sm">Definir Ruta, Operarios y Precios (Con Memoria).</p></div>
-                    </button>
-                </div>
-            </div>
-        );
-
-        // --- MÓDULO 1: TEJEDURÍA (La parte que ya funcionaba bien) ---
-        const KnittingModule = ({ onBack }) => {
-            const [form, setForm] = useState({ modelo: '', cliente: '' });
-            const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
-            const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
-            const [inventory, setInventory] = useState([]);
-
-            useEffect(() => {
-                db.collection('inventory').doc('main').onSnapshot(doc => doc.exists && setInventory(doc.data().items || []));
-            }, []);
-
-            const handleSave = async () => {
-                if(!form.modelo || !form.cliente) return alert("Ingresa Modelo y Cliente");
-                try {
-                    // Usamos set con merge: true para NO borrar si ya existe confección
-                    await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
-                        modelo: form.modelo.toUpperCase(),
-                        cliente: form.cliente.toUpperCase(),
-                        components,
-                        threading,
-                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    }, { merge: true });
-                    alert("Datos de Tejeduría Guardados Correctamente");
-                    onBack();
-                } catch(e) { alert("Error: " + e.message); }
-            };
-
-            const inputClass = "w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-indigo-500 outline-none uppercase font-bold";
-
-            return (
-                <div className="min-h-screen bg-slate-900 p-4 fade-in">
-                    <div className="max-w-6xl mx-auto space-y-6 pb-20">
-                        {/* Header Módulo */}
-                        <div className="flex items-center justify-between bg-slate-800 p-4 rounded-lg border border-slate-700">
-                            <h2 className="text-xl font-bold text-indigo-400 flex items-center gap-2"><Icon name="layers"/> MÓDULO TEJEDURÍA</h2>
-                            <button onClick={onBack} className="text-slate-400 hover:text-white px-3 py-1 bg-slate-700 rounded text-xs font-bold">VOLVER AL MENÚ</button>
-                        </div>
-
-                        {/* Datos Básicos */}
-                        <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div><label className="text-xs text-slate-500 font-bold block mb-1">MODELO</label><input value={form.modelo} onChange={e=>setForm({...form, modelo:e.target.value.toUpperCase()})} className={inputClass} placeholder="EJ: POLO-2025"/></div>
-                            <div><label className="text-xs text-slate-500 font-bold block mb-1">CLIENTE</label><input value={form.cliente} onChange={e=>setForm({...form, cliente:e.target.value.toUpperCase()})} className={inputClass}/></div>
-                        </div>
-
-                        {/* Tabla Piezas */}
-                        <div className="card space-y-4">
-                            <div className="flex justify-between items-center border-b border-slate-700 pb-2"><h3 className="font-bold text-slate-300 text-sm">PIEZAS / COMPONENTES</h3><button onClick={()=>setComponents([...components, {descripcion:'', talla:'', sufijo:'', maquina:'', multiplicador:1, piezasPorPaquete:0, peso:'', tiempo:''}])} className="bg-indigo-600 text-white px-2 py-1 rounded text-xs">+ Pieza</button></div>
-                            {components.map((c, i) => (
-                                <div key={i} className="grid grid-cols-2 md:grid-cols-9 gap-2 items-center bg-slate-900/50 p-2 rounded">
-                                    <div className="col-span-2"><input value={c.descripcion} onChange={e=>{const n=[...components];n[i].descripcion=e.target.value.toUpperCase();setComponents(n)}} className={inputClass} placeholder="DESCRIPCIÓN"/></div>
-                                    <input value={c.talla} onChange={e=>{const n=[...components];n[i].talla=e.target.value.toUpperCase();setComponents(n)}} className={inputClass} placeholder="TALLA"/>
-                                    <input value={c.sufijo} onChange={e=>{const n=[...components];n[i].sufijo=e.target.value.toUpperCase();setComponents(n)}} className={inputClass} placeholder="SUFIJO"/>
-                                    <div className="col-span-2"><select value={c.maquina} onChange={e=>{const n=[...components];n[i].maquina=e.target.value;setComponents(n)}} className={inputClass}><option value="">MAQUINA...</option><option value="GALGA 12">GALGA 12</option><option value="GALGA 7">GALGA 7</option><option value="INTARSIA">INTARSIA</option></select></div>
-                                    <input type="number" value={c.peso} onChange={e=>{const n=[...components];n[i].peso=e.target.value;setComponents(n)}} className={`${inputClass} text-right text-emerald-400`} placeholder="PESO"/>
-                                    <input type="number" value={c.tiempo} onChange={e=>{const n=[...components];n[i].tiempo=e.target.value;setComponents(n)}} className={`${inputClass} text-right`} placeholder="TIEMPO"/>
-                                    <button onClick={()=>setComponents(components.filter((_,idx)=>idx!==i))} className="text-red-400 text-center"><Icon name="trash-2" size={14}/></button>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Tabla Hilos */}
-                        <div className="card space-y-4">
-                            <div className="flex justify-between items-center border-b border-slate-700 pb-2"><h3 className="font-bold text-slate-300 text-sm">RECETA DE HILOS</h3><button onClick={()=>setThreading([...threading, {guia:threading.length+1, material:'', porcentaje:''}])} className="bg-amber-600 text-white px-2 py-1 rounded text-xs">+ Hilo</button></div>
-                            {threading.map((t, i) => (
-                                <div key={i} className="flex gap-2 items-center bg-slate-900/50 p-2 rounded">
-                                    <span className="text-xs font-bold text-slate-500 w-8">#{t.guia}</span>
-                                    <select value={t.material} onChange={e=>{const n=[...threading];n[i].material=e.target.value;setThreading(n)}} className={inputClass}><option value="">SELECCIONAR HILO...</option>{inventory.map(inv=><option key={inv.id} value={inv.nombre}>{inv.nombre} - {inv.color}</option>)}</select>
-                                    <input type="number" value={t.porcentaje} onChange={e=>{const n=[...threading];n[i].porcentaje=e.target.value;setThreading(n)}} className={`${inputClass} w-20 text-right`} placeholder="%"/>
-                                    <button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-400"><Icon name="trash-2" size={14}/></button>
-                                </div>
-                            ))}
-                        </div>
-                        
-                        <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-800 border-t border-slate-700 flex justify-end">
-                            <button onClick={handleSave} className="btn-primary flex items-center gap-2"><Icon name="save"/> GUARDAR TEJEDURÍA</button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- MÓDULO 2: CONFECCIÓN (Separado, con botón +) ---
-        const ConfectionModule = ({ onBack }) => {
+        // --- COMPONENTE PRINCIPAL: GESTOR DE CONFECCIÓN ---
+        const ConfectionManager = () => {
+            // Estado Principal
             const [modelo, setModelo] = useState('');
-            const [status, setStatus] = useState('idle'); // idle, loading, ready
-            const [processes, setProcesses] = useState([{ descripcion: '', tipo: 'MAQUINA', recurso: '', operarios: [], precio: '' }]);
+            const [isLoaded, setIsLoaded] = useState(false);
+            const [loading, setLoading] = useState(false);
             
-            // Datos DB
-            const [employees, setEmployees] = useState([]);
-            const [resources, setResources] = useState([]); // Maquinas/Otros guardados
-            const [processLibrary, setProcessLibrary] = useState([]); // Memoria de procesos
-            
-            // Estados temporales
+            // Datos de la ruta de confección
+            const [processes, setProcesses] = useState([]);
+
+            // Datos Auxiliares (Base de Datos)
+            const [employees, setEmployees] = useState([]); // Lista Empleados
+            const [resources, setResources] = useState([]); // Lista Máquinas/Otros
+            const [processLibrary, setProcessLibrary] = useState([]); // Memoria de procesos aprendidos
+
+            // Estado para sugerencias de autocompletado
             const [suggestions, setSuggestions] = useState({ index: null, items: [] });
 
+            // 1. Cargar Datos Globales al inicio
             useEffect(() => {
-                db.collection('confection_employees').where('status','==','ACTIVE').onSnapshot(s => setEmployees(s.docs.map(d=>d.data())));
-                db.collection('settings_resources').onSnapshot(s => setResources(s.docs.map(d=>d.data())));
-                db.collection('settings_processes').onSnapshot(s => setProcessLibrary(s.docs.map(d=>d.data())));
+                // Escuchar empleados activos
+                const unsubEmp = db.collection('confection_employees').where('status', '==', 'ACTIVE').onSnapshot(snap => {
+                    setEmployees(snap.docs.map(d => ({id: d.id, ...d.data()})));
+                });
+                // Escuchar recursos (Máquinas, etc.)
+                const unsubRes = db.collection('settings_resources').onSnapshot(snap => {
+                    setResources(snap.docs.map(d => ({id: d.id, ...d.data()})));
+                });
+                // Escuchar biblioteca de procesos (Memoria)
+                const unsubProc = db.collection('settings_processes').orderBy('lastUsed', 'desc').limit(50).onSnapshot(snap => {
+                    setProcessLibrary(snap.docs.map(d => d.data()));
+                });
+
+                return () => { unsubEmp(); unsubRes(); unsubProc(); };
             }, []);
 
-            // Cargar datos si el modelo existe
-            const loadModel = async () => {
-                if(!modelo) return;
-                setStatus('loading');
+            // 2. Función: Cargar Modelo existente (Conexión con BD)
+            const loadModelData = async () => {
+                if (!modelo.trim()) return alert("Por favor escribe un modelo.");
+                setLoading(true);
                 try {
-                    const doc = await db.collection('model_templates').doc(modelo.toUpperCase()).get();
-                    if(doc.exists && doc.data().confection) {
-                        setProcesses(doc.data().confection);
-                        alert("Se cargó la confección existente para este modelo.");
-                    } else {
-                        // Si existe el modelo pero no confección, o no existe nada, empezamos limpio
-                        // No alertamos error para no molestar, solo permitimos trabajar
-                    }
-                    setStatus('ready');
-                } catch(e) { console.error(e); setStatus('ready'); }
-            };
+                    const docRef = db.collection('model_templates').doc(modelo.toUpperCase().trim());
+                    const docSnap = await docRef.get();
 
-            // --- FUNCIÓN CLAVE: AGREGAR RECURSO (+) ---
-            const handleAddResource = async (type) => {
-                const name = prompt(`Ingrese el nombre para la nueva ${type}:`);
-                if(name && name.trim()) {
-                    try {
-                        await db.collection('settings_resources').add({
-                            type: type,
-                            name: name.toUpperCase().trim()
-                        });
-                        // No necesitamos recargar, el onSnapshot actualiza la lista 'resources' automáticamente
-                    } catch(e) { alert("Error al guardar recurso"); }
+                    if (docSnap.exists) {
+                        const data = docSnap.data();
+                        if (data.confection && data.confection.length > 0) {
+                            setProcesses(data.confection);
+                            // Notificación sutil
+                            console.log("Datos de confección cargados.");
+                        } else {
+                            // Existe el modelo (quizá solo tejeduría) pero no confección
+                            setProcesses([{ descripcion: '', tipo: 'MAQUINA', recurso: '', operarios: [], precio: '' }]);
+                        }
+                    } else {
+                        // No existe nada, empezamos de cero
+                        if(confirm(`El modelo "${modelo.toUpperCase()}" no existe en la base de datos. ¿Deseas crearlo ahora?`)) {
+                            setProcesses([{ descripcion: '', tipo: 'MAQUINA', recurso: '', operarios: [], precio: '' }]);
+                        } else {
+                            setLoading(false);
+                            return;
+                        }
+                    }
+                    setIsLoaded(true);
+                } catch (error) {
+                    console.error("Error cargando:", error);
+                    alert("Error al conectar con la base de datos.");
+                } finally {
+                    setLoading(false);
                 }
             };
 
-            const handleDescChange = (idx, val) => {
-                const n = [...processes]; n[idx].descripcion = val.toUpperCase(); setProcesses(n);
-                // Autocompletado de Memoria
-                if(val.length > 1) {
-                    const found = processLibrary.filter(p => p.descripcion.includes(val.toUpperCase()));
-                    setSuggestions({index: idx, items: found});
-                } else setSuggestions({index: null, items: []});
+            // 3. Función: Agregar Nuevo Recurso (+)
+            const handleAddResource = async (currentType) => {
+                const newName = prompt(`INGRESAR NUEVA ${currentType}: \n(Ej: RECUBRIDORA-05, MESA DE CORTE 2)`);
+                if (newName && newName.trim()) {
+                    try {
+                        await db.collection('settings_resources').add({
+                            type: currentType,
+                            name: newName.toUpperCase().trim(),
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        alert(`¡${newName.toUpperCase()} guardada! Ya puedes seleccionarla.`);
+                    } catch (e) {
+                        alert("Error al guardar recurso: " + e.message);
+                    }
+                }
             };
 
-            const applySuggestion = (idx, item) => {
-                const n = [...processes];
-                n[idx] = { ...n[idx], descripcion: item.descripcion, tipo: item.tipo, recurso: item.recurso, precio: item.precio, operarios: item.operarios || [] };
-                setProcesses(n);
-                setSuggestions({index: null, items: []});
+            // 4. Lógica de Autocompletado (Memoria)
+            const handleDescriptionChange = (idx, value) => {
+                const newProcs = [...processes];
+                newProcs[idx].descripcion = value.toUpperCase();
+                setProcesses(newProcs);
+
+                if (value.length > 1) {
+                    const matches = processLibrary.filter(p => p.descripcion.includes(value.toUpperCase()));
+                    setSuggestions({ index: idx, items: matches });
+                } else {
+                    setSuggestions({ index: null, items: [] });
+                }
             };
 
-            const toggleOperario = (idx, name) => {
-                const n = [...processes];
-                const ops = n[idx].operarios || [];
-                if(ops.includes(name)) n[idx].operarios = ops.filter(o => o !== name);
-                else n[idx].operarios = [...ops, name];
-                setProcesses(n);
+            const selectSuggestion = (idx, suggestion) => {
+                const newProcs = [...processes];
+                newProcs[idx] = {
+                    ...newProcs[idx],
+                    descripcion: suggestion.descripcion,
+                    tipo: suggestion.tipo || 'MAQUINA',
+                    recurso: suggestion.recurso || '', // Intenta recordar la máquina usada
+                    precio: suggestion.precio || '',
+                    operarios: suggestion.operarios || [] // Recuerda quiénes lo hicieron
+                };
+                setProcesses(newProcs);
+                setSuggestions({ index: null, items: [] });
             };
 
-            const handleSave = async () => {
-                if(!modelo) return alert("Escribe el modelo para conectar los datos");
+            // 5. Lógica de Operarios Múltiples (Toggle)
+            const toggleOperario = (idx, empName) => {
+                const newProcs = [...processes];
+                const currentOps = newProcs[idx].operarios || [];
+                
+                if (currentOps.includes(empName)) {
+                    newProcs[idx].operarios = currentOps.filter(name => name !== empName);
+                } else {
+                    newProcs[idx].operarios = [...currentOps, empName];
+                }
+                setProcesses(newProcs);
+            };
+
+            // 6. Guardar Todo (Merge con Tejeduría)
+            const handleSaveAll = async () => {
+                if (!modelo) return;
+                setLoading(true);
                 try {
-                    // 1. Guardar en la ficha del modelo (MERGE para no borrar tejeduría)
+                    const cleanProcesses = processes.filter(p => p.descripcion.trim() !== "");
+
+                    // A. Guardar en la Ficha del Modelo (MERGE: TRUE es vital para no borrar tejeduría)
                     await db.collection('model_templates').doc(modelo.toUpperCase()).set({
-                        confection: processes,
+                        confection: cleanProcesses,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        // Nota: Si el documento no existe, crea uno nuevo. Si existe, solo actualiza/agrega 'confection'.
                     }, { merge: true });
 
-                    // 2. Guardar en Memoria de Procesos
+                    // B. Guardar en la Memoria (Settings Processes)
                     const batch = db.batch();
-                    processes.forEach(p => {
-                        if(p.descripcion) {
-                            const ref = db.collection('settings_processes').doc(p.descripcion.replace(/\//g,'-'));
-                            batch.set(ref, p, {merge: true});
-                        }
+                    cleanProcesses.forEach(proc => {
+                        // ID del documento = Descripción saneada (ej: PEGAR-CUELLO)
+                        const docId = proc.descripcion.trim().toUpperCase().replace(/\//g, '-').replace(/\s+/g, '-');
+                        const ref = db.collection('settings_processes').doc(docId);
+                        
+                        batch.set(ref, {
+                            descripcion: proc.descripcion,
+                            tipo: proc.tipo,
+                            recurso: proc.recurso,
+                            precio: proc.precio,
+                            operarios: proc.operarios, // Aprende quién sabe hacerlo
+                            lastUsed: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
                     });
                     await batch.commit();
 
-                    alert("Ruta de Confección Guardada y Conectada al Modelo");
-                    onBack();
-                } catch(e) { alert("Error: " + e.message); }
+                    alert("¡Ruta de Confección Guardada y Memorizada!");
+                    // Opcional: setIsLoaded(false); setModelo(''); para reiniciar
+                } catch (error) {
+                    console.error(error);
+                    alert("Error al guardar: " + error.message);
+                } finally {
+                    setLoading(false);
+                }
             };
 
-            const inputClass = "w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-pink-500 outline-none uppercase font-bold";
+            // --- RENDERIZADO ---
+            if (!isLoaded) {
+                return (
+                    <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-900">
+                        <div className="w-full max-w-md glass-panel p-8 rounded-2xl shadow-2xl border-t-4 border-pink-500 fade-in text-center">
+                            <div className="mb-6 flex justify-center text-pink-500"><Icon name="scissors" size={48}/></div>
+                            <h1 className="text-2xl font-black text-white mb-2">MÓDULO DE CONFECCIÓN</h1>
+                            <p className="text-slate-400 text-sm mb-6">Ingresa el modelo para cargar o crear su ruta de costura.</p>
+                            
+                            <div className="flex gap-2">
+                                <input 
+                                    value={modelo} 
+                                    onChange={e => setModelo(e.target.value.toUpperCase())} 
+                                    onKeyDown={e => e.key === 'Enter' && loadModelData()}
+                                    className="input-dark text-center text-lg" 
+                                    placeholder="EJ: MODELO-2024"
+                                    autoFocus
+                                />
+                                <button onClick={loadModelData} disabled={loading} className="bg-pink-600 hover:bg-pink-500 text-white p-3 rounded-lg shadow-lg disabled:opacity-50 transition-colors">
+                                    {loading ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="arrow-right"/>}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
 
             return (
-                <div className="min-h-screen bg-slate-900 p-4 fade-in">
-                    <div className="max-w-6xl mx-auto space-y-6 pb-20">
-                         {/* Header Módulo */}
-                         <div className="flex items-center justify-between bg-slate-800 p-4 rounded-lg border border-slate-700">
-                            <h2 className="text-xl font-bold text-pink-400 flex items-center gap-2"><Icon name="scissors"/> MÓDULO CONFECCIÓN</h2>
-                            <button onClick={onBack} className="text-slate-400 hover:text-white px-3 py-1 bg-slate-700 rounded text-xs font-bold">VOLVER AL MENÚ</button>
-                        </div>
-
-                        {/* Conexión Modelo */}
-                        <div className="card">
-                            <label className="text-xs text-slate-500 font-bold block mb-1">CONECTAR CON MODELO</label>
-                            <div className="flex gap-2">
-                                <input value={modelo} onChange={e=>setModelo(e.target.value.toUpperCase())} className={inputClass} placeholder="INGRESA EL MODELO EXACTO (EJ: POLO-2025)"/>
-                                <button onClick={loadModel} className="bg-pink-600 text-white px-4 rounded font-bold text-xs">CARGAR DATOS</button>
+                <div className="min-h-screen bg-slate-900 pb-20 fade-in">
+                    {/* Header Sticky */}
+                    <div className="sticky top-0 z-20 bg-slate-900/90 backdrop-blur border-b border-pink-900/30 px-4 py-3 shadow-lg flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                            <button onClick={() => setIsLoaded(false)} className="text-slate-400 hover:text-white"><Icon name="arrow-left"/></button>
+                            <div>
+                                <h1 className="text-lg font-bold text-white flex gap-2 items-center"><span className="text-pink-500"><Icon name="shirt"/></span> {modelo}</h1>
+                                <p className="text-[10px] text-pink-400 font-bold uppercase tracking-wider">Modo Confección</p>
                             </div>
-                            <p className="text-[10px] text-slate-500 mt-2">* Si el modelo ya tiene tejeduría creada, esto se anexará a su ficha. Si ya tiene costura, se cargarán los datos para editar.</p>
+                        </div>
+                        <button onClick={handleSaveAll} disabled={loading} className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg shadow-pink-900/20 flex items-center gap-2 transition-transform active:scale-95">
+                            {loading ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="save"/>} 
+                            <span className="hidden md:inline">GUARDAR FICHA</span>
+                        </button>
+                    </div>
+
+                    <div className="max-w-5xl mx-auto p-4 space-y-6">
+                        {/* Botón Agregar Proceso */}
+                        <div className="flex justify-between items-end">
+                            <h2 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Secuencia de Operaciones</h2>
+                            <button 
+                                onClick={() => setProcesses([...processes, { descripcion: '', tipo: 'MAQUINA', recurso: '', operarios: [], precio: '' }])}
+                                className="text-xs bg-slate-800 hover:bg-slate-700 text-pink-400 border border-pink-900/50 px-4 py-2 rounded-lg font-bold transition flex items-center gap-2"
+                            >
+                                <Icon name="plus" size={14}/> AGREGAR OPERACIÓN
+                            </button>
                         </div>
 
-                        {/* Tabla Procesos */}
-                        <div className="card space-y-4">
-                             <div className="flex justify-between items-center border-b border-slate-700 pb-2"><h3 className="font-bold text-slate-300 text-sm">RUTA DE OPERACIONES</h3><button onClick={()=>setProcesses([...processes, {descripcion:'', tipo:'MAQUINA', recurso:'', operarios:[], precio:''}])} className="bg-pink-600 text-white px-2 py-1 rounded text-xs">+ Operación</button></div>
-                             
-                             {processes.map((p, i) => (
-                                 <div key={i} className="bg-slate-900/40 p-3 rounded border border-slate-700 hover:border-pink-500/50 transition">
-                                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
-                                        {/* Descripción Autocomplete */}
-                                        <div className="md:col-span-4 relative">
-                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">DESCRIPCIÓN</label>
-                                            <input value={p.descripcion} onChange={e=>handleDescChange(i, e.target.value)} className={inputClass} placeholder="EJ: PEGAR CUELLO"/>
-                                            {suggestions.index === i && suggestions.items.length > 0 && (
-                                                <div className="absolute z-10 w-full bg-slate-800 border border-slate-600 mt-1 max-h-40 overflow-y-auto rounded shadow-xl">
-                                                    {suggestions.items.map((sug, k) => (
-                                                        <div key={k} onClick={()=>applySuggestion(i, sug)} className="p-2 hover:bg-pink-900/30 cursor-pointer border-b border-slate-700 text-xs">
-                                                            <div className="text-white font-bold">{sug.descripcion}</div>
-                                                            <div className="text-[9px] text-slate-400">{sug.tipo} - {sug.recurso}</div>
+                        {/* LISTA DE PROCESOS */}
+                        <div className="space-y-4">
+                            {processes.map((proc, idx) => (
+                                <div key={idx} className="glass-panel p-4 rounded-xl relative group hover:border-pink-500/30 transition-colors">
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+                                        
+                                        {/* 1. Descripción + Autocomplete */}
+                                        <div className="md:col-span-5 relative z-10">
+                                            <label className="text-[10px] text-slate-500 font-bold mb-1 block">DESCRIPCIÓN DEL PROCESO</label>
+                                            <div className="relative">
+                                                <input 
+                                                    value={proc.descripcion} 
+                                                    onChange={e => handleDescriptionChange(idx, e.target.value)}
+                                                    className="input-dark pl-9" 
+                                                    placeholder="Ej: CERRAR COSTADOS"
+                                                />
+                                                <div className="absolute left-3 top-2.5 text-slate-500"><Icon name="search" size={14}/></div>
+                                            </div>
+                                            
+                                            {/* Sugerencias Flotantes */}
+                                            {suggestions.index === idx && suggestions.items.length > 0 && (
+                                                <div className="absolute top-full left-0 w-full bg-slate-800 border border-slate-600 rounded-lg shadow-2xl mt-1 max-h-48 overflow-y-auto z-50">
+                                                    {suggestions.items.map((item, i) => (
+                                                        <div key={i} onClick={() => selectSuggestion(idx, item)} className="p-3 border-b border-slate-700 hover:bg-pink-900/20 cursor-pointer flex justify-between items-center group">
+                                                            <div>
+                                                                <div className="text-xs font-bold text-white">{item.descripcion}</div>
+                                                                <div className="text-[10px] text-slate-400">{item.tipo} {item.recurso ? `• ${item.recurso}` : ''}</div>
+                                                            </div>
+                                                            <div className="text-xs font-mono text-pink-400 font-bold">${item.precio}</div>
                                                         </div>
                                                     ))}
                                                 </div>
                                             )}
                                         </div>
 
-                                        {/* Tipo */}
+                                        {/* 2. Categoría */}
                                         <div className="md:col-span-2">
-                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">TIPO</label>
-                                            <select value={p.tipo} onChange={e=>{const n=[...processes]; n[i].tipo=e.target.value; n[i].recurso=''; setProcesses(n)}} className={inputClass}>
+                                            <label className="text-[10px] text-slate-500 font-bold mb-1 block">TIPO</label>
+                                            <select 
+                                                value={proc.tipo} 
+                                                onChange={e => {
+                                                    const n = [...processes]; 
+                                                    n[idx].tipo = e.target.value; 
+                                                    n[idx].recurso = ''; // Reset recurso al cambiar tipo
+                                                    setProcesses(n);
+                                                }} 
+                                                className="input-dark cursor-pointer"
+                                            >
                                                 <option value="MAQUINA">MÁQUINA</option>
                                                 <option value="MANUAL">MANUAL</option>
                                                 <option value="PLANCHA">PLANCHA</option>
+                                                <option value="CORTADOR">CORTADOR</option>
                                                 <option value="OTROS">OTROS</option>
                                             </select>
                                         </div>
 
-                                        {/* Recurso con Botón + */}
+                                        {/* 3. Recurso + Botón ADD */}
                                         <div className="md:col-span-3">
-                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">RECURSO / MÁQUINA</label>
-                                            <div className="flex gap-1">
-                                                <select value={p.recurso} onChange={e=>{const n=[...processes]; n[i].recurso=e.target.value; setProcesses(n)}} className={`${inputClass} text-cyan-400`}>
-                                                    <option value="">-- SELECCIONAR --</option>
-                                                    {resources.filter(r => r.type === p.tipo).map((r, k) => <option key={k} value={r.name}>{r.name}</option>)}
+                                            <label className="text-[10px] text-slate-500 font-bold mb-1 block">RECURSO ESPECÍFICO</label>
+                                            <div className="flex gap-1 h-[38px]">
+                                                <select 
+                                                    value={proc.recurso} 
+                                                    onChange={e => {
+                                                        const n = [...processes]; n[idx].recurso = e.target.value; setProcesses(n);
+                                                    }}
+                                                    className="input-dark text-cyan-400 border-cyan-900/30 h-full"
+                                                >
+                                                    <option value="">-- GENERAL --</option>
+                                                    {resources.filter(r => r.type === proc.tipo).map(r => (
+                                                        <option key={r.id} value={r.name}>{r.name}</option>
+                                                    ))}
                                                 </select>
-                                                {/* Botón Mágico + */}
-                                                <button onClick={() => handleAddResource(p.tipo)} className="bg-slate-700 hover:bg-cyan-600 text-white px-2 rounded border border-slate-600 transition" title="Agregar nuevo a la lista">+</button>
+                                                <button 
+                                                    onClick={() => handleAddResource(proc.tipo)}
+                                                    className="bg-slate-800 hover:bg-cyan-600 text-cyan-400 hover:text-white border border-cyan-900/30 px-3 rounded-md transition-colors"
+                                                    title="Crear nuevo recurso en base de datos"
+                                                >
+                                                    <Icon name="plus" size={16}/>
+                                                </button>
                                             </div>
                                         </div>
 
-                                        {/* Precio */}
-                                        <div className="md:col-span-2">
-                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">PRECIO</label>
-                                            <input type="number" value={p.precio} onChange={e=>{const n=[...processes]; n[i].precio=e.target.value; setProcesses(n)}} className={`${inputClass} text-right text-pink-400`} placeholder="$"/>
+                                        {/* 4. Precio */}
+                                        <div className="md:col-span-2 relative">
+                                            <label className="text-[10px] text-slate-500 font-bold mb-1 block">PRECIO</label>
+                                            <input 
+                                                type="number" 
+                                                value={proc.precio} 
+                                                onChange={e => {const n=[...processes]; n[idx].precio=e.target.value; setProcesses(n);}}
+                                                className="input-dark text-right text-pink-400 font-mono pr-2" 
+                                                placeholder="0.00"
+                                            />
+                                            <span className="absolute top-[28px] left-2 text-pink-900 text-xs">$</span>
                                         </div>
+                                    </div>
 
-                                        <div className="md:col-span-1 flex items-end justify-center">
-                                            <button onClick={()=>setProcesses(processes.filter((_,idx)=>idx!==i))} className="text-slate-500 hover:text-red-400 mb-2"><Icon name="trash-2"/></button>
+                                    {/* 5. SELECCIÓN DE OPERARIOS (Multi-Select) */}
+                                    <div className="bg-slate-950/50 p-3 rounded-lg border border-slate-800">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Operarios Capaces ({proc.operarios?.length || 0})</label>
+                                            <button onClick={() => setProcesses(processes.filter((_, i) => i !== idx))} className="text-red-900 hover:text-red-500 transition"><Icon name="trash-2" size={14}/></button>
                                         </div>
-                                     </div>
+                                        
+                                        <div className="flex flex-wrap gap-2">
+                                            {employees.map(emp => {
+                                                const isSelected = (proc.operarios || []).includes(emp.fullName);
+                                                return (
+                                                    <button 
+                                                        key={emp.id}
+                                                        onClick={() => toggleOperario(idx, emp.fullName)}
+                                                        className={`
+                                                            tag-btn flex items-center gap-1
+                                                            ${isSelected 
+                                                                ? 'bg-pink-600 border-pink-500 text-white shadow-lg shadow-pink-900/50' 
+                                                                : 'bg-slate-900 border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'}
+                                                        `}
+                                                    >
+                                                        {isSelected && <Icon name="check" size={10}/>}
+                                                        {emp.firstName}
+                                                    </button>
+                                                )
+                                            })}
+                                            {employees.length === 0 && <span className="text-[10px] text-slate-600 italic">No hay empleados activos en el sistema.</span>}
+                                        </div>
+                                    </div>
 
-                                     {/* Operarios Multiselect */}
-                                     <div className="bg-slate-950 p-2 rounded border border-slate-800">
-                                         <label className="text-[9px] font-bold text-slate-500 block mb-1 uppercase">Operarios Capaces</label>
-                                         <div className="flex flex-wrap gap-2">
-                                            {employees.map(emp => (
-                                                <button key={emp.id} onClick={()=>toggleOperario(i, emp.fullName)} 
-                                                    className={`text-[9px] px-2 py-1 rounded border transition ${ (p.operarios||[]).includes(emp.fullName) ? 'bg-pink-600 border-pink-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500' }`}>
-                                                    {emp.firstName}
-                                                </button>
-                                            ))}
-                                         </div>
-                                     </div>
-                                 </div>
-                             ))}
+                                </div>
+                            ))}
                         </div>
 
-                        <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-800 border-t border-slate-700 flex justify-end">
-                            <button onClick={handleSave} className="bg-gradient-to-r from-pink-600 to-rose-600 text-white px-6 py-2 rounded font-bold shadow-lg flex items-center gap-2"><Icon name="save"/> GUARDAR RUTA DE CONFECCIÓN</button>
-                        </div>
+                        {/* Estado Vacío */}
+                        {processes.length === 0 && (
+                            <div className="text-center py-10 opacity-50">
+                                <Icon name="scissors" size={48} className="mx-auto mb-2 text-slate-600"/>
+                                <p className="text-slate-500">No hay procesos definidos para este modelo aún.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             );
         };
 
-        const App = () => {
-            const [view, setView] = useState('HOME'); // HOME, KNITTING, CONFECTION
-
-            return (
-                <div>
-                    {view === 'HOME' && <MainMenu onNavigate={setView} />}
-                    {view === 'KNITTING' && <KnittingModule onBack={() => setView('HOME')} />}
-                    {view === 'CONFECTION' && <ConfectionModule onBack={() => setView('HOME')} />}
-                </div>
-            );
-        };
-
+        const App = () => <ConfectionManager />;
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
