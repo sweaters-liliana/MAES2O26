@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sistema Textil Cloud - Cirineo Pro v5.1</title>
+    
+    <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
+    <meta name="theme-color" content="#1e293b">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#172033' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* --- ESTILOS GENERALES Y UTILIDADES --- */
+        body { -webkit-tap-highlight-color: transparent; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+
+        /* --- ESTILOS DE IMPRESIÓN (BÁSICOS PARA ESTA VISTA) --- */
+        @media print {
+            body, html, #root { 
+                background: white; -webkit-print-color-adjust: exact; width: 100%; height: 100%; margin: 0; padding: 0;
+            }
+            .no-print, .main-layout-container { display: none !important; }
+        }
+        
+        /* Contenedores Principales */
+        .main-layout-container { display: flex; flex-direction: column; height: 100vh; overflow: hidden; background-color: #f1f5f9; }
+        .top-pane { flex-grow: 1; overflow-y: auto; padding: 1rem; }
+        
+        /* Inputs Modales */
+        .modal-input { @apply w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm p-2 border; transition: all 0.2s; }
+        .modal-input:focus { @apply border-indigo-500 ring-1 ring-indigo-500; }
+        .modal-label { @apply block text-xs font-bold text-slate-600 mb-1 tracking-wide uppercase; }
+
+        /* Animaciones */
+        .chat-bubble { animation: popIn 0.3s ease-out forwards; opacity: 0; transform: translateY(10px); }
+        @keyframes popIn { to { opacity: 1; transform: translateY(0); } }
+        .modal-enter { animation: modalSlideUp 0.3s ease-out forwards; }
+        @keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+        
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const Icon = ({ name, size = 18, className }) => <i data-lucide={name} width={size} height={size} className={className}></i>;
+        
+        const generateSmartID = (partida, pieces, maquina) => {
+            const piecePrefixes = pieces.map(p => p.pieza.substring(0, 2).toUpperCase()).join('/');
+            return `${partida}-${piecePrefixes}-M${maquina}`;
+        };
+
+        const useBarcodeScanner = (onScan) => {
+            useEffect(() => {
+                let buffer = '';
+                let lastKeyTime = Date.now();
+                const handleKeyDown = (e) => {
+                    const target = e.target;
+                    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+                    const char = e.key;
+                    const currentTime = Date.now();
+                    if (currentTime - lastKeyTime > 100) buffer = '';
+                    lastKeyTime = currentTime;
+                    if (char === 'Enter') {
+                        if (buffer.length > 5) onScan(buffer);
+                        buffer = '';
+                    } else if (char.length === 1) buffer += char;
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [onScan]);
+        };
+
+        // --- COMPONENTE DE INPUT DE TIEMPO (MM:SS) ---
+        const TimeInput = ({ value, onChange, disabled }) => {
+            const [mins, setMins] = useState('');
+            const [secs, setSecs] = useState('');
+
+            useEffect(() => {
+                if (value === undefined || value === '' || value === null) {
+                    setMins(''); setSecs('');
+                } else {
+                    const totalMins = parseFloat(value);
+                    const m = Math.floor(totalMins);
+                    const s = Math.round((totalMins - m) * 60);
+                    setMins(m.toString());
+                    setSecs(s < 10 ? '0' + s : s.toString());
+                }
+            }, [value]);
+
+            const handleChange = (newM, newS) => {
+                const m = parseInt(newM) || 0;
+                const s = parseInt(newS) || 0;
+                const decimalValue = (m + (s / 60)).toFixed(4);
+                onChange(decimalValue);
+            };
+
+            return (
+                <div className="flex items-center gap-1 bg-white border border-gray-300 rounded-md shadow-sm p-0.5 focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500">
+                    <input type="number" value={mins} placeholder="00" disabled={disabled} onChange={(e) => { setMins(e.target.value); handleChange(e.target.value, secs); }} className={`w-8 text-center p-1 text-sm font-mono outline-none rounded-l-md ${disabled ? 'bg-gray-50' : 'bg-transparent'}`} />
+                    <span className="font-bold text-gray-400 text-xs">:</span>
+                    <input type="number" value={secs} placeholder="00" max="59" disabled={disabled} onChange={(e) => { setSecs(e.target.value); handleChange(mins, e.target.value); }} className={`w-8 text-center p-1 text-sm font-mono outline-none rounded-r-md ${disabled ? 'bg-gray-50' : 'bg-transparent'}`} />
+                </div>
+            );
+        };
+
+        // --- DRAFT EDITOR (Para el staging area) ---
+        const DraftEditor = ({ draft, onSave, onCancel }) => {
+            const [localDraft, setLocalDraft] = useState(draft);
+            const [inventory, setInventory] = useState([]);
+            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+            useEffect(() => {
+                const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => { if (doc.exists && doc.data().items) setInventory(doc.data().items); });
+                return () => unsubscribe();
+            }, []);
+            const addThread = () => setLocalDraft({ ...localDraft, threading: [...(localDraft.threading || []), { guia: (localDraft.threading?.length || 0) + 1, material: '', porcentaje: '', materialId: null }] });
+            const removeThread = (idx) => setLocalDraft({ ...localDraft, threading: localDraft.threading.filter((_, i) => i !== idx) });
+            const updateThread = (idx, field, val) => { const newThreads = [...localDraft.threading]; newThreads[idx] = { ...newThreads[idx], [field]: val }; setLocalDraft({ ...localDraft, threading: newThreads }); };
+            const handleMaterialInput = (idx, val) => { updateThread(idx, 'material', val); if (val.length > 1) { const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase())); setSuggestions({ index: idx, items: filtered }); } else { setSuggestions({ index: null, items: [] }); } };
+            const selectSuggestion = (idx, item) => { const newThreads = [...localDraft.threading]; newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id, stockDisponible: item.stock || '0' }; setLocalDraft({ ...localDraft, threading: newThreads }); setSuggestions({ index: null, items: [] }); };
+            const calculateConsumption = (hilo) => { if (!hilo.materialId || !hilo.porcentaje) return 0; const totalGramos = localDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0); return ((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2); };
+            const updatePiece = (idx, field, val) => { const newPieces = [...localDraft.subPiecesData]; newPieces[idx] = { ...newPieces[idx], [field]: val }; setLocalDraft({ ...localDraft, subPiecesData: newPieces }); };
+            
+            return (
+                <div className="flex flex-col h-full bg-slate-50">
+                    <div className="bg-indigo-700 p-4 text-white flex justify-between items-center shrink-0 shadow-md"><h2 className="font-bold text-lg flex items-center"><Icon name="edit-3" className="inline mr-2"/> Editando Orden Máquina {localDraft.maquina}</h2></div>
+                    <div className="p-4 sm:p-6 overflow-y-auto flex-grow space-y-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-white p-4 rounded-lg border shadow-sm">
+                            <div><label className="modal-label">Máquina</label><input type="number" value={localDraft.maquina} onChange={e=>setLocalDraft({...localDraft, maquina: e.target.value})} className="modal-input font-black text-xl text-center bg-indigo-50 border-indigo-200 text-indigo-800"/></div>
+                            <div><label className="modal-label">Cliente</label><input value={localDraft.cliente} disabled className="modal-input bg-gray-100 text-gray-500 cursor-not-allowed"/></div>
+                             <div><label className="modal-label">Partida</label><input value={localDraft.partida} disabled className="modal-input bg-gray-100 text-gray-500 cursor-not-allowed"/></div>
+                        </div>
+                        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                            <div className="flex justify-between items-center p-3 bg-slate-50 border-b"><h3 className="font-bold text-sm text-slate-700 flex items-center gap-2"><Icon name="spool" size={16}/> Enhebrado e Inventario</h3><button onClick={addThread} className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-bold hover:bg-indigo-200 transition flex items-center gap-1"><Icon name="plus" size={12}/> Hilo</button></div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs text-left">
+                                    <thead className="bg-slate-100 text-slate-600 uppercase tracking-wider"><tr><th className="p-2 w-12 text-center">Guía</th><th className="p-2">Material</th><th className="p-2 w-20 text-center">%</th><th className="p-2 w-28 text-center">Consumo</th><th className="p-2 w-10"></th></tr></thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                        {(localDraft.threading || []).map((h, i) => (
+                                            <tr key={i} className="relative bg-white">
+                                                <td className="p-1"><input value={h.guia} onChange={e=>updateThread(i,'guia',e.target.value)} className="w-full text-center font-bold bg-transparent outline-none"/></td>
+                                                <td className="p-1 relative"><input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="modal-input" placeholder="Buscar material..."/>{suggestions.index === i && suggestions.items.length > 0 && (<div className="absolute z-50 bg-white border shadow-xl w-full max-w-md max-h-48 overflow-y-auto left-0 mt-1 rounded-md">{suggestions.items.map(item => (<div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-2 hover:bg-indigo-50 cursor-pointer border-b last:border-b-0 flex justify-between items-center group"><div><span className="font-bold text-slate-700 group-hover:text-indigo-700 transition">{item.material}</span><span className="text-slate-500 ml-1 text-[11px]">- {item.color}</span></div><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${parseFloat(item.stock) > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>Stock: {item.stock || 0}kg</span></div>))}</div>)}</td>
+                                                <td className="p-1"><input value={h.porcentaje} onChange={e=>updateThread(i,'porcentaje',e.target.value)} className="modal-input text-center" placeholder="%"/></td>
+                                                <td className="p-1 text-center font-bold text-red-600 bg-red-50">{calculateConsumption(h)} Kg</td>
+                                                <td className="p-1 text-center"><button onClick={()=>removeThread(i)} className="text-slate-400 hover:text-red-500 transition p-1"><Icon name="trash-2" size={16}/></button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-sm text-slate-700 mb-3 flex items-center gap-2"><Icon name="puzzle" size={16}/> Detalles Técnicos (Piezas)</h3>
+                            <div className="space-y-3">
+                            {localDraft.subPiecesData.map((p, idx) => (
+                                <div key={idx} className="bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                                    <div className="font-black text-indigo-800 mb-3 pb-2 border-b text-base flex items-center gap-2"><Icon name="shirt" size={16}/> {p.pieza}</div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
+                                        <div><label className="modal-label text-blue-600">Talla</label><input value={p.talla} onChange={e=>updatePiece(idx,'talla',e.target.value)} className="modal-input font-bold text-blue-700 text-center uppercase"/></div>
+                                         <div><label className="modal-label text-orange-600">Peso (g)</label><input type="number" value={p.peso} onChange={e=>updatePiece(idx,'peso',e.target.value)} className="modal-input text-center border-orange-200 focus:border-orange-500 focus:ring-orange-500" placeholder="0.0"/></div>
+                                         <div>
+                                            <label className="modal-label text-orange-600">Tiempo (M:S)</label>
+                                            <TimeInput value={p.tiempo} onChange={val => updatePiece(idx, 'tiempo', val)} />
+                                        </div>
+                                        <div><label className="modal-label">Cant. Total</label><input value={p.totalPedido} disabled className="modal-input bg-slate-100 text-slate-600 font-bold text-center cursor-not-allowed"/></div>
+                                    </div>
+                                </div>
+                            ))}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-4 bg-white border-t flex justify-end gap-3 shrink-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+                        <button onClick={onCancel} className="px-4 py-2 rounded-md text-slate-700 font-bold hover:bg-slate-100 border border-slate-300 transition">Cancelar</button>
+                        <button onClick={() => onSave(localDraft)} className="px-6 py-2 rounded-md bg-green-600 text-white font-bold hover:bg-green-700 shadow-md flex items-center gap-2 transition-transform active:scale-95"><Icon name="check-circle" size={20}/> CONFIRMAR ORDEN</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ASISTENTE INTELIGENTE (CHATBOT) ---
+        const ModelAssistant = ({ onApply, onClose }) => {
+            const [query, setQuery] = useState('');
+            const [messages, setMessages] = useState([{ role: 'bot', text: 'Hola 👋, soy el asistente de Cirineo. Escribe un modelo y buscaré en mi memoria para ayudarte.' }]);
+            const [foundTemplate, setFoundTemplate] = useState(null);
+            const [loading, setLoading] = useState(false);
+            const inputRef = useRef(null);
+
+            useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+            const searchModel = async () => {
+                if(!query.trim()) return;
+                const searchQuery = query.toUpperCase().trim();
+                setLoading(true);
+                setMessages(prev => [...prev, { role: 'user', text: searchQuery }]);
+                setQuery('');
+                
+                try {
+                    const doc = await db.collection('model_templates').doc(searchQuery).get();
+                    if(doc.exists) {
+                        const data = doc.data();
+                        setFoundTemplate(data);
+                        setMessages(prev => [...prev, { role: 'bot', text: `¡Encontré el modelo **${data.modelo}**! Cliente: ${data.cliente}. Tiene receta de hilos y ${data.components.length} componentes. ¿Aplicar todo?` }]);
+                    } else {
+                        setMessages(prev => [...prev, { role: 'bot', text: `No encontré una plantilla exacta para "${searchQuery}". Asegúrate de que la plantilla exista.` }]);
+                        setFoundTemplate(null);
+                    }
+                } catch(e) {
+                    console.error(e);
+                    setMessages(prev => [...prev, { role: 'bot', text: 'Tuve un error de conexión al buscar en la base de datos.' }]);
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="absolute top-full mt-2 left-0 z-50 w-80 md:w-96 bg-white rounded-xl shadow-2xl border border-indigo-100 flex flex-col overflow-hidden modal-enter" style={{height: '450px', maxHeight: '60vh'}}>
+                    <div className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white p-3 text-sm font-bold flex justify-between items-center shadow-sm">
+                        <span className="flex items-center gap-2"><Icon name="bot" size={18}/> Asistente de Producción IA</span>
+                        <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full transition"><Icon name="x" size={16}/></button>
+                    </div>
+                    <div className="flex-grow p-3 overflow-y-auto bg-slate-50 space-y-3 scroll-smooth">
+                        {messages.map((m, i) => (
+                            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                <div className={`max-w-[85%] p-3 rounded-2xl text-xs chat-bubble shadow-sm ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-white border border-slate-100 text-slate-700 rounded-bl-none'}`}>
+                                    <React.Fragment>{m.text.split('**').map((part, idx) => idx % 2 === 1 ? <strong key={idx}>{part}</strong> : part)}</React.Fragment>
+                                </div>
+                            </div>
+                        ))}
+                        {loading && <div className="flex justify-start"><div className="bg-white border border-slate-100 p-3 rounded-2xl rounded-bl-none text-xs text-slate-500 flex items-center gap-2 chat-bubble shadow-sm"><Icon name="loader-2" className="animate-spin" size={14}/> Buscando en memoria...</div></div>}
+                        <div ref={useRef(el => el?.scrollIntoView({behavior: "smooth"}))} />
+                    </div>
+                    {foundTemplate && (
+                        <div className="p-3 bg-green-50 border-t border-green-100 animate-pulse">
+                            <button onClick={() => onApply(foundTemplate)} className="w-full bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm font-bold shadow-md transition-transform active:scale-95 flex items-center justify-center gap-2"><Icon name="wand-2" size={16}/> APLICAR DATOS COMPLETOS</button>
+                        </div>
+                    )}
+                    <div className="p-3 border-t bg-white flex gap-2">
+                        <input ref={inputRef} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter' && searchModel()} className="flex-grow border-gray-300 rounded-lg p-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none transition" placeholder="Escribe el modelo a buscar..." />
+                        <button onClick={searchModel} disabled={loading || !query.trim()} className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white p-2 rounded-lg shadow-sm transition flex items-center justify-center w-10"><Icon name="send" size={18}/></button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- ORDER GENERATOR (CON TALLA MANUAL Y AUTOMÁTICA) ---
+        const OrderGeneratorModal = ({ onClose, onProcess }) => {
+            const [step, setStep] = useState('input');
+            const [drafts, setDrafts] = useState([]);
+            const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
+            const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: '' });
+            
+            const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+            const [templateThreading, setTemplateThreading] = useState([]);
+            const [showAssistant, setShowAssistant] = useState(false);
+
+            useEffect(() => {
+                if (!form.fecha) return;
+                const fechaObj = new Date(form.fecha + 'T00:00:00');
+                const meses = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+                const mes = meses[fechaObj.getMonth()];
+                const year = fechaObj.getFullYear().toString().slice(-2);
+                setForm(prev => ({ ...prev, partidaCodigo: `${mes}${year}_01` }));
+            }, [form.fecha]);
+
+            const handleApplyTemplate = (templateData) => {
+                setForm(prev => ({ ...prev, modelo: templateData.modelo, cliente: templateData.cliente }));
+                setComponents(templateData.components || []);
+                if(templateData.threading) setTemplateThreading(templateData.threading);
+                setShowAssistant(false);
+            };
+
+            const handleGenerateDrafts = () => {
+                if (!form.partidaCodigo || !form.cliente || !form.modelo || !form.totalPrendas) return alert("Por favor completa todos los datos generales y la cantidad total.");
+                const totalPrendasNum = Number(form.totalPrendas);
+                if (isNaN(totalPrendasNum) || totalPrendasNum <= 0) return alert("La cantidad total debe ser un número mayor a 0.");
+
+                const ordersByMachine = {};
+                let hasValidComponent = false;
+                
+                components.forEach(comp => {
+                    if(!comp.descripcion || !comp.maquina) return;
+                    hasValidComponent = true;
+                    const maquinaKey = String(comp.maquina);
+                    
+                    if (!ordersByMachine[maquinaKey]) {
+                        const initialThreading = templateThreading.length > 0 
+                            ? templateThreading.map(t => ({...t})) // Deep copy simple
+                            : [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }];
+
+                        ordersByMachine[maquinaKey] = {
+                            codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(), maquina: maquinaKey, partida: form.partidaCodigo.toUpperCase(),
+                            subPiecesData: [], predefinedPackages: [], createdAt: new Date().toLocaleString('es-MX'),
+                            threading: initialThreading
+                        };
+                    }
+                    
+                    const totalPiezasComp = totalPrendasNum * comp.multiplicador;
+                    
+                    ordersByMachine[maquinaKey].subPiecesData.push({ 
+                        id: Date.now() + Math.random(), 
+                        pieza: comp.descripcion.toUpperCase(), 
+                        talla: comp.talla || 'UNI', 
+                        totalPedido: totalPiezasComp, 
+                        peso: comp.peso || '', 
+                        tiempo: comp.tiempo || '' 
+                    });
+                    
+                    const numPaquetes = comp.piezasPorPaquete > 0 ? Math.ceil(totalPiezasComp / comp.piezasPorPaquete) : 0;
+                    for (let i = 1; i <= numPaquetes; i++) {
+                        const cantidad = (i === numPaquetes && totalPiezasComp % comp.piezasPorPaquete !== 0) ? totalPiezasComp % comp.piezasPorPaquete : comp.piezasPorPaquete;
+                        ordersByMachine[maquinaKey].predefinedPackages.push({
+                            id: Date.now() + Math.random() + i, piezaNombre: comp.descripcion.toUpperCase(), cantidad: cantidad, paqueteNum: i, paquetesDePieza: numPaquetes,
+                            codigoUnico: `${form.partidaCodigo}${comp.sufijo}_${i}_${numPaquetes}`, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''
+                        });
+                    }
+                });
+                
+                if(!hasValidComponent) return alert("Agrega al menos un componente válido con descripción y máquina.");
+                setDrafts(Object.values(ordersByMachine));
+                setStep('staging');
+            };
+            
+            const removeDraft = (indexToRemove) => {
+                if(window.confirm("¿Estás seguro de eliminar este borrador de orden?")) {
+                    setDrafts(drafts.filter((_, i) => i !== indexToRemove));
+                }
+            };
+
+            const handleSaveOne = async (finalDraft) => {
+                try {
+                    const invDoc = await db.collection('inventory').doc('main').get();
+                    let currentItems = invDoc.exists && invDoc.data().items ? invDoc.data().items : [];
+                    const batch = db.batch();
+                    const newId = String(Date.now() + Math.random());
+                    const orderRef = db.collection('orders').doc(newId);
+                    const displayId = generateSmartID(finalDraft.partida, finalDraft.subPiecesData, finalDraft.maquina);
+                    batch.set(orderRef, { ...finalDraft, id: Number(newId), displayId: displayId, progreso: finalDraft.predefinedPackages, status: 'EN PROCESO', totalPedido: finalDraft.subPiecesData.reduce((a,b)=>a+Number(b.totalPedido),0) });
+                    const totalGramos = finalDraft.subPiecesData.reduce((acc, p) => acc + (Number(p.peso || 0) * Number(p.totalPedido || 0)), 0);
+                    (finalDraft.threading || []).forEach(hilo => {
+                        if (hilo.materialId) {
+                            const cantADescontar = Number(((totalGramos * (Number(hilo.porcentaje) / 100)) / 1000).toFixed(2));
+                            const itemIndex = currentItems.findIndex(i => i.id === hilo.materialId);
+                            if(itemIndex !== -1) {
+                                currentItems[itemIndex].stock = (parseFloat(currentItems[itemIndex].stock || 0) - cantADescontar).toFixed(2);
+                                const moveRef = db.collection('inventory_movements').doc();
+                                batch.set(moveRef, { materialId: hilo.materialId, type: 'SALIDA_ORDEN', quantityKg: cantADescontar, orderId: displayId, model: finalDraft.codigo, partida: finalDraft.partida, timestamp: firebase.firestore.FieldValue.serverTimestamp(), note: `Consumo automático` });
+                            }
+                        }
+                    });
+                    batch.set(db.collection('inventory').doc('main'), { items: currentItems });
+                    await batch.commit();
+                    const remaining = drafts.filter((_, i) => i !== currentDraftIndex);
+                    setDrafts(remaining); setStep('staging'); setCurrentDraftIndex(null);
+                    if (remaining.length === 0) { alert("¡Todas las órdenes han sido creadas exitosamente!"); onProcess(); }
+                } catch (e) { console.error("Error save:", e); alert("Error al guardar la orden en Firebase."); }
+            };
+
+            if (step === 'editing' && currentDraftIndex !== null) return (<div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm"><div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl h-[95vh] md:h-[90vh] overflow-hidden relative modal-enter"><DraftEditor draft={drafts[currentDraftIndex]} onSave={handleSaveOne} onCancel={() => setStep('staging')} /></div></div>);
+            if (step === 'staging') return (
+                <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col modal-enter">
+                        <div className="bg-gradient-to-r from-orange-600 to-orange-500 p-4 text-white flex justify-between items-center shrink-0 shadow-md">
+                            <div><h1 className="text-lg sm:text-xl font-bold flex items-center gap-2"><Icon name="layers" size={24}/> Órdenes Preparadas ({drafts.length})</h1><p className="text-xs text-orange-100 hidden sm:block">Revisa y confirma cada orden antes de enviarla a producción.</p></div>
+                            <button onClick={() => setStep('input')} className="text-white bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 transition"><Icon name="arrow-left" size={16}/> Volver</button>
+                        </div>
+                        <div className="p-4 sm:p-6 overflow-y-auto bg-slate-100 flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 content-start">
+                            {drafts.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-slate-400 py-20"><div className="bg-slate-200 p-6 rounded-full mb-4"><Icon name="check-circle" size={64} className="text-slate-300"/></div><p className="text-lg font-medium">¡Todo listo!</p><p className="text-sm">No quedan borradores pendientes.</p><button onClick={onClose} className="mt-6 text-indigo-600 font-bold hover:text-indigo-800 hover:underline transition">Cerrar Asistente</button></div>}
+                            {drafts.map((draft, idx) => (
+                                <div key={idx} className="bg-white rounded-xl shadow-md border border-slate-200 overflow-hidden group hover:shadow-lg transition-all">
+                                    <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
+                                        <div>
+                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Máquina</div>
+                                            <div className="font-black text-3xl text-slate-800 leading-none">{draft.maquina}</div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wide">Borrador</span>
+                                            <button onClick={() => removeDraft(idx)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors" title="Eliminar este borrador">
+                                                <Icon name="trash-2" size={18}/>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="p-4 text-sm text-slate-600 space-y-1">
+                                        <p><strong className="text-slate-800">Cliente:</strong> {draft.cliente}</p>
+                                        <p><strong className="text-slate-800">Modelo:</strong> {draft.codigo}</p>
+                                        <p className="truncate"><strong className="text-slate-800">Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p>
+                                    </div>
+                                    <div className="p-3 bg-slate-50 border-t">
+                                        <button onClick={() => { setCurrentDraftIndex(idx); setStep('editing'); }} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-transform active:scale-95 text-sm sm:text-base"><Icon name="edit" size={18}/> REVISAR, PESOS E INVENTARIO</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+
+            // CALCULO DE CARGA DE TEÑIDO PARA OVERLAY
+            const calculateTotalLoad = () => {
+                return components.reduce((acc, comp) => {
+                    const weight = parseFloat(comp.peso) || 0;
+                    const perPkg = parseFloat(comp.piezasPorPaquete) || 0;
+                    const pkgWeightKg = (weight * perPkg) / 1000;
+                    return acc + pkgWeightKg;
+                }, 0);
+            };
+            const grandTotalLoad = calculateTotalLoad();
+
+            return (
+                <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-2 sm:p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl h-[95vh] md:h-[90vh] overflow-hidden flex flex-col relative modal-enter">
+                        <div className="bg-gradient-to-r from-blue-700 to-indigo-700 p-4 text-white flex justify-between items-center shrink-0 shadow-md"><div><h1 className="text-lg sm:text-xl font-bold flex items-center gap-2"><Icon name="wand-2" size={24}/> Generador Automático</h1><p className="text-xs text-blue-200 hidden sm:block">Crea múltiples órdenes de producción en un solo paso.</p></div><button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-lg transition"><Icon name="x" size={20}/></button></div>
+                        
+                        <div className="p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-2 gap-6 overflow-y-auto relative flex-grow bg-slate-50">
+                            <div className="space-y-4 bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-slate-200 h-fit">
+                                <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2 mb-4 pb-2 border-b"><span className="bg-blue-100 text-blue-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">1</span> Datos Generales del Pedido</h2>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 relative">
+                                    <div className="sm:col-span-2 relative z-20">
+                                        <label className="modal-label flex justify-between items-center">Modelo / Referencia
+                                            <button onClick={()=>setShowAssistant(!showAssistant)} className={`text-[11px] font-bold px-2 py-1 rounded-full flex items-center gap-1 transition ${showAssistant ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'}`}><Icon name="bot" size={14}/> {showAssistant ? 'Ocultar IA' : 'Usar Asistente IA'}</button>
+                                        </label>
+                                        <div className="relative">
+                                            <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="modal-input font-bold uppercase pl-10" placeholder="EJ: POLO-BASICO-2024"/>
+                                            <Icon name="search" size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"/>
+                                            {showAssistant && <ModelAssistant onApply={handleApplyTemplate} onClose={()=>setShowAssistant(false)} />}
+                                        </div>
+                                    </div>
+                                    <div className="sm:col-span-2"><label className="modal-label">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="modal-input font-bold uppercase" placeholder="Nombre del cliente"/></div>
+                                    <div><label className="modal-label">Fecha Entrega</label><input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="modal-input cursor-pointer"/></div>
+                                    <div><label className="modal-label">Cód. Partida (Sug.)</label><input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="modal-input bg-slate-100 font-black text-slate-700"/></div>
+                                </div>
+                                <div className="pt-2"><label className="modal-label text-indigo-700">Cantidad TOTAL de Prendas</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: e.target.value})} className="modal-input bg-indigo-50 text-2xl font-black text-center text-indigo-800 border-indigo-200 focus:border-indigo-500 focus:ring-indigo-500" placeholder="0"/></div>
+                            </div>
+                            
+                            <div className="space-y-4 bg-white p-4 sm:p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col h-[500px] lg:h-auto">
+                                <div className="flex justify-between items-center mb-2 pb-2 border-b shrink-0">
+                                    <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2"><span className="bg-green-100 text-green-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">2</span> Desglose de Componentes</h2>
+                                    <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-full text-xs font-bold flex gap-1 items-center transition shadow-sm"><Icon name="plus" size={14}/> Agregar Pieza</button>
+                                </div>
+                                <div className="bg-slate-50 p-3 rounded-lg border overflow-y-auto space-y-3 flex-grow scrollbar-thin">
+                                    {components.length === 0 && <div className="text-center text-slate-400 py-10 italic">Agrega los componentes de la prenda aquí.</div>}
+                                    {components.map((comp, idx) => (
+                                        <div key={idx} className="bg-white p-3 rounded-lg shadow-sm border border-slate-200 relative hover:border-indigo-300 transition group">
+                                            <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-2 right-2 text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition opacity-0 group-hover:opacity-100" title="Eliminar pieza"><Icon name="trash-2" size={16}/></button>
+                                            
+                                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3 mb-2 sm:items-end pr-6 sm:pr-0">
+                                                <div className="sm:col-span-5"><label className="modal-label">Descripción Pieza</label><input value={comp.descripcion} onChange={e => { const newComps=[...components]; newComps[idx].descripcion=e.target.value.toUpperCase(); setComponents(newComps); }} className="modal-input font-bold uppercase text-xs" placeholder="EJ: DELANTERO"/></div>
+                                                <div className="sm:col-span-3"><label className="modal-label text-blue-600">Talla</label><input value={comp.talla} onChange={e => { const newComps=[...components]; newComps[idx].talla=e.target.value.toUpperCase(); setComponents(newComps); }} className="modal-input font-bold uppercase bg-blue-50 text-blue-800 text-xs text-center" placeholder="UNI"/></div>
+                                                <div className="sm:col-span-4 grid grid-cols-2 gap-2">
+                                                     <div><label className="modal-label">Máquina</label><input type="number" value={comp.maquina} onChange={e => { const newComps=[...components]; newComps[idx].maquina=e.target.value; setComponents(newComps); }} className="modal-input font-black text-center text-xs bg-slate-100"/></div>
+                                                     <div><label className="modal-label">Sufijo</label><input value={comp.sufijo} onChange={e => { const newComps=[...components]; newComps[idx].sufijo=e.target.value.toUpperCase(); setComponents(newComps); }} className="modal-input font-bold uppercase text-xs text-center" placeholder="EJ: A"/></div>
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-3 bg-slate-50 p-2 rounded">
+                                                <div><label className="modal-label" title="Multiplicador: Cuántas de estas piezas lleva UNA prenda">Mult. (Pzs/Prenda)</label><input type="number" value={comp.multiplicador} min="1" onChange={e => { const newComps=[...components]; newComps[idx].multiplicador=Number(e.target.value); setComponents(newComps); }} className="modal-input text-center text-xs font-bold"/></div>
+                                                <div><label className="modal-label" title="Piezas por Paquete: Tamaño del bulto para control">Pzs x Paquete</label><input type="number" value={comp.piezasPorPaquete} min="0" onChange={e => { const newComps=[...components]; newComps[idx].piezasPorPaquete=Number(e.target.value); setComponents(newComps); }} className="modal-input bg-indigo-50 text-indigo-700 text-center text-xs font-bold"/></div>
+                                                {/* CAMBIO: Se hizo visible el campo de peso para el calculo en vivo */}
+                                                <div><label className="modal-label text-orange-500">Peso (gr)</label><input type="number" value={comp.peso} onChange={e => { const newComps=[...components]; newComps[idx].peso=e.target.value; setComponents(newComps); }} className="modal-input text-center text-xs font-bold border-orange-200" placeholder="0"/></div>
+                                                <input type="hidden" value={comp.tiempo} />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* --- WIDGET FLOTANTE: CALCULADORA DE CARGA DE TEÑIDO --- */}
+                        <div className="absolute bottom-20 right-6 w-72 bg-slate-800/95 backdrop-blur shadow-2xl rounded-xl p-4 border border-slate-600 text-white z-50 pointer-events-none sm:pointer-events-auto">
+                            <h3 className="font-bold text-sm border-b border-slate-600 pb-2 mb-2 flex items-center gap-2 text-indigo-300">
+                                <Icon name="scale" size={16}/> Carga de Teñido (x Paq)
+                            </h3>
+                            <div className="space-y-1 max-h-32 overflow-y-auto pr-1 scrollbar-thin">
+                                {components.map((c, i) => {
+                                    const p = parseFloat(c.peso) || 0;
+                                    const cant = parseFloat(c.piezasPorPaquete) || 0;
+                                    const totalKg = (p * cant) / 1000;
+                                    return (
+                                        <div key={i} className="flex justify-between text-xs items-center">
+                                            <span className="truncate w-32 text-slate-300">{c.descripcion || `Pieza ${i+1}`}</span>
+                                            <span className="font-mono text-slate-400">{c.piezasPorPaquete}pz x {c.peso}g</span>
+                                            <span className="font-bold text-white min-w-[50px] text-right">{totalKg.toFixed(2)}kg</span>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                            <div className="border-t border-slate-600 pt-2 mt-2 flex justify-between items-end">
+                                <div>
+                                    <div className="text-[10px] text-slate-400">Peso Total Set</div>
+                                    <div className={`font-black text-xl ${grandTotalLoad > 16.8 && grandTotalLoad < 17.2 ? 'text-green-400' : 'text-white'}`}>{grandTotalLoad.toFixed(2)} kg</div>
+                                </div>
+                                <div className="text-[10px] text-slate-500 mb-1 text-right">
+                                    Meta ideal: <span className="text-slate-300">~17.00 kg</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white border-t p-4 shrink-0 mt-auto flex justify-end shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
+                            <button onClick={handleGenerateDrafts} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-3 rounded-lg font-bold shadow-md transform transition-all active:scale-95 flex items-center gap-3 text-sm sm:text-base">
+                                <span>GENERAR BORRADORES</span> <Icon name="arrow-right" size={20}/>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const InstallButton = () => {
+             const [deferredPrompt, setDeferredPrompt] = useState(null);
+            useEffect(() => { const handler = (e) => { e.preventDefault(); setDeferredPrompt(e); }; window.addEventListener('beforeinstallprompt', handler); return () => window.removeEventListener('beforeinstallprompt', handler); }, []);
+            const handleInstall = async () => { if (!deferredPrompt) return; deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') setDeferredPrompt(null); };
+            if (!deferredPrompt) return null;
+            return (<button onClick={handleInstall} className="bg-yellow-500 hover:bg-yellow-600 text-black px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-2 text-xs animate-pulse transition"><Icon name="download-cloud" size={16}/> <span className="hidden sm:inline">INSTALAR APP</span></button>);
+        };
+
+        const SmartImage = ({ repoUrls, codigo, className }) => {
+             const [imgSrc, setImgSrc] = useState(null);
+            const [attempt, setAttempt] = useState({ urlIndex: 0, extension: 'jpg' });
+            useEffect(() => {
+                if (!repoUrls || !repoUrls.length || !codigo) { setImgSrc(null); return; }
+                setAttempt({ urlIndex: 0, extension: 'jpg' });
+                const base = repoUrls[0].endsWith('/') ? repoUrls[0] : repoUrls[0] + '/';
+                setImgSrc(`${base}${codigo}.jpg`);
+            }, [repoUrls, codigo]);
+
+            const handleError = () => {
+                const { urlIndex, extension } = attempt;
+                if (extension === 'jpg') {
+                    const base = repoUrls[urlIndex].endsWith('/') ? repoUrls[urlIndex] : repoUrls[urlIndex] + '/';
+                    setImgSrc(`${base}${codigo}.png`);
+                    setAttempt({ ...attempt, extension: 'png' });
+                } else if (urlIndex < repoUrls.length - 1) {
+                    const nextIdx = urlIndex + 1;
+                    const base = repoUrls[nextIdx].endsWith('/') ? repoUrls[nextIdx] : repoUrls[nextIdx] + '/';
+                    setImgSrc(`${base}${codigo}.jpg`);
+                    setAttempt({ urlIndex: nextIdx, extension: 'jpg' });
+                } else {
+                    setAttempt({ ...attempt, extension: 'fail' });
+                }
+            };
+            if (attempt.extension === 'fail' || !imgSrc) return <div className={`bg-slate-100 flex flex-col items-center justify-center text-slate-300 ${className}`}><Icon name="image-off" size={32} className="mb-2"/><span className="text-[10px] text-center px-2">Sin img</span></div>;
+            return <img src={imgSrc} onError={handleError} className={className} alt={codigo} />;
+        };
+
+        const OrderView = ({ order, config, onBack, onEdit }) => { 
+            const [entry, setEntry] = useState({ tejedor: '', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' });
+            const markPackage = async (pkgId) => { if(!entry.tejedor) return alert("Por favor selecciona un TEJEDOR"); const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: true, tejedor: entry.tejedor, fecha: entry.fecha, defectos: entry.defectos, agujas: entry.agujas} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
+            const unmarkPackage = async (pkgId) => { const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''} : p); await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso}); };
+            const toggleArchive = async () => {
+                if (order.status === 'ARCHIVADO') { if(window.confirm("¿Desarchivar esta orden?")){ await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); onBack(); } return; }
+                const incompletePkgs = order.progreso.filter(p => !p.finished);
+                if (incompletePkgs.length === 0) { if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); onBack(); } 
+                else {
+                    const msg = `⚠️ ADVERTENCIA: Hay ${incompletePkgs.length} paquetes SIN TERMINAR.\n\nSi archiva ahora, el sistema asume que NO se tejieron y REGRESARÁ el material calculado al inventario.\n\n¿Está seguro?`;
+                    if(!window.confirm(msg)) return;
+                    try {
+                        const invRef = db.collection('inventory').doc('main');
+                        const invDoc = await invRef.get();
+                        let currentItems = invDoc.exists ? invDoc.data().items : [];
+                        let refundLog = [];
+                        let totalUnfinishedGrams = 0;
+                        incompletePkgs.forEach(pkg => { const pieceInfo = order.subPiecesData.find(sp => sp.pieza === pkg.piezaNombre); const weight = Number(pieceInfo?.peso || 0); totalUnfinishedGrams += (pkg.cantidad * weight); });
+                        order.threading.forEach(hilo => { if (hilo.materialId && hilo.porcentaje) { const kgToRefund = (totalUnfinishedGrams * (Number(hilo.porcentaje) / 100)) / 1000; const itemIndex = currentItems.findIndex(i => i.id === hilo.materialId); if (itemIndex > -1 && kgToRefund > 0) { const currentStock = parseFloat(currentItems[itemIndex].stock || 0); currentItems[itemIndex].stock = (currentStock + kgToRefund).toFixed(2); refundLog.push(`${hilo.material}: +${kgToRefund.toFixed(2)}kg`); } } });
+                        const batch = db.batch(); batch.update(invRef, { items: currentItems }); batch.update(db.collection('orders').doc(String(order.id)), { status: 'ARCHIVADO' });
+                        if(refundLog.length > 0) { const moveRef = db.collection('inventory_movements').doc(); batch.set(moveRef, { type: 'DEVOLUCION_ARCHIVO', details: refundLog, orderId: order.displayId, timestamp: firebase.firestore.FieldValue.serverTimestamp() }); }
+                        await batch.commit(); alert(`Orden Archivada.\n\nMaterial devuelto al inventario:\n${refundLog.join('\n')}`); onBack();
+                    } catch (e) { console.error(e); alert("Error al actualizar inventario. Revise la consola."); }
+                }
+            };
+            const minutosPorPrenda = order.subPiecesData.reduce((acc, curr) => acc + (Number(curr.tiempo) || 0), 0);
+            const piezasPorHora = minutosPorPrenda > 0 ? (60 / minutosPorPrenda).toFixed(0) : 0;
+            const piezasPorTurno = minutosPorPrenda > 0 ? ((60 / minutosPorPrenda) * 12).toFixed(0) : 0;
+
+            return (
+                <div className="bg-white min-h-screen relative">
+                    <div className="no-print p-3 sm:p-4 border-b flex justify-between bg-white sticky top-0 z-20 shadow-sm items-center">
+                        <button onClick={onBack} className="flex items-center gap-2 text-slate-600 font-bold hover:text-slate-800 transition"><Icon name="arrow-left" size={20}/> <span className="hidden sm:inline">Volver</span></button>
+                        <div className="flex gap-2">
+                             <button onClick={toggleArchive} className={`px-3 py-2 rounded-md font-bold text-xs flex items-center gap-2 text-white shadow-sm transition ${order.status === 'ARCHIVADO' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}><Icon name={order.status === 'ARCHIVADO' ? "refresh-ccw" : "archive"} size={16}/> <span className="hidden sm:inline">{order.status === 'ARCHIVADO' ? 'DESARCHIVAR' : 'ARCHIVAR'}</span></button>
+                        </div>
+                    </div>
+                    <div className="p-4 sm:p-8 print:p-0 max-w-5xl mx-auto">
+                        {order.status === 'ARCHIVADO' && <div className="bg-orange-50 border-l-4 border-orange-500 text-orange-800 p-4 mb-6 font-bold text-center no-print rounded-r-md shadow-sm flex items-center justify-center gap-2"><Icon name="archive" size={20}/> ESTA ORDEN ESTÁ ARCHIVADA / TERMINADA</div>}
+                        <div className="bg-white p-4 sm:p-0">
+                             <div className="flex flex-col sm:flex-row justify-between items-start mb-6 border-b-4 border-slate-800 pb-4 gap-4 sm:gap-0">
+                                <div className="w-full sm:w-8/12">
+                                    <h1 className="font-black uppercase tracking-tight text-3xl sm:text-4xl mb-2 text-slate-900">{order.cliente}</h1>
+                                    <div className="flex flex-col gap-1 header-info text-slate-700">
+                                        <div className="text-xl sm:text-2xl font-bold uppercase tracking-wide">PARTIDA: {order.partida}</div>
+                                        <div className="text-xl sm:text-2xl font-black uppercase text-indigo-800">MOD: {order.codigo}</div>
+                                    </div>
+                                </div>
+                                <div className="w-full sm:w-auto text-left sm:text-right flex flex-row sm:flex-col items-center sm:items-end gap-2 sm:gap-0">
+                                    <div className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 bg-slate-100 px-2 py-1 rounded inline-block sm:block">MÁQUINA</div>
+                                    <div className="font-black text-5xl sm:text-6xl text-slate-800 leading-none">{order.maquina}</div>
+                                </div>
+                             </div>
+                             <div className="flex flex-col md:flex-row gap-6">
+                                <div className="w-full md:w-7/12 flex flex-col gap-4 order-2 md:order-1">
+                                    <div className="border rounded-lg overflow-hidden shadow-sm">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-slate-100 text-slate-700 uppercase text-xs font-bold"><tr><th className="p-2 text-left">PIEZA</th><th className="p-2 text-center w-20">TALLA</th><th className="p-2 text-center w-20">TOTAL</th></tr></thead>
+                                        <tbody className="divide-y divide-slate-100">{order.subPiecesData.map((p,i)=>(<tr key={i} className="bg-white"><td className="p-2 font-bold text-slate-700 truncate">{p.pieza}</td><td className="p-2 text-center text-blue-700 font-bold">{p.talla}</td><td className="p-2 text-center font-black text-lg">{p.totalPedido}</td></tr>))}</tbody>
+                                    </table>
+                                    </div>
+                                    
+                                    <div className="border rounded-lg overflow-hidden shadow-sm">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr><th colSpan="2" className="bg-indigo-700 text-white py-2 text-xs font-bold uppercase tracking-wider text-center">ENHEBRADO (RECETA)</th></tr>
+                                            <tr className="bg-slate-100 text-slate-700 uppercase text-xs font-bold">
+                                                <th className="p-2 text-left">Material</th>
+                                                <th className="p-2 text-center w-20">%</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {order.threading && order.threading.map((row, i) => (
+                                                <tr key={i} className="bg-white">
+                                                    <td className="p-2 truncate font-bold text-sm text-slate-700">{row.material}</td>
+                                                    <td className="p-2 text-center font-bold text-slate-600">{row.porcentaje}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    </div>
+
+                                    <div className="flex gap-4 mt-2">
+                                        <div className="w-1/2 bg-white border rounded-lg shadow-sm flex flex-col justify-center items-center p-3"><span className="text-xs font-bold uppercase w-full text-center text-slate-500 mb-1 tracking-wider">PIEZAS / HORA</span><span className="text-3xl font-black text-indigo-700">{piezasPorHora}</span></div>
+                                        <div className="w-1/2 bg-white border rounded-lg shadow-sm flex flex-col justify-center items-center p-3"><span className="text-xs font-bold uppercase w-full text-center text-slate-500 mb-1 tracking-wider">PIEZAS / TURNO (12H)</span><span className="text-3xl font-black text-indigo-700">{piezasPorTurno}</span></div>
+                                    </div>
+                                </div>
+                                <div className="w-full md:w-5/12 order-1 md:order-2">
+                                    <div className="border-2 border-slate-200 rounded-lg shadow-sm flex items-center justify-center relative bg-slate-50 overflow-hidden p-2 h-64 md:h-auto"><SmartImage repoUrls={config.repoUrls} codigo={order.codigo} className="max-h-full w-full object-contain rounded"/></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="no-print mt-8">
+                            <div className="bg-white p-4 sm:p-6 rounded-xl border shadow-sm mb-6">
+                                <div className="flex flex-wrap justify-between items-center mb-4 gap-2"><h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Icon name="clipboard-list" size={20}/> Registro Digital de Producción</h3><div className="bg-indigo-50 text-indigo-700 text-xs px-3 py-1.5 rounded-full font-bold border border-indigo-100 flex items-center gap-2 animate-pulse"><Icon name="scan-barcode" size={16}/> MODO ESCÁNER ACTIVO</div></div>
+                                <div className="flex flex-wrap gap-4 items-end mb-4 bg-slate-50 p-4 rounded-lg border border-slate-200"><div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">TEJEDOR (Selección Manual)</label><select value={entry.tejedor} onChange={e=>setEntry({...entry, tejedor: e.target.value})} className="border-gray-300 p-2 rounded-md w-full sm:w-48 font-bold text-indigo-700 focus:border-indigo-500 focus:ring-indigo-500 outline-none shadow-sm"><option value="">Seleccionar...</option><option value="BALTA">BALTA</option><option value="ANDRÉS">ANDRÉS</option><option value="OPERADOR 3">OPERADOR 3</option></select></div><div><label className="block text-xs font-bold text-slate-600 mb-1 uppercase tracking-wide">FECHA REGISTRO</label><input type="date" value={entry.fecha} onChange={e=>setEntry({...entry, fecha: e.target.value})} className="border-gray-300 p-2 rounded-md font-mono cursor-pointer hover:bg-white focus:border-indigo-500 focus:ring-indigo-500 shadow-sm"/></div></div>
+                                <div className="max-h-[500px] overflow-y-auto bg-white border rounded-lg shadow-inner scrollbar-thin"><table className="w-full text-sm text-left relative"><thead className="bg-slate-100 text-slate-600 uppercase text-xs font-bold sticky top-0 z-10 shadow-sm"><tr><th className="p-3">CÓDIGO/PIEZA</th><th className="p-3 text-center">Pzs</th><th className="p-3 text-center">Estado</th><th className="p-3 text-right">Acción Manual</th></tr></thead><tbody className="divide-y divide-slate-100">{order.progreso.map(p=>(<tr key={p.id} className="hover:bg-slate-50 transition-colors"><td className="p-3 font-mono font-bold text-slate-700" title={p.codigoUnico || p.piezaNombre}><div className="flex items-center gap-2"><Icon name="package" size={16} className="text-slate-400"/> {p.codigoUnico || p.piezaNombre}</div></td><td className="p-3 font-black text-center text-lg">{p.cantidad}</td><td className="p-3 text-center">{p.finished ? <span className="text-green-700 font-bold bg-green-100 px-3 py-1 rounded-full text-[10px] uppercase tracking-wide shadow-sm inline-flex items-center gap-1"><Icon name="check" size={12}/> LISTO ({p.tejedor})</span> : <span className="text-slate-400 font-bold text-xs uppercase tracking-wide bg-slate-100 px-3 py-1 rounded-full inline-flex items-center gap-1"><Icon name="clock" size={12}/> PENDIENTE</span>}</td><td className="p-3 text-right">{!p.finished ? <button onClick={()=>markPackage(p.id)} disabled={!entry.tejedor} className="bg-indigo-50 text-indigo-600 px-4 py-1.5 rounded-md font-bold hover:bg-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed transition text-xs shadow-sm border border-indigo-100">Registrar</button> : <button onClick={()=>unmarkPackage(p.id)} className="bg-red-50 text-red-600 px-4 py-1.5 rounded-md font-bold hover:bg-red-100 transition text-xs shadow-sm border border-red-100 flex items-center gap-1 ml-auto"><Icon name="undo-2" size={14}/> Deshacer</button>}</td></tr>))}</tbody></table></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const SettingsModal = ({ config, onClose }) => {
+            const [localUrls, setLocalUrls] = useState(config.repoUrls || []);
+            const [newUrl, setNewUrl] = useState('');
+            const save = async () => { await db.collection('settings').doc('config').set({ ...config, repoUrls: localUrls }); onClose(); };
+            return (<div className="fixed inset-0 bg-black/70 z-[70] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl modal-enter"><h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800"><Icon name="settings" size={20}/> Configuración Imágenes</h3><p className="text-sm text-slate-500 mb-4">Añade URLs base (GitHub Raw) para buscar las imágenes de los modelos.</p><div className="mb-4 max-h-40 overflow-y-auto bg-slate-50 p-2 rounded border space-y-2">{localUrls.map((u,i)=><div key={i} className="text-xs bg-white border p-2 rounded flex justify-between items-center shadow-sm"><span className="truncate font-mono">{u}</span><button onClick={()=>setLocalUrls(localUrls.filter((_,x)=>x!==i))} className="text-slate-400 hover:text-red-500 transition p-1"><Icon name="x" size={14}/></button></div>)}</div><div className="flex gap-2 mb-6"><input value={newUrl} onChange={e=>setNewUrl(e.target.value)} className="modal-input flex-1 text-xs font-mono" placeholder="https://raw.githubusercontent.com/..."/><button onClick={()=>{if(newUrl)setLocalUrls([...localUrls,newUrl]);setNewUrl('')}} className="bg-indigo-100 text-indigo-700 px-3 rounded-md font-bold hover:bg-indigo-200 transition"><Icon name="plus" size={16}/></button></div><div className="flex gap-3"><button onClick={onClose} className="flex-1 py-2 rounded-md font-bold text-slate-700 hover:bg-slate-100 border transition">Cancelar</button><button onClick={save} className="flex-1 bg-indigo-600 text-white py-2 rounded-md font-bold hover:bg-indigo-700 shadow-sm transition">Guardar Configuración</button></div></div></div>);
+        };
+
+        const App = () => {
+            const [view, setView] = useState('dashboard');
+            const [orders, setOrders] = useState([]);
+            const [config, setConfig] = useState({});
+            const [selectedOrder, setSelectedOrder] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+            const [showGenerator, setShowGenerator] = useState(false); 
+            const [viewMode, setViewMode] = useState('active'); 
+            const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+            
+            useEffect(() => {
+                const u1 = db.collection('orders').onSnapshot(s => setOrders(s.docs.map(d=>d.data())));
+                const u2 = db.collection('settings').doc('config').onSnapshot(d => setConfig(d.data() || {}));
+                setTimeout(()=>lucide.createIcons(), 500);
+                return () => { u1(); u2(); };
+            }, []);
+            useEffect(()=>lucide.createIcons(), [view, orders, viewMode, isMobileMenuOpen]);
+
+            const handleGlobalScan = async (scannedCode) => {
+                if (!scannedCode.includes('-')) return;
+                const [orderId, pkgIdString] = scannedCode.split('-');
+                const pkgId = parseFloat(pkgIdString);
+                const targetOrder = orders.find(o => String(o.id) === orderId);
+                if (targetOrder) {
+                    const targetPkg = targetOrder.progreso.find(p => p.id === pkgId);
+                    if (targetPkg) {
+                        if (targetPkg.finished) {
+                            alert(`El paquete ${targetPkg.codigoUnico || targetPkg.piezaNombre} ya estaba terminado.`);
+                            return;
+                        }
+                        const newProgreso = targetOrder.progreso.map(p => 
+                            p.id === pkgId 
+                                ? { ...p, finished: true, tejedor: 'ESCÁNER', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' } 
+                                : p
+                        );
+                        await db.collection('orders').doc(String(targetOrder.id)).update({ progreso: newProgreso });
+                        console.log(`Paquete ${pkgId} escaneado y actualizado.`);
+                    }
+                }
+            };
+            useBarcodeScanner(handleGlobalScan);
+
+            const displayedGroups = useMemo(() => {
+                const filtered = viewMode === 'active' 
+                    ? orders.filter(o => o.status !== 'ARCHIVADO') 
+                    : orders.filter(o => o.status === 'ARCHIVADO');
+                const groups = {};
+                filtered.forEach(o => {
+                    const key = o.partida || 'SIN_PARTIDA';
+                    if (!groups[key]) { groups[key] = { partida: key, cliente: o.cliente, codigo: o.codigo, orders: [] }; }
+                    groups[key].orders.push(o);
+                });
+                return Object.values(groups).sort((a,b) => b.partida.localeCompare(a.partida));
+            }, [orders, viewMode]);
+
+            const handleGeneratorSuccess = () => {
+                setShowGenerator(false);
+                setViewMode('active');
+            };
+
+            return (
+                <div className="main-layout-container relative">
+                    {/* MODALES */}
+                    {showGenerator && <OrderGeneratorModal onClose={()=>setShowGenerator(false)} onProcess={handleGeneratorSuccess} />}
+                    
+                    {view === 'detail' && selectedOrder && <div className="absolute inset-0 z-40 bg-slate-100 overflow-y-auto print-visible-wrapper"><OrderView order={orders.find(o=>o.id===selectedOrder.id) || selectedOrder} config={config} onBack={()=>setView('dashboard')} onEdit={()=>{}}/></div>}
+                    
+                    {showSettings && <SettingsModal config={config} onClose={()=>setShowSettings(false)} />}
+
+                    <div className="top-pane bg-slate-100 p-3 sm:p-6">
+                        <div className="flex flex-wrap justify-between items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                            <h1 className="text-xl sm:text-2xl font-black text-slate-800 flex gap-3 items-center">
+                                <div className="bg-indigo-600 text-white p-2 rounded-lg shadow-sm"><Icon name="layout-dashboard" size={24}/></div>
+                                <div className="flex flex-col">
+                                    <span>PLANTA DE PRODUCCIÓN</span>
+                                    <span className="text-xs font-bold text-indigo-600 tracking-wider mt-0.5">SISTEMA CIRINEO PRO v5.1</span>
+                                </div>
+                            </h1>
+                            
+                            {/* Barra de herramientas Desktop Simplificada */}
+                            <div className="hidden md:flex gap-3 items-center">
+                                <InstallButton />
+                                <button onClick={()=>setShowSettings(true)} className="bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 p-2 rounded-md shadow-sm transition" title="Configuración"><Icon name="settings" size={20}/></button>
+                                <button onClick={()=>setShowGenerator(true)} className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white px-5 py-2.5 rounded-md font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95 text-sm">
+                                    <Icon name="wand-2" size={18}/> GENERAR ORDEN
+                                </button>
+                            </div>
+
+                             {/* Barra de herramientas Móvil Simplificada */}
+                             <div className="flex md:hidden gap-2 items-center relative">
+                                <button onClick={()=>setShowGenerator(true)} className="bg-indigo-600 text-white px-3 py-2 rounded-md font-bold shadow-sm flex items-center gap-1 transition text-xs">
+                                    <Icon name="wand-2" size={16}/> GENERAR
+                                </button>
+                                <button onClick={()=>setIsMobileMenuOpen(!isMobileMenuOpen)} className="bg-white text-slate-700 border border-slate-300 p-2 rounded-md shadow-sm"><Icon name="menu" size={20}/></button>
+                                
+                                {isMobileMenuOpen && (
+                                    <div className="absolute top-full right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-50 py-2 flex flex-col modal-enter">
+                                        <button onClick={()=>{setShowSettings(true); setIsMobileMenuOpen(false);}} className="px-4 py-3 text-slate-700 hover:bg-slate-50 font-bold text-sm flex items-center gap-3 w-full text-left"><Icon name="settings" size={18}/> Configuración</button>
+                                        <div className="px-4 py-2 border-t border-slate-100"><InstallButton /></div>
+                                    </div>
+                                )}
+                             </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-6">
+                            {displayedGroups.map(group => (
+                                <div key={group.partida} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                                    <div className="bg-slate-50 p-4 border-b flex justify-between items-start relative">
+                                        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-600"></div>
+                                        <div className="pl-3">
+                                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-1">PARTIDA</div>
+                                            <div className="text-xl font-black text-slate-900 leading-none">{group.partida}</div>
+                                            <div className="text-sm font-bold text-indigo-700 mt-2 flex items-center gap-1"><Icon name="tag" size={14}/> {group.codigo}</div>
+                                        </div>
+                                        <div className="text-right">
+                                             <div className="text-[10px] font-black bg-slate-200 px-3 py-1.5 rounded-full text-slate-700 truncate max-w-[120px] uppercase tracking-wider">{group.cliente}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex-grow p-3 space-y-3 bg-slate-100/30">
+                                        {group.orders.map(o => {
+                                            const totalPkgs = o.progreso.length;
+                                            const finishedPkgs = o.progreso.filter(p=>p.finished).length;
+                                            const pct = totalPkgs > 0 ? Math.round((finishedPkgs / totalPkgs)*100) : 0;
+                                            const piezasStr = o.subPiecesData.map(sp => sp.pieza).join(' + ');
+                                            return (
+                                                <div key={o.id} onClick={()=>{setSelectedOrder(o); setView('detail')}} className="bg-white p-3 rounded-lg border border-slate-200 hover:border-indigo-400 hover:shadow cursor-pointer transition-all flex items-center gap-4 group">
+                                                    <div className="flex flex-col items-center justify-center bg-slate-800 text-white w-14 h-14 rounded-lg shrink-0 shadow-sm group-hover:bg-indigo-700 transition">
+                                                        <span className="text-[9px] font-bold opacity-70 uppercase tracking-wider">MQ</span>
+                                                        <span className="text-2xl font-black leading-none">{o.maquina}</span>
+                                                    </div>
+                                                    <div className="flex-grow overflow-hidden">
+                                                        <div className="font-bold text-sm text-slate-800 truncate mb-2 flex items-center gap-1"><Icon name="layers" size={14} className="text-slate-400"/> {piezasStr}</div>
+                                                        <div className="flex justify-between items-end mt-1 text-xs mb-1">
+                                                            <div className="font-bold text-slate-500">{o.totalPedido} Pzs</div>
+                                                            <div className={`font-black ${pct === 100 ? 'text-green-600' : 'text-indigo-600'}`}>{pct}%</div>
+                                                        </div>
+                                                        <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden relative">
+                                                            <div className={`h-full absolute top-0 left-0 transition-all duration-500 ${o.status === 'ARCHIVADO' ? 'bg-slate-400' : (pct === 100 ? 'bg-green-500' : 'bg-indigo-500')}`} style={{width:`${pct}%`}}></div>
+                                                        </div>
+                                                        <div className="flex justify-between text-[9px] text-slate-400 mt-0.5 font-medium"><span>0%</span><span>100%</span></div>
+                                                    </div>
+                                                    <Icon name="chevron-right" size={18} className="text-slate-300 shrink-0 group-hover:text-indigo-500 transition-transform group-hover:translate-x-1"/>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            ))}
+                            {displayedGroups.length === 0 && <div className="col-span-full flex flex-col items-center justify-center text-slate-400 py-20"><div className="bg-slate-200 p-6 rounded-full mb-4"><Icon name="layout-list" size={64} className="text-slate-300"/></div><p className="text-lg font-bold text-slate-500">No hay órdenes en producción.</p><p className="text-sm">Comienza generando una nueva orden.</p></div>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
