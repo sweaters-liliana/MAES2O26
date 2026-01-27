@@ -3,563 +3,376 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Neo Factory - Creador de Plantillas V2.3 (Con Memoria)</title>
+    <title>Neo Factory - Sistema Modular V3.0</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
     <style>
-        /* Estilos base Dark Mode */
         body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
-        
-        /* Scrollbars oscuros */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #1e293b; }
         ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #64748b; }
-        
-        /* Inputs y Selects */
         input:focus, select:focus { outline: 2px solid #6366f1; outline-offset: 1px; }
-        
-        /* Animaciones */
-        .modal-enter { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95) translateY(10px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-
-        /* Estilos Excel Viewer */
-        .excel-viewer-container { font-family: Calibri, Arial, sans-serif; background: #ffffff; height: 100%; }
-        .excel-table { border-collapse: collapse; table-layout: fixed; width: max-content; background: #fff; }
-        .excel-table td { border: 1px solid #c0c0c0; padding: 0px 2px; vertical-align: middle; white-space: pre-wrap; overflow: hidden; color: #000; line-height: 1.1; }
-        
-        /* Ventana Flotante */
-        .floating-window { position: fixed; z-index: 100; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); border: 1px solid #475569; display: flex; flex-direction: column; overflow: hidden; border-radius: 0.5rem; background-color: #1e293b; }
-        .floating-window.dragging { box-shadow: 0 0 0 2px #6366f1; opacity: 0.95; user-select: none; }
-        .resize-handle { position: absolute; bottom: 0; right: 0; width: 30px; height: 30px; cursor: se-resize; display: flex; align-items: flex-end; justify-content: flex-end; padding: 2px; z-index: 20; }
-
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* Clases utilitarias */
+        .btn-primary { background: linear-gradient(to right, #4f46e5, #7c3aed); color: white; padding: 0.5rem 1.5rem; border-radius: 0.5rem; font-weight: bold; transition: all 0.2s; }
+        .btn-primary:hover { transform: scale(1.02); opacity: 0.9; }
+        .card { background-color: #1e293b; border: 1px solid #334155; border-radius: 0.75rem; padding: 1.5rem; }
+        .input-std { width: 100%; background: #0f172a; border: 1px solid #334155; padding: 0.5rem; border-radius: 0.25rem; color: white; outline: none; transition: border 0.2s; }
+        .input-std:focus { border-color: #6366f1; }
     </style>
 </head>
-<body class="font-sans antialiased">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect } = React;
 
-        // --- CONFIGURACIÓN FIREBASE (Original) ---
+        // --- CONFIGURACIÓN FIREBASE ---
         const firebaseConfig = {
             apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
             authDomain: "cirineo-cec21.firebaseapp.com",
             projectId: "cirineo-cec21",
             storageBucket: "cirineo-cec21.firebasestorage.app",
             messagingSenderId: "620210618284",
-            appId: "1:620210618284:web:482bab9bf74650fff18409",
-            measurementId: "G-B7YLM78RVW"
+            appId: "1:620210618284:web:482bab9bf74650fff18409"
         };
-
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
 
-        // --- GITHUB FETCH (Original) ---
-        const GITHUB_CONFIG = { owner: 'sweaters-liliana', repo: 'MAES2O26', path: 'Fichas' };
-        
-        const fetchExcelFromGitHub = async (modelName) => {
-            if (!modelName) throw new Error("Ingresa un modelo");
-            const apiUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
-            try {
-                const listResponse = await fetch(apiUrl);
-                if (!listResponse.ok) throw new Error("No se pudo acceder al repositorio");
-                const files = await listResponse.json();
-                const targetFile = files.find(f => f.name.toLowerCase().includes(modelName.toLowerCase()) && f.name.endsWith('.xlsx'));
-                if (!targetFile) throw new Error(`No se encontró ficha para "${modelName}"`);
-                const fileResponse = await fetch(targetFile.download_url);
-                const blob = await fileResponse.blob();
-                const arrayBuffer = await blob.arrayBuffer();
-                const workbook = XLSX.read(arrayBuffer);
-                return { fileName: targetFile.name, worksheet: workbook.Sheets[workbook.SheetNames[0]] };
-            } catch (error) { throw error; }
-        };
-
+        // --- COMPONENTE ICONO ---
         const Icon = ({ name, size = 18, className }) => {
             useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
             return <i data-lucide={name} width={size} height={size} className={className}></i>;
         };
 
-        // --- VISOR DE EXCEL (Original) ---
-        const FloatingExcelViewer = ({ worksheet, fileName, onClose }) => {
-            const [winState, setWinState] = useState(() => {
-                const saved = localStorage.getItem('excelWinState');
-                return saved ? JSON.parse(saved) : { x: 50, y: 80, w: 600, h: 400 };
-            });
-            const [zoom, setZoom] = useState(0.85);
-            const [isDragging, setIsDragging] = useState(false);
-            const [isResizing, setIsResizing] = useState(false);
-            const dragRef = useRef({});
-
-            useEffect(() => { localStorage.setItem('excelWinState', JSON.stringify(winState)); }, [winState]);
-
-            const startDrag = (e) => { setIsDragging(true); dragRef.current = { startX: e.clientX || e.touches[0].clientX, startY: e.clientY || e.touches[0].clientY, initialX: winState.x, initialY: winState.y }; };
-            const startResize = (e) => { e.stopPropagation(); setIsResizing(true); dragRef.current = { startX: e.clientX || e.touches[0].clientX, startY: e.clientY || e.touches[0].clientY, initialW: winState.w, initialH: winState.h }; };
-
-            useEffect(() => {
-                const handleMove = (e) => {
-                    const cx = e.clientX || (e.touches && e.touches[0].clientX);
-                    const cy = e.clientY || (e.touches && e.touches[0].clientY);
-                    if (isDragging) setWinState(p => ({ ...p, x: dragRef.current.initialX + (cx - dragRef.current.startX), y: dragRef.current.initialY + (cy - dragRef.current.startY) }));
-                    if (isResizing) setWinState(p => ({ ...p, w: Math.max(200, dragRef.current.initialW + (cx - dragRef.current.startX)), h: Math.max(150, dragRef.current.initialH + (cy - dragRef.current.startY)) }));
-                };
-                const stop = () => { setIsDragging(false); setIsResizing(false); };
-                window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', stop);
-                window.addEventListener('touchmove', handleMove); window.addEventListener('touchend', stop);
-                return () => { 
-                    window.removeEventListener('mousemove', handleMove); window.removeEventListener('mouseup', stop);
-                    window.removeEventListener('touchmove', handleMove); window.removeEventListener('touchend', stop);
-                };
-            }, [isDragging, isResizing]);
-
-            const grid = useMemo(() => {
-                if (!worksheet) return null;
-                const range = XLSX.utils.decode_range(worksheet['!ref']);
-                const rows = [];
-                for (let R = range.s.r; R <= range.e.r; R++) {
-                    const cells = [];
-                    for (let C = range.s.c; C <= range.e.c; C++) {
-                        const cell = worksheet[XLSX.utils.encode_cell({c: C, r: R})];
-                        // Aproximación de ancho basada en zoom
-                        cells.push({ key: `${R}-${C}`, value: cell?.w || cell?.v || "", width: 65 * zoom });
-                    }
-                    rows.push({ index: R, cells });
-                }
-                return rows;
-            }, [worksheet, zoom]);
-
-            return (
-                <div className={`floating-window ${isDragging ? 'dragging' : ''}`} style={{ left: winState.x, top: winState.y, width: winState.w, height: winState.h }}>
-                    <div className="bg-slate-800 px-3 py-2 flex justify-between items-center cursor-move border-b border-slate-700 select-none" onMouseDown={startDrag} onTouchStart={startDrag}>
-                        <div className="flex items-center gap-2 overflow-hidden">
-                            <Icon name="file-spreadsheet" size={14} className="text-emerald-400 shrink-0"/>
-                            <span className="text-xs font-bold text-slate-200 truncate uppercase">{fileName}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button onClick={() => setZoom(z => Math.max(0.4, z - 0.1))} className="text-slate-400 hover:text-white p-1"><Icon name="minus" size={12}/></button>
-                            <span className="text-[10px] text-slate-400 w-8 text-center">{Math.round(zoom * 100)}%</span>
-                            <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="text-slate-400 hover:text-white p-1"><Icon name="plus" size={12}/></button>
-                            <div className="w-px h-3 bg-slate-600 mx-1"></div>
-                            <button onClick={onClose} className="text-red-400 hover:bg-red-900/30 p-1 rounded"><Icon name="x" size={16}/></button>
-                        </div>
-                    </div>
-                    <div className="flex-grow overflow-auto bg-white custom-scrollbar relative">
-                        <table className="excel-table" style={{ fontSize: `${10 * zoom}pt` }}>
-                            <tbody>{grid?.map(r => <tr key={r.index}>{r.cells.map(c => <td key={c.key} style={{width: c.width}}>{c.value}</td>)}</tr>)}</tbody>
-                        </table>
-                    </div>
-                    <div className="resize-handle bg-slate-700 hover:bg-indigo-600 transition-colors" onMouseDown={startResize} onTouchStart={startResize}><Icon name="move-diagonal-2" size={14} className="text-slate-400"/></div>
+        // --- PANTALLA DE INICIO (MENÚ) ---
+        const MainMenu = ({ onNavigate }) => (
+            <div className="min-h-screen flex flex-col items-center justify-center p-4 gap-8 bg-slate-900">
+                <div className="text-center space-y-2">
+                    <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">NEO FACTORY</h1>
+                    <p className="text-slate-400 text-sm tracking-widest">SISTEMA MODULAR V3.0</p>
                 </div>
-            );
-        };
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
+                    <button onClick={() => onNavigate('KNITTING')} className="group bg-slate-800 hover:bg-slate-800/80 border border-slate-700 p-8 rounded-2xl transition-all hover:border-indigo-500 hover:shadow-2xl hover:shadow-indigo-500/20 flex flex-col items-center gap-4 text-center">
+                        <div className="bg-indigo-900/50 p-4 rounded-full text-indigo-400 group-hover:scale-110 transition-transform"><Icon name="layers" size={40}/></div>
+                        <div><h2 className="text-2xl font-bold text-white mb-2">1. Tejeduría</h2><p className="text-slate-400 text-sm">Crear Ficha Técnica, Piezas y Receta de Hilos.</p></div>
+                    </button>
 
-        const TimeInput = ({ value, onChange, disabled }) => {
-            const m = Math.floor(value || 0);
-            const s = Math.round(((value || 0) - m) * 60);
-            const handleChange = (newM, newS) => { onChange((parseInt(newM || 0) + (parseInt(newS || 0) / 60)).toFixed(4)); };
-            return (
-                <div className="flex items-center gap-1">
-                    <input type="number" value={m || ''} placeholder="00" disabled={disabled} onChange={e => handleChange(e.target.value, s)} className="w-12 text-center bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white"/>
-                    <span className="text-slate-500">:</span>
-                    <input type="number" value={s || ''} placeholder="00" disabled={disabled} onChange={e => handleChange(m, e.target.value)} className="w-12 text-center bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-white"/>
+                    <button onClick={() => onNavigate('CONFECTION')} className="group bg-slate-800 hover:bg-slate-800/80 border border-slate-700 p-8 rounded-2xl transition-all hover:border-pink-500 hover:shadow-2xl hover:shadow-pink-500/20 flex flex-col items-center gap-4 text-center">
+                        <div className="bg-pink-900/50 p-4 rounded-full text-pink-400 group-hover:scale-110 transition-transform"><Icon name="scissors" size={40}/></div>
+                        <div><h2 className="text-2xl font-bold text-white mb-2">2. Confección</h2><p className="text-slate-400 text-sm">Definir Ruta, Operarios y Precios (Con Memoria).</p></div>
+                    </button>
                 </div>
-            );
-        };
+            </div>
+        );
 
-        // --- COMPONENTE PRINCIPAL MODAL ---
-        const TemplateCreatorModal = ({ onClose }) => {
+        // --- MÓDULO 1: TEJEDURÍA (La parte que ya funcionaba bien) ---
+        const KnittingModule = ({ onBack }) => {
             const [form, setForm] = useState({ modelo: '', cliente: '' });
-            
-            // Sección TEJEDURÍA (Intacta)
             const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
-            
-            // Sección HILOS (Intacta)
             const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
-            
-            // Sección CONFECCIÓN (MODIFICADA: operariosCapaces como array)
-            const [confection, setConfection] = useState([{ descripcion: '', tipo: 'MAQUINA', subRecurso: '', operariosCapaces: [], precio: '' }]);
-            
             const [inventory, setInventory] = useState([]);
-            const [employees, setEmployees] = useState([]);
-            const [savedResources, setSavedResources] = useState([]);
-            
-            // --- NUEVO: Estado para librería de procesos y sugerencias
-            const [processLibrary, setProcessLibrary] = useState([]);
-            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
-            // --------------------------------------------------------
-
-            const [excelFile, setExcelFile] = useState(null);
-            const [isLoadingExcel, setIsLoadingExcel] = useState(false);
 
             useEffect(() => {
                 db.collection('inventory').doc('main').onSnapshot(doc => doc.exists && setInventory(doc.data().items || []));
-                db.collection('confection_employees').where('status', '==', 'ACTIVE').onSnapshot(snap => setEmployees(snap.docs.map(d => ({id: d.id, ...d.data()}))));
-                db.collection('settings_resources').onSnapshot(snap => setSavedResources(snap.docs.map(d => d.data())));
-                
-                // --- NUEVO: Cargar biblioteca de procesos aprendidos
-                db.collection('settings_processes').orderBy('lastUsed', 'desc').onSnapshot(snap => {
-                    setProcessLibrary(snap.docs.map(d => d.data()));
-                });
             }, []);
 
-            // --- Lógica Tejeduría (Intacta) ---
-            const updateComponent = (idx, field, val) => {
-                const newComps = [...components]; newComps[idx][field] = val; setComponents(newComps);
-            };
-
-            // --- Lógica Confección (MEJORADA) ---
-            
-            // 1. Manejo de descripción con autocompletado
-            const handleConfectionDescChange = (idx, val) => {
-                const newConf = [...confection];
-                newConf[idx].descripcion = val.toUpperCase();
-                setConfection(newConf);
-
-                if (val.length > 1) {
-                    const matches = processLibrary.filter(p => p.descripcion.includes(val.toUpperCase()));
-                    setSuggestions({ index: idx, items: matches });
-                } else {
-                    setSuggestions({ index: null, items: [] });
-                }
-            };
-
-            // 2. Selección de proceso guardado
-            const selectSuggestion = (idx, process) => {
-                const newConf = [...confection];
-                newConf[idx] = {
-                    ...newConf[idx],
-                    descripcion: process.descripcion,
-                    tipo: process.tipo || 'MAQUINA',
-                    subRecurso: process.subRecurso || '',
-                    precio: process.precio || '',
-                    // Si el proceso guardado tiene operarios, úsalos, si no, déjalo vacío
-                    operariosCapaces: process.operariosCapaces || [] 
-                };
-                setConfection(newConf);
-                setSuggestions({ index: null, items: [] });
-            };
-
-            // 3. Toggle de operarios múltiples
-            const toggleOperario = (idx, nombreOperario) => {
-                const newConf = [...confection];
-                const currentList = newConf[idx].operariosCapaces || []; // Asegurar que sea array
-                
-                if (currentList.includes(nombreOperario)) {
-                    // Remover si ya existe
-                    newConf[idx].operariosCapaces = currentList.filter(n => n !== nombreOperario);
-                } else {
-                    // Agregar si no existe
-                    newConf[idx].operariosCapaces = [...currentList, nombreOperario];
-                }
-                setConfection(newConf);
-            };
-
-            const handleSaveTemplate = async () => {
-                if(!form.modelo || !form.cliente) return alert("Faltan datos básicos (Modelo/Cliente)");
-                
-                // Validaciones básicas (Originales)
-                const invalidComp = components.some(c => !c.descripcion || !c.talla || !c.peso || !c.tiempo);
-                if(invalidComp) return alert("Faltan datos en Tejeduría (Descripción, Talla, Peso o Tiempo)");
-
+            const handleSave = async () => {
+                if(!form.modelo || !form.cliente) return alert("Ingresa Modelo y Cliente");
                 try {
-                    // 1. Guardar la Plantilla (Lógica Original + campo nuevo de operarios array)
+                    // Usamos set con merge: true para NO borrar si ya existe confección
                     await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
-                        ...form,
-                        components: components.map(c => ({...c, peso: parseFloat(c.peso), tiempo: parseFloat(c.tiempo)})),
-                        threading: threading.filter(t => t.material),
-                        confection: confection.filter(c => c.descripcion).map(c => ({
-                            ...c,
-                            operariosCapaces: c.operariosCapaces || [] // Asegurar array
-                        })),
+                        modelo: form.modelo.toUpperCase(),
+                        cliente: form.cliente.toUpperCase(),
+                        components,
+                        threading,
                         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-                    });
+                    }, { merge: true });
+                    alert("Datos de Tejeduría Guardados Correctamente");
+                    onBack();
+                } catch(e) { alert("Error: " + e.message); }
+            };
 
-                    // 2. NUEVO: Guardar/Actualizar procesos en la biblioteca (Memoria)
+            const inputClass = "w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-indigo-500 outline-none uppercase font-bold";
+
+            return (
+                <div className="min-h-screen bg-slate-900 p-4 fade-in">
+                    <div className="max-w-6xl mx-auto space-y-6 pb-20">
+                        {/* Header Módulo */}
+                        <div className="flex items-center justify-between bg-slate-800 p-4 rounded-lg border border-slate-700">
+                            <h2 className="text-xl font-bold text-indigo-400 flex items-center gap-2"><Icon name="layers"/> MÓDULO TEJEDURÍA</h2>
+                            <button onClick={onBack} className="text-slate-400 hover:text-white px-3 py-1 bg-slate-700 rounded text-xs font-bold">VOLVER AL MENÚ</button>
+                        </div>
+
+                        {/* Datos Básicos */}
+                        <div className="card grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div><label className="text-xs text-slate-500 font-bold block mb-1">MODELO</label><input value={form.modelo} onChange={e=>setForm({...form, modelo:e.target.value.toUpperCase()})} className={inputClass} placeholder="EJ: POLO-2025"/></div>
+                            <div><label className="text-xs text-slate-500 font-bold block mb-1">CLIENTE</label><input value={form.cliente} onChange={e=>setForm({...form, cliente:e.target.value.toUpperCase()})} className={inputClass}/></div>
+                        </div>
+
+                        {/* Tabla Piezas */}
+                        <div className="card space-y-4">
+                            <div className="flex justify-between items-center border-b border-slate-700 pb-2"><h3 className="font-bold text-slate-300 text-sm">PIEZAS / COMPONENTES</h3><button onClick={()=>setComponents([...components, {descripcion:'', talla:'', sufijo:'', maquina:'', multiplicador:1, piezasPorPaquete:0, peso:'', tiempo:''}])} className="bg-indigo-600 text-white px-2 py-1 rounded text-xs">+ Pieza</button></div>
+                            {components.map((c, i) => (
+                                <div key={i} className="grid grid-cols-2 md:grid-cols-9 gap-2 items-center bg-slate-900/50 p-2 rounded">
+                                    <div className="col-span-2"><input value={c.descripcion} onChange={e=>{const n=[...components];n[i].descripcion=e.target.value.toUpperCase();setComponents(n)}} className={inputClass} placeholder="DESCRIPCIÓN"/></div>
+                                    <input value={c.talla} onChange={e=>{const n=[...components];n[i].talla=e.target.value.toUpperCase();setComponents(n)}} className={inputClass} placeholder="TALLA"/>
+                                    <input value={c.sufijo} onChange={e=>{const n=[...components];n[i].sufijo=e.target.value.toUpperCase();setComponents(n)}} className={inputClass} placeholder="SUFIJO"/>
+                                    <div className="col-span-2"><select value={c.maquina} onChange={e=>{const n=[...components];n[i].maquina=e.target.value;setComponents(n)}} className={inputClass}><option value="">MAQUINA...</option><option value="GALGA 12">GALGA 12</option><option value="GALGA 7">GALGA 7</option><option value="INTARSIA">INTARSIA</option></select></div>
+                                    <input type="number" value={c.peso} onChange={e=>{const n=[...components];n[i].peso=e.target.value;setComponents(n)}} className={`${inputClass} text-right text-emerald-400`} placeholder="PESO"/>
+                                    <input type="number" value={c.tiempo} onChange={e=>{const n=[...components];n[i].tiempo=e.target.value;setComponents(n)}} className={`${inputClass} text-right`} placeholder="TIEMPO"/>
+                                    <button onClick={()=>setComponents(components.filter((_,idx)=>idx!==i))} className="text-red-400 text-center"><Icon name="trash-2" size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Tabla Hilos */}
+                        <div className="card space-y-4">
+                            <div className="flex justify-between items-center border-b border-slate-700 pb-2"><h3 className="font-bold text-slate-300 text-sm">RECETA DE HILOS</h3><button onClick={()=>setThreading([...threading, {guia:threading.length+1, material:'', porcentaje:''}])} className="bg-amber-600 text-white px-2 py-1 rounded text-xs">+ Hilo</button></div>
+                            {threading.map((t, i) => (
+                                <div key={i} className="flex gap-2 items-center bg-slate-900/50 p-2 rounded">
+                                    <span className="text-xs font-bold text-slate-500 w-8">#{t.guia}</span>
+                                    <select value={t.material} onChange={e=>{const n=[...threading];n[i].material=e.target.value;setThreading(n)}} className={inputClass}><option value="">SELECCIONAR HILO...</option>{inventory.map(inv=><option key={inv.id} value={inv.nombre}>{inv.nombre} - {inv.color}</option>)}</select>
+                                    <input type="number" value={t.porcentaje} onChange={e=>{const n=[...threading];n[i].porcentaje=e.target.value;setThreading(n)}} className={`${inputClass} w-20 text-right`} placeholder="%"/>
+                                    <button onClick={()=>setThreading(threading.filter((_,idx)=>idx!==i))} className="text-red-400"><Icon name="trash-2" size={14}/></button>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-800 border-t border-slate-700 flex justify-end">
+                            <button onClick={handleSave} className="btn-primary flex items-center gap-2"><Icon name="save"/> GUARDAR TEJEDURÍA</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MÓDULO 2: CONFECCIÓN (Separado, con botón +) ---
+        const ConfectionModule = ({ onBack }) => {
+            const [modelo, setModelo] = useState('');
+            const [status, setStatus] = useState('idle'); // idle, loading, ready
+            const [processes, setProcesses] = useState([{ descripcion: '', tipo: 'MAQUINA', recurso: '', operarios: [], precio: '' }]);
+            
+            // Datos DB
+            const [employees, setEmployees] = useState([]);
+            const [resources, setResources] = useState([]); // Maquinas/Otros guardados
+            const [processLibrary, setProcessLibrary] = useState([]); // Memoria de procesos
+            
+            // Estados temporales
+            const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+
+            useEffect(() => {
+                db.collection('confection_employees').where('status','==','ACTIVE').onSnapshot(s => setEmployees(s.docs.map(d=>d.data())));
+                db.collection('settings_resources').onSnapshot(s => setResources(s.docs.map(d=>d.data())));
+                db.collection('settings_processes').onSnapshot(s => setProcessLibrary(s.docs.map(d=>d.data())));
+            }, []);
+
+            // Cargar datos si el modelo existe
+            const loadModel = async () => {
+                if(!modelo) return;
+                setStatus('loading');
+                try {
+                    const doc = await db.collection('model_templates').doc(modelo.toUpperCase()).get();
+                    if(doc.exists && doc.data().confection) {
+                        setProcesses(doc.data().confection);
+                        alert("Se cargó la confección existente para este modelo.");
+                    } else {
+                        // Si existe el modelo pero no confección, o no existe nada, empezamos limpio
+                        // No alertamos error para no molestar, solo permitimos trabajar
+                    }
+                    setStatus('ready');
+                } catch(e) { console.error(e); setStatus('ready'); }
+            };
+
+            // --- FUNCIÓN CLAVE: AGREGAR RECURSO (+) ---
+            const handleAddResource = async (type) => {
+                const name = prompt(`Ingrese el nombre para la nueva ${type}:`);
+                if(name && name.trim()) {
+                    try {
+                        await db.collection('settings_resources').add({
+                            type: type,
+                            name: name.toUpperCase().trim()
+                        });
+                        // No necesitamos recargar, el onSnapshot actualiza la lista 'resources' automáticamente
+                    } catch(e) { alert("Error al guardar recurso"); }
+                }
+            };
+
+            const handleDescChange = (idx, val) => {
+                const n = [...processes]; n[idx].descripcion = val.toUpperCase(); setProcesses(n);
+                // Autocompletado de Memoria
+                if(val.length > 1) {
+                    const found = processLibrary.filter(p => p.descripcion.includes(val.toUpperCase()));
+                    setSuggestions({index: idx, items: found});
+                } else setSuggestions({index: null, items: []});
+            };
+
+            const applySuggestion = (idx, item) => {
+                const n = [...processes];
+                n[idx] = { ...n[idx], descripcion: item.descripcion, tipo: item.tipo, recurso: item.recurso, precio: item.precio, operarios: item.operarios || [] };
+                setProcesses(n);
+                setSuggestions({index: null, items: []});
+            };
+
+            const toggleOperario = (idx, name) => {
+                const n = [...processes];
+                const ops = n[idx].operarios || [];
+                if(ops.includes(name)) n[idx].operarios = ops.filter(o => o !== name);
+                else n[idx].operarios = [...ops, name];
+                setProcesses(n);
+            };
+
+            const handleSave = async () => {
+                if(!modelo) return alert("Escribe el modelo para conectar los datos");
+                try {
+                    // 1. Guardar en la ficha del modelo (MERGE para no borrar tejeduría)
+                    await db.collection('model_templates').doc(modelo.toUpperCase()).set({
+                        confection: processes,
+                        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                    }, { merge: true });
+
+                    // 2. Guardar en Memoria de Procesos
                     const batch = db.batch();
-                    confection.forEach(proc => {
-                        if (proc.descripcion && proc.descripcion.trim().length > 0) {
-                            // Usamos la descripción como ID (saneada)
-                            const docId = proc.descripcion.trim().toUpperCase().replace(/\//g, '-').replace(/\./g, '');
-                            const ref = db.collection('settings_processes').doc(docId);
-                            batch.set(ref, {
-                                descripcion: proc.descripcion.toUpperCase(),
-                                tipo: proc.tipo,
-                                subRecurso: proc.subRecurso,
-                                precio: proc.precio,
-                                operariosCapaces: proc.operariosCapaces || [], // Recordar quién lo hace
-                                lastUsed: firebase.firestore.FieldValue.serverTimestamp()
-                            }, { merge: true });
+                    processes.forEach(p => {
+                        if(p.descripcion) {
+                            const ref = db.collection('settings_processes').doc(p.descripcion.replace(/\//g,'-'));
+                            batch.set(ref, p, {merge: true});
                         }
                     });
                     await batch.commit();
 
-                    alert("Plantilla Guardada y Procesos Memorizados Exitosamente");
-                    onClose();
-                } catch(e) {
-                    console.error(e);
-                    alert("Error al guardar: " + e.message);
-                }
+                    alert("Ruta de Confección Guardada y Conectada al Modelo");
+                    onBack();
+                } catch(e) { alert("Error: " + e.message); }
             };
 
-            const inputStyle = "w-full p-2 border border-slate-700 bg-slate-900 rounded font-bold uppercase focus:border-indigo-500 text-white text-xs";
-            const labelStyle = "text-[10px] font-bold text-slate-500 uppercase block mb-1";
+            const inputClass = "w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs text-white focus:border-pink-500 outline-none uppercase font-bold";
 
             return (
-                <div className="fixed inset-0 bg-black/90 z-[50] flex items-center justify-center p-0 md:p-4 backdrop-blur-sm modal-enter">
-                    {excelFile && <FloatingExcelViewer worksheet={excelFile.worksheet} fileName={excelFile.fileName} onClose={() => setExcelFile(null)} />}
-
-                    <div className="bg-slate-800 md:rounded-xl shadow-2xl w-full h-full md:h-[95vh] md:max-w-6xl flex flex-col overflow-hidden border border-slate-700 relative">
-                        {/* HEADER */}
-                        <div className="bg-slate-900 p-4 border-b border-slate-700 flex justify-between items-center shrink-0">
-                            <div>
-                                <h1 className="text-xl font-bold text-white flex items-center gap-2"><Icon name="cpu" className="text-indigo-400"/> PLANTILLA MAESTRA V2.3 (MEMORIA)</h1>
-                                <p className="text-[10px] text-slate-500 uppercase font-bold">Modo Operarios Múltiples</p>
-                            </div>
-                            <button onClick={onClose} className="text-slate-400 hover:text-white transition"><Icon name="x" size={24}/></button>
+                <div className="min-h-screen bg-slate-900 p-4 fade-in">
+                    <div className="max-w-6xl mx-auto space-y-6 pb-20">
+                         {/* Header Módulo */}
+                         <div className="flex items-center justify-between bg-slate-800 p-4 rounded-lg border border-slate-700">
+                            <h2 className="text-xl font-bold text-pink-400 flex items-center gap-2"><Icon name="scissors"/> MÓDULO CONFECCIÓN</h2>
+                            <button onClick={onBack} className="text-slate-400 hover:text-white px-3 py-1 bg-slate-700 rounded text-xs font-bold">VOLVER AL MENÚ</button>
                         </div>
 
-                        {/* BODY SCROLL */}
-                        <div className="overflow-y-auto flex-grow p-4 md:p-6 space-y-8 custom-scrollbar">
-                            
-                            {/* 1. SECCIÓN MODELO/CLIENTE (Original) */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
-                                <div>
-                                    <label className={labelStyle}>Modelo</label>
-                                    <div className="flex gap-2 relative">
-                                        <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className={inputStyle} placeholder="MODELO-001"/>
-                                        <button onClick={async () => { setIsLoadingExcel(true); try { setExcelFile(await fetchExcelFromGitHub(form.modelo)); } catch(e) { alert(e.message); } setIsLoadingExcel(false); }} className="bg-emerald-600 hover:bg-emerald-500 p-2 rounded text-white transition disabled:opacity-50" disabled={isLoadingExcel}>
-                                            <Icon name={isLoadingExcel ? "loader-2" : "search"} className={isLoadingExcel ? "animate-spin" : ""}/>
-                                        </button>
-                                        <button onClick={() => {if(form.modelo){ db.collection('model_templates').doc(form.modelo.toUpperCase()).get().then(doc => { if(doc.exists){ const d = doc.data(); setForm(d); setComponents(d.components || []); setThreading(d.threading || []); setConfection(d.confection || []); alert("Datos cargados"); } else alert("No existe plantilla guardada"); }).catch(e=>alert(e.message)); }}} className="bg-blue-600 hover:bg-blue-500 p-2 rounded text-white transition"><Icon name="download-cloud"/></button>
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className={labelStyle}>Cliente</label>
-                                    <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className={inputStyle} placeholder="CLIENTE S.A."/>
-                                </div>
+                        {/* Conexión Modelo */}
+                        <div className="card">
+                            <label className="text-xs text-slate-500 font-bold block mb-1">CONECTAR CON MODELO</label>
+                            <div className="flex gap-2">
+                                <input value={modelo} onChange={e=>setModelo(e.target.value.toUpperCase())} className={inputClass} placeholder="INGRESA EL MODELO EXACTO (EJ: POLO-2025)"/>
+                                <button onClick={loadModel} className="bg-pink-600 text-white px-4 rounded font-bold text-xs">CARGAR DATOS</button>
                             </div>
+                            <p className="text-[10px] text-slate-500 mt-2">* Si el modelo ya tiene tejeduría creada, esto se anexará a su ficha. Si ya tiene costura, se cargarán los datos para editar.</p>
+                        </div>
 
-                            {/* 2. SECCIÓN TEJEDURÍA (COMPONENTS) - INTACTA */}
-                            <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-sm">
-                                <div className="bg-slate-900/80 px-4 py-3 border-b border-slate-700 flex justify-between items-center shrink-0 sticky top-0 z-10 backdrop-blur-sm">
-                                    <h2 className="text-sm font-bold text-indigo-400 flex items-center gap-2"><Icon name="layers" size={16}/> RUTA DE TEJEDURÍA</h2>
-                                    <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold transition">+ Componente</button>
-                                </div>
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left border-collapse">
-                                        <thead>
-                                            <tr className="bg-slate-900 text-[9px] text-slate-500 uppercase tracking-wider">
-                                                <th className="p-3 font-bold border-b border-slate-700 w-48">Descripción</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-24">Talla</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-24">Sufijo</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-32">Máquina (Galga)</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-20 text-center">Multipl.</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-20 text-center">Pzs/Paq</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-24 text-right">Peso (g)</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-32 text-center">Tiempo (m:s)</th>
-                                                <th className="p-3 font-bold border-b border-slate-700 w-10"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700">
-                                            {components.map((comp, idx) => (
-                                                <tr key={idx} className="group hover:bg-slate-700/30 transition-colors">
-                                                    <td className="p-2"><input value={comp.descripcion} onChange={e => updateComponent(idx, 'descripcion', e.target.value.toUpperCase())} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900`} placeholder="DELANTERO"/></td>
-                                                    <td className="p-2"><input value={comp.talla} onChange={e => updateComponent(idx, 'talla', e.target.value.toUpperCase())} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900 text-center`} placeholder="M"/></td>
-                                                    <td className="p-2"><input value={comp.sufijo} onChange={e => updateComponent(idx, 'sufijo', e.target.value.toUpperCase())} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900 text-center text-slate-400`} placeholder="-"/></td>
-                                                    <td className="p-2">
-                                                        <select value={comp.maquina} onChange={e => updateComponent(idx, 'maquina', e.target.value)} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900 text-cyan-400`}>
-                                                            <option value="">Seleccionar</option>
-                                                            <option value="GALGA 12">GALGA 12</option>
-                                                            <option value="GALGA 10">GALGA 10</option>
-                                                            <option value="GALGA 7">GALGA 7</option>
-                                                            <option value="GALGA 5">GALGA 5</option>
-                                                            <option value="GALGA 3">GALGA 3</option>
-                                                            <option value="INTARSIA">INTARSIA</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="p-2 text-center"><input type="number" value={comp.multiplicador} onChange={e => updateComponent(idx, 'multiplicador', parseInt(e.target.value))} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900 text-center w-12 mx-auto`}/></td>
-                                                    <td className="p-2 text-center"><input type="number" value={comp.piezasPorPaquete} onChange={e => updateComponent(idx, 'piezasPorPaquete', parseInt(e.target.value))} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900 text-center w-12 mx-auto`}/></td>
-                                                    <td className="p-2"><input type="number" value={comp.peso} onChange={e => updateComponent(idx, 'peso', e.target.value)} className={`${inputStyle} bg-transparent border-transparent hover:border-slate-600 focus:bg-slate-900 text-right font-mono text-emerald-400`} placeholder="0.0"/></td>
-                                                    <td className="p-2 flex justify-center"><TimeInput value={comp.tiempo} onChange={val => updateComponent(idx, 'tiempo', val)}/></td>
-                                                    <td className="p-2 text-center"><button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="text-slate-600 hover:text-red-400 transition opacity-0 group-hover:opacity-100"><Icon name="trash-2" size={14}/></button></td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                            
-                            {/* 3. SECCIÓN HILOS (THREADING) - INTACTA */}
-                            <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-sm">
-                                <div className="bg-slate-900/80 px-4 py-3 border-b border-slate-700 flex justify-between items-center shrink-0">
-                                    <h2 className="text-sm font-bold text-amber-400 flex items-center gap-2"><Icon name="spool" size={16}/> RECETA DE HILOS</h2>
-                                    <button onClick={() => setThreading([...threading, { guia: threading.length + 1, material: '', porcentaje: '', materialId: null }])} className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded font-bold transition">+ Hilo</button>
-                                </div>
-                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {threading.map((th, idx) => (
-                                        <div key={idx} className="flex items-center gap-2 bg-slate-900/50 p-2 rounded border border-slate-700 group hover:border-amber-500/50 transition-colors">
-                                            <div className="w-8 h-8 rounded bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 border border-slate-700">#{th.guia}</div>
-                                            <select 
-                                                value={th.material} 
-                                                onChange={e => {
-                                                    const selected = inventory.find(i => i.nombre === e.target.value);
-                                                    const newTh = [...threading];
-                                                    newTh[idx].material = e.target.value;
-                                                    newTh[idx].materialId = selected ? selected.id : null;
-                                                    setThreading(newTh);
-                                                }} 
-                                                className={`${inputStyle} flex-grow text-[10px]`}
-                                            >
-                                                <option value="">Seleccionar Material...</option>
-                                                {inventory.map(item => <option key={item.id} value={item.nombre}>{item.nombre} ({item.color})</option>)}
-                                            </select>
-                                            <div className="relative w-16">
-                                                <input type="number" value={th.porcentaje} onChange={e => {const n=[...threading]; n[idx].porcentaje=e.target.value; setThreading(n);}} className={`${inputStyle} text-right pr-5`} placeholder="0"/>
-                                                <span className="absolute right-2 top-2 text-[10px] text-slate-500">%</span>
-                                            </div>
-                                            <button onClick={() => setThreading(threading.filter((_, i) => i !== idx))} className="text-slate-600 hover:text-red-400 transition"><Icon name="x" size={14}/></button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* 4. SECCIÓN CONFECCIÓN (MODIFICADA: Memoria + Múltiples Operarios) */}
-                            <div className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden shadow-sm">
-                                <div className="bg-slate-900/80 px-4 py-3 border-b border-slate-700 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm">
-                                    <h2 className="text-sm font-bold text-pink-400 flex items-center gap-2"><Icon name="scissors" size={16}/> RUTA DE CONFECCIÓN (CON MEMORIA)</h2>
-                                    <button onClick={() => setConfection([...confection, { descripcion: '', tipo: 'MAQUINA', subRecurso: '', operariosCapaces: [], precio: '' }])} className="text-xs bg-pink-600 hover:bg-pink-500 text-white px-3 py-1.5 rounded font-bold transition">+ Operación</button>
-                                </div>
-                                
-                                <div className="p-4 space-y-4">
-                                    {confection.map((proc, idx) => (
-                                        <div key={idx} className="p-3 bg-slate-900/40 rounded-lg border border-slate-700 hover:border-pink-500/30 transition-colors relative">
-                                            
-                                            {/* FILA SUPERIOR: Descripción, Categoría, Recurso, Precio */}
-                                            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
-                                                {/* Descripción con Autocompletado */}
-                                                <div className="md:col-span-4 relative">
-                                                    <label className="text-[9px] text-slate-500 font-bold mb-1 block">PROCESO / OPERACIÓN</label>
-                                                    <input 
-                                                        value={proc.descripcion} 
-                                                        onChange={e => handleConfectionDescChange(idx, e.target.value)} 
-                                                        className={inputStyle} 
-                                                        placeholder="Ej: CERRAR COSTADOS..."
-                                                    />
-                                                    {suggestions.index === idx && suggestions.items.length > 0 && (
-                                                        <div className="absolute z-[100] top-full left-0 w-full bg-slate-800 border border-indigo-500 mt-1 rounded shadow-2xl max-h-48 overflow-y-auto custom-scrollbar">
-                                                            {suggestions.items.map((p, i) => (
-                                                                <div key={i} onClick={() => selectSuggestion(idx, p)} className="p-2 hover:bg-indigo-900/50 cursor-pointer border-b border-slate-700 last:border-0 group">
-                                                                    <div className="text-[10px] font-bold text-white group-hover:text-indigo-300">{p.descripcion}</div>
-                                                                    <div className="text-[8px] text-slate-400 flex justify-between mt-1">
-                                                                        <span>{p.tipo} - {p.subRecurso}</span> 
-                                                                        <span className="text-pink-400 font-mono">${p.precio}</span>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                        {/* Tabla Procesos */}
+                        <div className="card space-y-4">
+                             <div className="flex justify-between items-center border-b border-slate-700 pb-2"><h3 className="font-bold text-slate-300 text-sm">RUTA DE OPERACIONES</h3><button onClick={()=>setProcesses([...processes, {descripcion:'', tipo:'MAQUINA', recurso:'', operarios:[], precio:''}])} className="bg-pink-600 text-white px-2 py-1 rounded text-xs">+ Operación</button></div>
+                             
+                             {processes.map((p, i) => (
+                                 <div key={i} className="bg-slate-900/40 p-3 rounded border border-slate-700 hover:border-pink-500/50 transition">
+                                     <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3">
+                                        {/* Descripción Autocomplete */}
+                                        <div className="md:col-span-4 relative">
+                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">DESCRIPCIÓN</label>
+                                            <input value={p.descripcion} onChange={e=>handleDescChange(i, e.target.value)} className={inputClass} placeholder="EJ: PEGAR CUELLO"/>
+                                            {suggestions.index === i && suggestions.items.length > 0 && (
+                                                <div className="absolute z-10 w-full bg-slate-800 border border-slate-600 mt-1 max-h-40 overflow-y-auto rounded shadow-xl">
+                                                    {suggestions.items.map((sug, k) => (
+                                                        <div key={k} onClick={()=>applySuggestion(i, sug)} className="p-2 hover:bg-pink-900/30 cursor-pointer border-b border-slate-700 text-xs">
+                                                            <div className="text-white font-bold">{sug.descripcion}</div>
+                                                            <div className="text-[9px] text-slate-400">{sug.tipo} - {sug.recurso}</div>
                                                         </div>
-                                                    )}
+                                                    ))}
                                                 </div>
-
-                                                <div className="md:col-span-2">
-                                                    <label className="text-[9px] text-slate-500 font-bold mb-1 block">CATEGORÍA</label>
-                                                    <select value={proc.tipo} onChange={e => {const n=[...confection]; n[idx].tipo=e.target.value; setConfection(n);}} className={inputStyle}>
-                                                        <option value="MAQUINA">MÁQUINA</option>
-                                                        <option value="CORTADOR">CORTADOR</option>
-                                                        <option value="MANUAL">MANUAL</option>
-                                                        <option value="PLANCHA">PLANCHA</option>
-                                                        <option value="OTROS">OTROS</option>
-                                                    </select>
-                                                </div>
-
-                                                <div className="md:col-span-2">
-                                                    <label className="text-[9px] text-slate-500 font-bold mb-1 block">RECURSO ESPECÍFICO</label>
-                                                    <select value={proc.subRecurso} onChange={e => {const n=[...confection]; n[idx].subRecurso=e.target.value; setConfection(n);}} className={`${inputStyle} text-cyan-400 border-cyan-900/50`}>
-                                                        <option value="">N/A</option>
-                                                        {savedResources.filter(r => r.type === proc.tipo).map((r, i) => <option key={i} value={r.name}>{r.name}</option>)}
-                                                    </select>
-                                                </div>
-
-                                                <div className="md:col-span-2">
-                                                    <label className="text-[9px] text-slate-500 font-bold mb-1 block">PRECIO $</label>
-                                                    <input type="number" value={proc.precio} onChange={e => {const n=[...confection]; n[idx].precio=e.target.value; setConfection(n);}} className={`${inputStyle} text-right text-pink-400 font-mono border-pink-900/50`} placeholder="0.00"/>
-                                                </div>
-
-                                                <div className="md:col-span-2 flex items-end justify-end">
-                                                    <button onClick={() => setConfection(confection.filter((_, i) => i !== idx))} className="text-slate-600 hover:text-red-500 transition p-2 bg-slate-800 rounded border border-slate-700 hover:border-red-900"><Icon name="trash-2" size={16}/></button>
-                                                </div>
-                                            </div>
-
-                                            {/* FILA INFERIOR: Selección de Múltiples Operarios */}
-                                            <div className="bg-slate-950/50 p-2 rounded border border-slate-800/50">
-                                                <label className="text-[8px] text-slate-500 font-bold mb-2 block uppercase tracking-wider">Operarios Capaces ({proc.operariosCapaces?.length || 0})</label>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {employees.map(emp => {
-                                                        const isSelected = (proc.operariosCapaces || []).includes(emp.fullName);
-                                                        return (
-                                                            <button 
-                                                                key={emp.id}
-                                                                onClick={() => toggleOperario(idx, emp.fullName)}
-                                                                className={`
-                                                                    text-[9px] px-2 py-1 rounded border transition-all select-none
-                                                                    ${isSelected 
-                                                                        ? 'bg-indigo-600 border-indigo-400 text-white font-bold shadow-sm shadow-indigo-900/50' 
-                                                                        : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'}
-                                                                `}
-                                                            >
-                                                                {emp.firstName}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                    {employees.length === 0 && <span className="text-[9px] text-slate-600 italic">No hay empleados registrados</span>}
-                                                </div>
-                                            </div>
-
+                                            )}
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
 
+                                        {/* Tipo */}
+                                        <div className="md:col-span-2">
+                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">TIPO</label>
+                                            <select value={p.tipo} onChange={e=>{const n=[...processes]; n[i].tipo=e.target.value; n[i].recurso=''; setProcesses(n)}} className={inputClass}>
+                                                <option value="MAQUINA">MÁQUINA</option>
+                                                <option value="MANUAL">MANUAL</option>
+                                                <option value="PLANCHA">PLANCHA</option>
+                                                <option value="OTROS">OTROS</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Recurso con Botón + */}
+                                        <div className="md:col-span-3">
+                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">RECURSO / MÁQUINA</label>
+                                            <div className="flex gap-1">
+                                                <select value={p.recurso} onChange={e=>{const n=[...processes]; n[i].recurso=e.target.value; setProcesses(n)}} className={`${inputClass} text-cyan-400`}>
+                                                    <option value="">-- SELECCIONAR --</option>
+                                                    {resources.filter(r => r.type === p.tipo).map((r, k) => <option key={k} value={r.name}>{r.name}</option>)}
+                                                </select>
+                                                {/* Botón Mágico + */}
+                                                <button onClick={() => handleAddResource(p.tipo)} className="bg-slate-700 hover:bg-cyan-600 text-white px-2 rounded border border-slate-600 transition" title="Agregar nuevo a la lista">+</button>
+                                            </div>
+                                        </div>
+
+                                        {/* Precio */}
+                                        <div className="md:col-span-2">
+                                            <label className="text-[9px] font-bold text-slate-500 block mb-1">PRECIO</label>
+                                            <input type="number" value={p.precio} onChange={e=>{const n=[...processes]; n[i].precio=e.target.value; setProcesses(n)}} className={`${inputClass} text-right text-pink-400`} placeholder="$"/>
+                                        </div>
+
+                                        <div className="md:col-span-1 flex items-end justify-center">
+                                            <button onClick={()=>setProcesses(processes.filter((_,idx)=>idx!==i))} className="text-slate-500 hover:text-red-400 mb-2"><Icon name="trash-2"/></button>
+                                        </div>
+                                     </div>
+
+                                     {/* Operarios Multiselect */}
+                                     <div className="bg-slate-950 p-2 rounded border border-slate-800">
+                                         <label className="text-[9px] font-bold text-slate-500 block mb-1 uppercase">Operarios Capaces</label>
+                                         <div className="flex flex-wrap gap-2">
+                                            {employees.map(emp => (
+                                                <button key={emp.id} onClick={()=>toggleOperario(i, emp.fullName)} 
+                                                    className={`text-[9px] px-2 py-1 rounded border transition ${ (p.operarios||[]).includes(emp.fullName) ? 'bg-pink-600 border-pink-400 text-white' : 'bg-slate-800 border-slate-700 text-slate-500' }`}>
+                                                    {emp.firstName}
+                                                </button>
+                                            ))}
+                                         </div>
+                                     </div>
+                                 </div>
+                             ))}
                         </div>
 
-                        {/* FOOTER */}
-                        <div className="p-4 bg-slate-900 border-t border-slate-700 flex justify-end gap-3 shrink-0">
-                            <button onClick={onClose} className="px-6 py-2 text-slate-400 font-bold hover:text-white transition text-xs border border-transparent hover:border-slate-700 rounded-lg">DESCARTAR</button>
-                            <button onClick={handleSaveTemplate} className="bg-gradient-to-r from-indigo-600 to-purple-600 px-8 py-2.5 rounded-lg font-bold text-white shadow-lg hover:shadow-indigo-500/20 hover:scale-105 transition active:scale-95 text-xs flex items-center gap-2 border border-indigo-500/50">
-                                <Icon name="save" size={14}/> GUARDAR PLANTILLA Y MEMORIA
-                            </button>
+                        <div className="fixed bottom-0 left-0 w-full p-4 bg-slate-800 border-t border-slate-700 flex justify-end">
+                            <button onClick={handleSave} className="bg-gradient-to-r from-pink-600 to-rose-600 text-white px-6 py-2 rounded font-bold shadow-lg flex items-center gap-2"><Icon name="save"/> GUARDAR RUTA DE CONFECCIÓN</button>
                         </div>
                     </div>
                 </div>
             );
-        }
+        };
 
         const App = () => {
-            const [showModal, setShowModal] = useState(true);
+            const [view, setView] = useState('HOME'); // HOME, KNITTING, CONFECTION
+
             return (
-                <div className="min-h-screen flex flex-col items-center justify-center gap-6 p-4 bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
-                    <div className="text-center space-y-2">
-                        <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 tracking-tighter">NEO FACTORY</h1>
-                        <p className="text-slate-500">Sistema de Gestión de Producción V2.3</p>
-                    </div>
-                    <button onClick={() => setShowModal(true)} className="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold shadow-2xl hover:bg-indigo-500 hover:scale-105 transition-all flex gap-3 items-center border border-indigo-400/20 group">
-                        <Icon name="layout-template" className="group-hover:rotate-12 transition-transform"/> ABRIR GENERADOR V2.3
-                    </button>
-                    {showModal && <TemplateCreatorModal onClose={() => setShowModal(false)} />}
+                <div>
+                    {view === 'HOME' && <MainMenu onNavigate={setView} />}
+                    {view === 'KNITTING' && <KnittingModule onBack={() => setView('HOME')} />}
+                    {view === 'CONFECTION' && <ConfectionModule onBack={() => setView('HOME')} />}
                 </div>
-            )
-        }
-        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
