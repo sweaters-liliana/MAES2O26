@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neo Factory - Registro de Personal</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3); }
+        
+        input, select {
+            background-color: #1e293b; border: 1px solid #334155; color: white;
+            transition: all 0.2s;
+        }
+        input:focus, select:focus {
+            outline: none; border-color: #6366f1; ring: 2px; --tw-ring-color: rgba(99, 102, 241, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- CONFIGURACIÓN FIREBASE (Misma que tu sistema actual) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const Icon = ({ name, size = 18, className }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+            return <i data-lucide={name} width={size} height={size} className={className}></i>;
+        };
+
+        const EmployeeManager = () => {
+            const [employees, setEmployees] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [form, setForm] = useState({
+                firstName: '',
+                lastName: '',
+                role: 'COSTURERA', // Default
+                alias: ''
+            });
+            const [isSubmitting, setIsSubmitting] = useState(false);
+
+            // Cargar empleados al iniciar
+            useEffect(() => {
+                const unsubscribe = db.collection('confection_employees')
+                    .orderBy('createdAt', 'desc')
+                    .onSnapshot(snapshot => {
+                        const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                        setEmployees(list);
+                        setLoading(false);
+                    });
+                return () => unsubscribe();
+            }, []);
+
+            // Generar código aleatorio para simular el futuro código de barras
+            const generateOperatorCode = () => {
+                const random = Math.floor(1000 + Math.random() * 9000); // 4 dígitos
+                return `OP-${random}`;
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!form.firstName || !form.lastName) return alert("Nombre y Apellido requeridos");
+                
+                setIsSubmitting(true);
+                try {
+                    const fullName = `${form.firstName} ${form.lastName}`.toUpperCase();
+                    const code = generateOperatorCode();
+
+                    await db.collection('confection_employees').add({
+                        firstName: form.firstName.toUpperCase(),
+                        lastName: form.lastName.toUpperCase(),
+                        fullName: fullName,
+                        alias: form.alias.toUpperCase(),
+                        role: form.role,
+                        operatorCode: code, // Este código será el del código de barras
+                        status: 'ACTIVE',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    setForm({ firstName: '', lastName: '', role: 'COSTURERA', alias: '' });
+                    alert(`Empleado registrado correctamente. Código asignado: ${code}`);
+                } catch (error) {
+                    console.error("Error:", error);
+                    alert("Error al registrar empleado");
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const handleDelete = async (id, name) => {
+                if (confirm(`¿Estás seguro de eliminar a ${name}? Se perderá su historial.`)) {
+                    try {
+                        await db.collection('confection_employees').doc(id).delete();
+                    } catch (error) {
+                        alert("Error al eliminar");
+                    }
+                }
+            };
+
+            const getRoleBadge = (role) => {
+                switch(role) {
+                    case 'COSTURERA': return 'bg-purple-900/50 text-purple-300 border-purple-700';
+                    case 'CORTADOR': return 'bg-blue-900/50 text-blue-300 border-blue-700';
+                    case 'MANUAL': return 'bg-emerald-900/50 text-emerald-300 border-emerald-700';
+                    case 'ENCARGADA': return 'bg-amber-900/50 text-amber-300 border-amber-700';
+                    default: return 'bg-slate-700 text-slate-300';
+                }
+            };
+
+            return (
+                <div className="min-h-screen p-4 md:p-8 flex flex-col items-center">
+                    
+                    {/* HEADER */}
+                    <div className="w-full max-w-5xl mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-gradient-to-br from-pink-500 to-purple-600 p-3 rounded-xl shadow-lg shadow-pink-900/20">
+                                <Icon name="users" size={28} className="text-white"/>
+                            </div>
+                            <div>
+                                <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">PERSONAL DE CONFECCIÓN</h1>
+                                <p className="text-slate-500 text-sm">Registro de operarios para destajo (Pago x Pieza)</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-4 text-xs font-mono text-slate-500">
+                            <div className="text-center">
+                                <div className="text-xl font-bold text-white">{employees.length}</div>
+                                <div>ACTIVOS</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xl font-bold text-emerald-400">{employees.filter(e => e.role === 'COSTURERA').length}</div>
+                                <div>COSTURERAS</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-3 gap-6">
+                        
+                        {/* FORMULARIO DE REGISTRO (Izquierda) */}
+                        <div className="md:col-span-1">
+                            <div className="bg-slate-800/80 backdrop-blur border border-slate-700 p-6 rounded-2xl shadow-xl sticky top-6">
+                                <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                    <Icon name="user-plus" className="text-emerald-400"/> Nuevo Ingreso
+                                </h2>
+                                
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">Nombre(s)</label>
+                                        <input 
+                                            type="text" 
+                                            value={form.firstName}
+                                            onChange={e => setForm({...form, firstName: e.target.value})}
+                                            className="w-full p-3 rounded-lg font-bold uppercase focus:shadow-emerald-900/20"
+                                            placeholder="MARIA"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-400 uppercase ml-1">Apellido(s)</label>
+                                        <input 
+                                            type="text" 
+                                            value={form.lastName}
+                                            onChange={e => setForm({...form, lastName: e.target.value})}
+                                            className="w-full p-3 rounded-lg font-bold uppercase"
+                                            placeholder="PEREZ"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">Alias / Apodo</label>
+                                            <input 
+                                                type="text" 
+                                                value={form.alias}
+                                                onChange={e => setForm({...form, alias: e.target.value})}
+                                                className="w-full p-3 rounded-lg text-sm uppercase text-center"
+                                                placeholder="MARI"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-400 uppercase ml-1">Puesto</label>
+                                            <select 
+                                                value={form.role}
+                                                onChange={e => setForm({...form, role: e.target.value})}
+                                                className="w-full p-3 rounded-lg text-sm font-bold bg-slate-900 cursor-pointer"
+                                            >
+                                                <option value="COSTURERA">COSTURERA</option>
+                                                <option value="CORTADOR">CORTADOR</option>
+                                                <option value="MANUAL">MANUAL</option>
+                                                <option value="ENCARGADA">ENCARGADA</option>
+                                                <option value="OTROS">OTROS</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4">
+                                        <button 
+                                            type="submit" 
+                                            disabled={isSubmitting}
+                                            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-900/30 transition transform active:scale-95 flex justify-center items-center gap-2"
+                                        >
+                                            {isSubmitting ? <Icon name="loader-2" className="animate-spin"/> : <Icon name="save"/>}
+                                            REGISTRAR EMPLEADO
+                                        </button>
+                                        <p className="text-[10px] text-slate-500 text-center mt-2">
+                                            Se generará automáticamente un código para código de barras.
+                                        </p>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        {/* LISTA DE EMPLEADOS (Derecha) */}
+                        <div className="md:col-span-2 space-y-4">
+                            {loading ? (
+                                <div className="text-center py-20 text-slate-500 animate-pulse">Cargando base de datos...</div>
+                            ) : employees.length === 0 ? (
+                                <div className="text-center py-20 text-slate-500 border-2 border-dashed border-slate-700 rounded-xl">
+                                    No hay personal registrado aún.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {employees.map((emp) => (
+                                        <div key={emp.id} className="bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center justify-between card-hover group relative overflow-hidden">
+                                            {/* Decoración de fondo */}
+                                            <div className="absolute -right-4 -bottom-4 opacity-5 pointer-events-none">
+                                                <Icon name="scissors" size={80} />
+                                            </div>
+
+                                            <div className="flex items-center gap-4 z-10">
+                                                <div className="h-12 w-12 rounded-full bg-slate-700 flex items-center justify-center text-lg font-bold text-slate-300 border border-slate-600">
+                                                    {emp.firstName.charAt(0)}{emp.lastName.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-white text-sm md:text-base leading-tight">{emp.fullName}</h3>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${getRoleBadge(emp.role)}`}>
+                                                            {emp.role}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-500 font-mono bg-slate-900 px-1 rounded border border-slate-800">
+                                                            {emp.operatorCode}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="z-10">
+                                                <button 
+                                                    onClick={() => handleDelete(emp.id, emp.firstName)}
+                                                    className="p-2 text-slate-600 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition"
+                                                >
+                                                    <Icon name="trash-2" size={18}/>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<EmployeeManager />);
+    </script>
+</body>
+</html>
