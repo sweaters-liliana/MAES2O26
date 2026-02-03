@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Soporte Técnico Móvil - JESÚS VALLEJO 🤖</title>
+    
+    <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
+    <meta name="theme-color" content="#1e293b">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: { 850: '#172033' }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* --- ESTILOS OPTIMIZADOS PARA MÓVIL --- */
+        body { 
+            -webkit-tap-highlight-color: transparent;
+            -webkit-font-smoothing: antialiased;
+            overscroll-behavior: none;
+        }
+        
+        /* Mejorar toques en móvil */
+        button, [role="button"] {
+            min-height: 44px;
+            min-width: 44px;
+        }
+        
+        /* Contenedor principal */
+        .mobile-container {
+            height: 100vh;
+            height: calc(var(--vh, 1vh) * 100);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Header fijo */
+        .mobile-header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+        
+        /* Cards optimizadas */
+        .mobile-card {
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .mobile-card:active {
+            transform: translateY(2px);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        
+        /* Tablas scrollables en móvil */
+        .table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Inputs más grandes para móvil */
+        .mobile-input {
+            font-size: 16px !important; /* Evita zoom en iOS */
+        }
+        
+        /* Animaciones suaves */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Esconder elementos de escritorio */
+        .desktop-only {
+            display: none !important;
+        }
+        
+        /* Modal móvil */
+        .mobile-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 100;
+            background: rgba(0,0,0,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+        
+        .modal-content {
+            background: white;
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            max-height: 90vh;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            animation: slideUp 0.3s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100%); }
+            to { transform: translateY(0); }
+        }
+        
+        /* Gesture handler */
+        .modal-handle {
+            width: 40px;
+            height: 4px;
+            background: #ccc;
+            border-radius: 2px;
+            margin: 8px auto;
+        }
+        
+        /* Estado táctil */
+        .touch-feedback:active {
+            opacity: 0.7;
+        }
+        
+        /* Mejorar scroll */
+        .scroll-area {
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* Safe areas para iPhone */
+        .safe-top {
+            padding-top: env(safe-area-inset-top);
+        }
+        
+        .safe-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans antialiased">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+        
+        // Configuración de Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const Icon = ({ name, size = 20, className }) => <i data-lucide={name} width={size} height={size} className={className}></i>;
+        
+        // Hook para altura de viewport en móvil
+        const useViewportHeight = () => {
+            useEffect(() => {
+                const setVh = () => {
+                    const vh = window.innerHeight * 0.01;
+                    document.documentElement.style.setProperty('--vh', `${vh}px`);
+                };
+                setVh();
+                window.addEventListener('resize', setVh);
+                return () => window.removeEventListener('resize', setVh);
+            }, []);
+        };
+
+        const MobileOrderView = ({ order, config, onBack, onEdit }) => { 
+            const [entry, setEntry] = useState({ 
+                tejedor: 'JESÚS VALLEJO 🤖', 
+                fecha: new Date().toISOString().split('T')[0], 
+                defectos: '', 
+                agujas: '' 
+            });
+
+            const [showActionSheet, setShowActionSheet] = useState(false);
+            const [selectedPackage, setSelectedPackage] = useState(null);
+
+            const markPackage = async (pkgId) => { 
+                if(!entry.tejedor) return alert("Error: Operador no asignado."); 
+                const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: true, tejedor: entry.tejedor, fecha: entry.fecha, defectos: entry.defectos, agujas: entry.agujas} : p); 
+                await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso});
+                setShowActionSheet(false);
+            };
+            
+            const unmarkPackage = async (pkgId) => { 
+                const newProgreso = order.progreso.map(p => p.id === pkgId ? {...p, finished: false, tejedor: '', fecha: '', defectos: '', agujas: ''} : p); 
+                await db.collection('orders').doc(String(order.id)).update({progreso: newProgreso});
+                setShowActionSheet(false);
+            };
+            
+            const toggleArchive = async () => {
+                if (order.status === 'ARCHIVADO') { 
+                    if(window.confirm("¿Desarchivar esta orden?")){ 
+                        await db.collection('orders').doc(String(order.id)).update({ status: 'EN PROCESO' }); 
+                        onBack(); 
+                    } 
+                    return; 
+                }
+                
+                const incompletePkgs = order.progreso.filter(p => !p.finished);
+                if (incompletePkgs.length === 0) { 
+                    if(!window.confirm("La orden está COMPLETA. ¿Desea archivarla?")) return; 
+                    await db.collection('orders').doc(String(order.id)).update({ status: 'ARCHIVADO' }); 
+                    onBack(); 
+                } else {
+                    const msg = `⚠️ ${incompletePkgs.length} paquetes SIN TERMINAR.\n\nSi archiva ahora, el material NO tejido regresará al inventario.\n\n¿Continuar?`;
+                    if(!window.confirm(msg)) return;
+                    
+                    try {
+                        const invRef = db.collection('inventory').doc('main');
+                        const invDoc = await invRef.get();
+                        let currentItems = invDoc.exists ? invDoc.data().items : [];
+                        let refundLog = [];
+                        let totalUnfinishedGrams = 0;
+                        
+                        incompletePkgs.forEach(pkg => { 
+                            const pieceInfo = order.subPiecesData.find(sp => sp.pieza === pkg.piezaNombre); 
+                            const weight = Number(pieceInfo?.peso || 0); 
+                            totalUnfinishedGrams += (pkg.cantidad * weight); 
+                        });
+                        
+                        order.threading.forEach(hilo => { 
+                            if (hilo.materialId && hilo.porcentaje) { 
+                                const kgToRefund = (totalUnfinishedGrams * (Number(hilo.porcentaje) / 100)) / 1000; 
+                                const itemIndex = currentItems.findIndex(i => i.id === hilo.materialId); 
+                                if (itemIndex > -1 && kgToRefund > 0) { 
+                                    const currentStock = parseFloat(currentItems[itemIndex].stock || 0); 
+                                    currentItems[itemIndex].stock = (currentStock + kgToRefund).toFixed(2); 
+                                    refundLog.push(`${hilo.material}: +${kgToRefund.toFixed(2)}kg`); 
+                                } 
+                            } 
+                        });
+                        
+                        const batch = db.batch(); 
+                        batch.update(invRef, { items: currentItems }); 
+                        batch.update(db.collection('orders').doc(String(order.id)), { status: 'ARCHIVADO' });
+                        
+                        if(refundLog.length > 0) { 
+                            const moveRef = db.collection('inventory_movements').doc(); 
+                            batch.set(moveRef, { 
+                                type: 'DEVOLUCION_ARCHIVO', 
+                                details: refundLog, 
+                                orderId: order.displayId, 
+                                timestamp: firebase.firestore.FieldValue.serverTimestamp() 
+                            }); 
+                        }
+                        
+                        await batch.commit(); 
+                        alert(`✅ Orden Archivada\n\nMaterial devuelto:\n${refundLog.join('\n')}`); 
+                        onBack();
+                    } catch (e) { 
+                        console.error(e); 
+                        alert("Error al actualizar inventario"); 
+                    }
+                }
+            };
+
+            const minutosPorPrenda = order.subPiecesData.reduce((acc, curr) => acc + (Number(curr.tiempo) || 0), 0);
+            const piezasPorHora = minutosPorPrenda > 0 ? (60 / minutosPorPrenda).toFixed(0) : 0;
+            const piezasPorTurno = minutosPorPrenda > 0 ? ((60 / minutosPorPrenda) * 12).toFixed(0) : 0;
+
+            return (
+                <div className="mobile-container bg-white">
+                    {/* Header */}
+                    <div className="mobile-header bg-white border-b px-4 py-3 safe-top flex items-center justify-between shadow-sm">
+                        <button 
+                            onClick={onBack}
+                            className="flex items-center gap-2 text-slate-700 font-bold touch-feedback p-2 -ml-2"
+                        >
+                            <Icon name="arrow-left" size={24}/>
+                            <span>Volver</span>
+                        </button>
+                        
+                        <button
+                            onClick={toggleArchive}
+                            className={`px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 shadow-sm ${
+                                order.status === 'ARCHIVADO' 
+                                    ? 'bg-orange-500 text-white' 
+                                    : 'bg-green-600 text-white'
+                            }`}
+                        >
+                            <Icon name={order.status === 'ARCHIVADO' ? "refresh-ccw" : "archive"} size={18}/>
+                            {order.status === 'ARCHIVADO' ? 'Desarchivar' : 'Archivar'}
+                        </button>
+                    </div>
+
+                    {/* Contenido principal */}
+                    <div className="flex-1 overflow-y-auto scroll-area pb-4">
+                        {order.status === 'ARCHIVADO' && (
+                            <div className="bg-orange-50 border-l-4 border-orange-500 text-orange-800 p-3 mx-4 mt-4 rounded-r-lg flex items-center gap-2">
+                                <Icon name="archive" size={20}/>
+                                <span className="font-bold">ORDEN ARCHIVADA / TERMINADA</span>
+                            </div>
+                        )}
+
+                        {/* Información principal */}
+                        <div className="p-4">
+                            <div className="mb-6">
+                                <h1 className="font-black text-2xl text-slate-900 mb-1">{order.cliente}</h1>
+                                <div className="text-lg font-bold text-indigo-800 mb-1">MOD: {order.codigo}</div>
+                                <div className="text-lg font-bold text-slate-700">PARTIDA: {order.partida}</div>
+                            </div>
+
+                            <div className="flex items-center justify-between bg-slate-800 text-white p-4 rounded-xl mb-6">
+                                <div>
+                                    <div className="text-xs opacity-80">MÁQUINA</div>
+                                    <div className="font-black text-4xl">{order.maquina}</div>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xs opacity-80">TOTAL</div>
+                                    <div className="font-black text-3xl">{order.totalPedido} Pzs</div>
+                                </div>
+                            </div>
+
+                            {/* Piezas */}
+                            <div className="mobile-card bg-white p-4 mb-4">
+                                <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+                                    <Icon name="layers" size={20}/>
+                                    Piezas
+                                </h3>
+                                <div className="space-y-3">
+                                    {order.subPiecesData.map((p, i) => (
+                                        <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
+                                            <div>
+                                                <div className="font-bold text-slate-700">{p.pieza}</div>
+                                                <div className="text-sm text-slate-500">Talla: {p.talla}</div>
+                                            </div>
+                                            <div className="font-black text-xl text-blue-700">{p.totalPedido}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Enhebrado */}
+                            <div className="mobile-card bg-white p-4 mb-4">
+                                <h3 className="font-bold text-lg mb-3 flex items-center gap-2">
+                                    <Icon name="git-merge" size={20}/>
+                                    Enhebrado
+                                </h3>
+                                <div className="space-y-2">
+                                    {order.threading && order.threading.map((row, i) => (
+                                        <div key={i} className="flex justify-between items-center p-2">
+                                            <span className="font-medium text-slate-700">{row.material}</span>
+                                            <span className="font-bold bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full">
+                                                {row.porcentaje}%
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Métricas */}
+                            <div className="grid grid-cols-2 gap-3 mb-6">
+                                <div className="mobile-card bg-white p-4 text-center">
+                                    <div className="text-xs text-slate-500 font-bold mb-1">PIEZAS/HORA</div>
+                                    <div className="text-2xl font-black text-indigo-700">{piezasPorHora}</div>
+                                </div>
+                                <div className="mobile-card bg-white p-4 text-center">
+                                    <div className="text-xs text-slate-500 font-bold mb-1">PIEZAS/TURNO</div>
+                                    <div className="text-2xl font-black text-indigo-700">{piezasPorTurno}</div>
+                                </div>
+                            </div>
+
+                            {/* Registro manual - VERSIÓN MÓVIL */}
+                            <div className="mobile-card bg-white p-4">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="font-bold text-lg flex items-center gap-2">
+                                        <Icon name="wrench" size={20}/>
+                                        Soporte Técnico
+                                    </h3>
+                                    <div className="bg-amber-50 text-amber-700 text-xs px-3 py-1 rounded-full font-bold border border-amber-200">
+                                        MODO JESÚS VALLEJO 🤖
+                                    </div>
+                                </div>
+
+                                {/* Información del operador */}
+                                <div className="bg-indigo-50 p-3 rounded-lg mb-4">
+                                    <div className="text-xs font-bold text-indigo-700 mb-1">OPERADOR</div>
+                                    <div className="font-bold text-lg flex items-center gap-2">
+                                        <Icon name="user-cog" size={20}/>
+                                        {entry.tejedor}
+                                    </div>
+                                </div>
+
+                                {/* Selector de fecha */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-bold text-slate-700 mb-2">Fecha de registro</label>
+                                    <input 
+                                        type="date" 
+                                        value={entry.fecha} 
+                                        onChange={e => setEntry({...entry, fecha: e.target.value})}
+                                        className="w-full p-3 border border-slate-300 rounded-lg mobile-input bg-white"
+                                    />
+                                </div>
+
+                                {/* Lista de paquetes - VERSIÓN MÓVIL SIMPLIFICADA */}
+                                <div className="space-y-3">
+                                    {order.progreso.map(p => {
+                                        const isFinished = p.finished;
+                                        return (
+                                            <div 
+                                                key={p.id}
+                                                className={`p-4 rounded-lg border-2 ${
+                                                    isFinished 
+                                                        ? 'border-green-200 bg-green-50' 
+                                                        : 'border-slate-200 bg-white'
+                                                }`}
+                                                onClick={() => {
+                                                    setSelectedPackage(p);
+                                                    setShowActionSheet(true);
+                                                }}
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div>
+                                                        <div className="font-bold text-slate-800 text-lg">
+                                                            {p.piezaNombre}
+                                                        </div>
+                                                        <div className="text-sm text-slate-500 font-mono">
+                                                            {p.codigoUnico}
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="font-black text-2xl text-blue-700">
+                                                            {p.cantidad}
+                                                        </div>
+                                                        <div className="text-xs text-slate-500">pzs</div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex justify-between items-center">
+                                                    <div>
+                                                        {isFinished ? (
+                                                            <span className="inline-flex items-center gap-1 text-green-700 font-bold">
+                                                                <Icon name="check-circle" size={16}/>
+                                                                LISTO ({p.tejedor})
+                                                            </span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 text-slate-500">
+                                                                <Icon name="clock" size={16}/>
+                                                                PENDIENTE
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <button className="text-indigo-600 font-bold text-sm flex items-center gap-1">
+                                                        {isFinished ? 'Cambiar' : 'Registrar'}
+                                                        <Icon name="chevron-right" size={16}/>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Action Sheet Móvil */}
+                    {showActionSheet && selectedPackage && (
+                        <div className="mobile-modal">
+                            <div className="modal-content safe-bottom">
+                                <div className="modal-handle"></div>
+                                
+                                <div className="p-4">
+                                    <h3 className="font-bold text-lg mb-4 text-center">
+                                        {selectedPackage.finished ? 'Acciones disponibles' : 'Registrar paquete'}
+                                    </h3>
+                                    
+                                    <div className="space-y-3">
+                                        {!selectedPackage.finished ? (
+                                            <button
+                                                onClick={() => markPackage(selectedPackage.id)}
+                                                className="w-full bg-indigo-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 touch-feedback"
+                                            >
+                                                <Icon name="check-circle" size={24}/>
+                                                Marcar como terminado
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => unmarkPackage(selectedPackage.id)}
+                                                className="w-full bg-red-600 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-3 touch-feedback"
+                                            >
+                                                <Icon name="undo" size={24}/>
+                                                Marcar como pendiente
+                                            </button>
+                                        )}
+                                        
+                                        <button
+                                            onClick={() => setShowActionSheet(false)}
+                                            className="w-full bg-slate-200 text-slate-700 p-4 rounded-xl font-bold text-lg touch-feedback"
+                                        >
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="mt-6 p-4 bg-slate-50 rounded-lg">
+                                        <div className="font-bold text-slate-700 mb-1">{selectedPackage.piezaNombre}</div>
+                                        <div className="text-sm text-slate-500 mb-2">Código: {selectedPackage.codigoUnico}</div>
+                                        <div className="font-black text-xl text-blue-700">{selectedPackage.cantidad} piezas</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const MobileApp = () => {
+            const [view, setView] = useState('dashboard');
+            const [orders, setOrders] = useState([]);
+            const [config, setConfig] = useState({});
+            const [selectedOrder, setSelectedOrder] = useState(null);
+            const [isLoading, setIsLoading] = useState(true);
+            const [viewMode, setViewMode] = useState('active');
+
+            useViewportHeight();
+
+            useEffect(() => {
+                const unsubscribeOrders = db.collection('orders').onSnapshot(snapshot => {
+                    setOrders(snapshot.docs.map(doc => doc.data()));
+                    setIsLoading(false);
+                });
+                
+                const unsubscribeConfig = db.collection('settings').doc('config').onSnapshot(doc => {
+                    setConfig(doc.data() || {});
+                });
+
+                setTimeout(() => lucide.createIcons(), 100);
+
+                return () => {
+                    unsubscribeOrders();
+                    unsubscribeConfig();
+                };
+            }, []);
+
+            useEffect(() => {
+                lucide.createIcons();
+            }, [view, orders, viewMode]);
+
+            const filteredOrders = useMemo(() => {
+                const filtered = viewMode === 'active' 
+                    ? orders.filter(o => o.status !== 'ARCHIVADO') 
+                    : orders.filter(o => o.status === 'ARCHIVADO');
+                
+                // Agrupar por partida para móvil
+                const groups = {};
+                filtered.forEach(o => {
+                    const key = o.partida || 'SIN_PARTIDA';
+                    if (!groups[key]) {
+                        groups[key] = {
+                            partida: key,
+                            cliente: o.cliente,
+                            codigo: o.codigo,
+                            orders: []
+                        };
+                    }
+                    groups[key].orders.push(o);
+                });
+                
+                return Object.values(groups).sort((a, b) => b.partida.localeCompare(a.partida));
+            }, [orders, viewMode]);
+
+            const toggleViewMode = () => {
+                setViewMode(viewMode === 'active' ? 'archived' : 'active');
+            };
+
+            if (view === 'detail' && selectedOrder) {
+                return (
+                    <MobileOrderView 
+                        order={orders.find(o => o.id === selectedOrder.id) || selectedOrder}
+                        config={config}
+                        onBack={() => setView('dashboard')}
+                        onEdit={() => {}}
+                    />
+                );
+            }
+
+            return (
+                <div className="mobile-container">
+                    {/* Header */}
+                    <div className="mobile-header bg-white border-b px-4 py-3 safe-top">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-amber-600 text-white p-2 rounded-lg">
+                                    <Icon name="wrench" size={24}/>
+                                </div>
+                                <div>
+                                    <h1 className="font-black text-lg">SOPORTE PLANTA</h1>
+                                    <div className="text-xs font-bold text-amber-600">JESÚS VALLEJO 🤖</div>
+                                </div>
+                            </div>
+                            
+                            <button
+                                onClick={toggleViewMode}
+                                className={`px-4 py-2 rounded-lg font-bold text-sm ${
+                                    viewMode === 'active'
+                                        ? 'bg-indigo-100 text-indigo-700'
+                                        : 'bg-slate-100 text-slate-700'
+                                }`}
+                            >
+                                {viewMode === 'active' ? 'Activas' : 'Archivadas'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Contenido principal */}
+                    <div className="flex-1 overflow-y-auto scroll-area pb-4">
+                        {isLoading ? (
+                            <div className="flex flex-col items-center justify-center h-full">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                                <p className="text-slate-500">Cargando órdenes...</p>
+                            </div>
+                        ) : filteredOrders.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                                <div className="bg-slate-100 p-6 rounded-full mb-4">
+                                    <Icon name="package" size={48} className="text-slate-400"/>
+                                </div>
+                                <h3 className="font-bold text-xl text-slate-700 mb-2">
+                                    {viewMode === 'active' ? 'No hay órdenes activas' : 'No hay órdenes archivadas'}
+                                </h3>
+                                <p className="text-slate-500">
+                                    {viewMode === 'active' 
+                                        ? 'Todo está funcionando correctamente'
+                                        : 'No hay órdenes completadas recientemente'}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="p-4 space-y-4">
+                                {filteredOrders.map(group => (
+                                    <div key={group.partida} className="mobile-card bg-white overflow-hidden">
+                                        <div className="bg-slate-800 text-white p-4 relative">
+                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500"></div>
+                                            <div className="pl-2">
+                                                <div className="text-xs opacity-80 mb-1">PARTIDA</div>
+                                                <div className="font-black text-xl mb-1">{group.partida}</div>
+                                                <div className="flex items-center gap-2">
+                                                    <Icon name="tag" size={16} className="opacity-70"/>
+                                                    <span className="text-sm font-medium opacity-90">{group.codigo}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="p-4 space-y-3">
+                                            {group.orders.map(order => {
+                                                const totalPkgs = order.progreso.length;
+                                                const finishedPkgs = order.progreso.filter(p => p.finished).length;
+                                                const pct = totalPkgs > 0 ? Math.round((finishedPkgs / totalPkgs) * 100) : 0;
+                                                const piezasStr = order.subPiecesData.map(sp => sp.pieza).slice(0, 2).join(' + ');
+                                                
+                                                return (
+                                                    <div
+                                                        key={order.id}
+                                                        onClick={() => {
+                                                            setSelectedOrder(order);
+                                                            setView('detail');
+                                                        }}
+                                                        className="border border-slate-200 rounded-xl p-4 active:bg-slate-50 touch-feedback"
+                                                    >
+                                                        <div className="flex items-start justify-between mb-3">
+                                                            <div className="flex items-center gap-3">
+                                                                <div className="bg-slate-800 text-white w-12 h-12 rounded-lg flex items-center justify-center">
+                                                                    <span className="font-black text-xl">M{order.maquina}</span>
+                                                                </div>
+                                                                <div>
+                                                                    <div className="font-bold text-slate-800">
+                                                                        {piezasStr}
+                                                                        {order.subPiecesData.length > 2 && '...'}
+                                                                    </div>
+                                                                    <div className="text-sm text-slate-500">
+                                                                        {order.totalPedido} piezas
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <div className={`font-black text-xl ${
+                                                                    pct === 100 ? 'text-green-600' : 'text-indigo-600'
+                                                                }`}>
+                                                                    {pct}%
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        {/* Barra de progreso */}
+                                                        <div className="mb-2">
+                                                            <div className="flex justify-between text-xs text-slate-500 mb-1">
+                                                                <span>Progreso</span>
+                                                                <span>{finishedPkgs}/{totalPkgs}</span>
+                                                            </div>
+                                                            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                                                                <div 
+                                                                    className={`h-full transition-all duration-300 ${
+                                                                        pct === 100 ? 'bg-green-500' : 'bg-indigo-500'
+                                                                    }`}
+                                                                    style={{ width: `${pct}%` }}
+                                                                ></div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <div className="flex justify-between items-center mt-3">
+                                                            <div className="text-xs text-slate-500">
+                                                                {order.cliente}
+                                                            </div>
+                                                            <Icon name="chevron-right" size={20} className="text-slate-400"/>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Stats en footer */}
+                    <div className="bg-white border-t px-4 py-3 safe-bottom">
+                        <div className="grid grid-cols-3 gap-2">
+                            <div className="text-center">
+                                <div className="text-xs text-slate-500">Total</div>
+                                <div className="font-bold text-lg">{orders.length}</div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-500">Activas</div>
+                                <div className="font-bold text-lg text-indigo-700">
+                                    {orders.filter(o => o.status !== 'ARCHIVADO').length}
+                                </div>
+                            </div>
+                            <div className="text-center">
+                                <div className="text-xs text-slate-500">Completadas</div>
+                                <div className="font-bold text-lg text-green-700">
+                                    {orders.filter(o => o.status === 'ARCHIVADO').length}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MobileApp />);
+    </script>
+</body>
+</html>
