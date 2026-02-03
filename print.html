@@ -3,359 +3,758 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v4.4 (Print Updated)</title>
+    <title>Impresión de Órdenes - Sistema Textil Cloud</title>
     
-    <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
-    <meta name="theme-color" content="#1e293b">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
     <style>
-        /* --- ESTILOS DE IMPRESIÓN --- */
+        /* ESTILOS GENERALES */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #1e293b;
+            border-bottom: 3px solid #3b82f6;
+            padding-bottom: 10px;
+            margin-bottom: 25px;
+            font-size: 28px;
+        }
+        
+        h2 {
+            color: #475569;
+            margin: 20px 0 15px 0;
+            font-size: 22px;
+        }
+        
+        .controls {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #475569;
+        }
+        
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn:hover {
+            background: #2563eb;
+        }
+        
+        .btn-print {
+            background: #10b981;
+        }
+        
+        .btn-print:hover {
+            background: #059669;
+        }
+        
+        .btn-secondary {
+            background: #64748b;
+        }
+        
+        .btn-secondary:hover {
+            background: #475569;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        /* ESTILOS DE IMPRESIÓN */
+        .print-area {
+            background: white;
+            padding: 20px;
+            border: 1px dashed #cbd5e1;
+            border-radius: 6px;
+            margin-top: 20px;
+            position: relative;
+        }
+        
+        .print-area::before {
+            content: "Vista previa de impresión";
+            position: absolute;
+            top: -12px;
+            left: 15px;
+            background: white;
+            padding: 0 10px;
+            color: #64748b;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        /* Estilos específicos para la hoja de orden impresa */
+        .order-sheet {
+            width: 100%;
+            font-family: 'Arial', sans-serif;
+            color: black;
+            page-break-after: always;
+        }
+        
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 4px solid black;
+        }
+        
+        .order-title {
+            flex: 2;
+        }
+        
+        .order-title h3 {
+            font-size: 36px;
+            font-weight: 900;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+            line-height: 0.9;
+        }
+        
+        .order-info {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .machine-box {
+            flex: 1;
+            text-align: right;
+        }
+        
+        .machine-label {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .machine-number {
+            font-size: 80px;
+            font-weight: 900;
+            line-height: 0.8;
+            color: #1e293b;
+        }
+        
+        .order-content {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .order-details {
+            flex: 7;
+        }
+        
+        .order-image {
+            flex: 5;
+            border: 2px solid black;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+            background: #f8fafc;
+            overflow: hidden;
+        }
+        
+        .order-image img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        
+        .order-image.placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        .order-image.placeholder::before {
+            content: "Sin imagen";
+            margin-bottom: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        
+        th {
+            background-color: #d1d5db;
+            color: black;
+            font-weight: 900;
+            font-size: 14px;
+            border: 2px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        td {
+            border: 2px solid black;
+            padding: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            color: black;
+        }
+        
+        .metrics {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .metric-box {
+            flex: 1;
+            border: 2px solid black;
+            padding: 10px;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 14px;
+            font-weight: bold;
+            text-transform: uppercase;
+            border-bottom: 2px solid black;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+        }
+        
+        .metric-value {
+            font-size: 36px;
+            font-weight: 900;
+        }
+        
+        .control-table {
+            margin-top: 30px;
+        }
+        
+        .control-table th {
+            font-size: 12px;
+            padding: 6px;
+        }
+        
+        .control-table td {
+            font-size: 14px;
+            padding: 6px;
+        }
+        
+        .manual-input {
+            text-align: center;
+            font-style: italic;
+        }
+        
+        /* Estilos solo para impresión real */
         @media print {
-            body, html, #root { 
+            body, html {
                 background: white;
-                -webkit-print-color-adjust: exact; 
                 width: 100%;
+                height: 100%;
                 margin: 0;
                 padding: 0;
             }
-            .no-print, .dashboard-grid { display: none !important; }
-        }
-
-        [span_0](start_span)[span_1](start_span)[span_2](start_span)/* DISEÑO DE HOJA CARTA BASADO EN PAPELETAS[span_0](end_span)[span_1](end_span)[span_2](end_span) */
-        @media print {
-            body:not(.print-mode-ticket) @page { size: letter portrait; margin: 0.5cm; }
-            body:not(.print-mode-ticket) .print-visible-wrapper { display: block !important; width: 100% !important; }
             
-            /* Contenedor Principal (Estilo Papeleta pero en Grande) */
-            .letter-order-container {
-                border: 4px solid black;
-                border-radius: 12px;
+            .no-print {
+                display: none !important;
+            }
+            
+            .container {
+                box-shadow: none;
                 padding: 0;
-                font-family: sans-serif;
-                color: black;
-                overflow: hidden;
+                margin: 0;
             }
-
-            .order-header-row {
-                display: flex;
-                border-bottom: 3px solid black;
-            }
-
-            .order-cell {
-                flex: 1;
-                padding: 6px 10px;
-                border-right: 3px solid black;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .order-cell:last-child { border-right: none; }
-
-            .order-label {
-                font-size: 10pt;
-                font-weight: 800;
-                text-transform: uppercase;
-                color: #222;
-                margin-bottom: 2px;
-            }
-
-            .order-value {
-                font-size: 18pt;
-                font-weight: 900;
-                text-transform: uppercase;
-                line-height: 1.1;
-            }
-
-            .order-value.xl { font-size: 28pt; }
-            .order-value.huge-mq { font-size: 80pt; color: #dc2626; text-align: center; line-height: 1; }
-
-            /* Tabla de Piezas Estilo Papeleta */
-            .pieces-grid {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            .pieces-grid th {
-                background: #e2e8f0 !important;
-                border: 2px solid black;
-                padding: 8px;
-                font-size: 11pt;
-                font-weight: 900;
-                text-align: left;
-            }
-            .pieces-grid td {
-                border: 2px solid black;
-                padding: 8px;
-                font-size: 14pt;
-                font-weight: 800;
-            }
-
-            .barcode-footer {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 15px;
-                border-top: 3px solid black;
-            }
-        }
-
-        [span_3](start_span)[span_4](start_span)[span_5](start_span)/* Mantenimiento de Estilos Originales de Papeletas[span_3](end_span)[span_4](end_span)[span_5](end_span) */
-        @media print {
-            body.print-mode-ticket @page { size: 6in 4in landscape; margin: 0; }
-            body.print-mode-ticket .ticket-container { 
-                display: flex !important; width: 6in; height: 4in; page-break-after: always; padding: 5px; 
-            }
-            .ticket-content { width: 100%; height: 100%; border: 3px solid black; border-radius: 8px; display: flex; flex-direction: column; }
-            .ticket-row { display: flex; border-bottom: 2px solid black; }
-            .ticket-col { flex: 1; padding: 2px 4px; border-right: 2px solid black; display: flex; flex-direction: column; justify-content: center; }
-            .ticket-label { font-size: 8pt; font-weight: bold; text-transform: uppercase; }
-            .ticket-value { font-size: 12pt; font-weight: 900; text-transform: uppercase; }
-        }
-
-        /* General Dash Styles */
-        .dashboard-grid { display: grid; grid-template-rows: 60vh 1fr; height: 100vh; overflow: hidden; }
-        .top-pane { overflow-y: auto; border-bottom: 4px solid #334155; }
-        .bottom-pane { overflow-x: auto; background: #1e293b; color: white; display: flex; padding: 10px; gap: 10px; }
-    </style>
-</head>
-<body class="bg-slate-100 text-slate-800 font-sans">
-    <div id="root"></div>
-
-    <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
-            authDomain: "cirineo-cec21.firebaseapp.com",
-            projectId: "cirineo-cec21",
-            storageBucket: "cirineo-cec21.firebasestorage.app",
-            messagingSenderId: "620210618284",
-            appId: "1:620210618284:web:482bab9bf74650fff18409",
-            measurementId: "G-B7YLM78RVW"
-        };
-
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-
-        const Icon = ({ name, size = 18, className }) => <i data-lucide={name} width={size} height={size} className={className}></i>;
-
-        // --- COMPONENTE ORDEN DE PRODUCCIÓN TAMAÑO CARTA (DISEÑO ADAPTADO A PAPELETA) ---
-        const ProductionOrderPrint = ({ order }) => {
-            const canvasRef = useRef(null);
             
-            useEffect(() => {
-                if (canvasRef.current && order.id) {
-                    try { JsBarcode(canvasRef.current, order.id, { format: "CODE128", displayValue: false, height: 60 }); } 
-                    catch (e) { console.error("Error barcode", e); }
-                }
-            }, [order]);
+            .print-area {
+                border: none;
+                padding: 0;
+                margin: 0;
+            }
+            
+            .print-area::before {
+                display: none;
+            }
+            
+            .order-sheet {
+                page-break-inside: avoid;
+            }
+            
+            @page {
+                size: letter portrait;
+                margin: 1cm;
+            }
+        }
+        
+        /* Mensajes y estados */
+        .message {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+        
+        .message.info {
+            background: #dbeafe;
+            color: #1e40af;
+            border-left: 4px solid #3b82f6;
+        }
+        
+        .message.success {
+            background: #d1fae5;
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+        
+        .message.warning {
+            background: #fef3c7;
+            color: #92400e;
+            border-left: 4px solid #f59e0b;
+        }
+        
+        .message.error {
+            background: #fee2e2;
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+        
+        /* Responsive */
+        @media (max-width: 900px) {
+            .order-content {
+                flex-direction: column;
+            }
+            
+            .order-image {
+                min-height: 200px;
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .button-group {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+    
+    <!-- Font Awesome para iconos -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-print"></i> Impresión de Hojas de Órdenes</h1>
+        
+        <div class="controls">
+            <h2>Configurar Orden para Impresión</h2>
+            
+            <div class="input-group">
+                <label for="orderId">ID de la Orden (separar múltiples IDs con comas)</label>
+                <input type="text" id="orderId" placeholder="Ej: 12345, 12346, 12347">
+                <div class="message info">
+                    <i class="fas fa-info-circle"></i> Ingresa uno o más IDs de órdenes separados por comas para imprimir múltiples hojas.
+                </div>
+            </div>
+            
+            <div class="input-group">
+                <label for="imageUrl">URL de imagen del modelo (opcional)</label>
+                <input type="text" id="imageUrl" placeholder="https://ejemplo.com/imagen.jpg">
+            </div>
+            
+            <div class="button-group">
+                <button class="btn" id="generateBtn">
+                    <i class="fas fa-eye"></i> Generar Vista Previa
+                </button>
+                <button class="btn btn-print" id="printBtn">
+                    <i class="fas fa-print"></i> Imprimir Hoja(s)
+                </button>
+                <button class="btn btn-secondary" id="clearBtn">
+                    <i class="fas fa-trash-alt"></i> Limpiar
+                </button>
+            </div>
+        </div>
+        
+        <div id="printPreview" class="print-area">
+            <div class="message warning">
+                <i class="fas fa-exclamation-circle"></i> Ingresa un ID de orden y haz clic en "Generar Vista Previa" para ver cómo se imprimirá la hoja.
+            </div>
+        </div>
+    </div>
 
-            return (
-                <div className="print-visible-wrapper hidden p-4">
-                    <div className="letter-order-container">
-                        {/* Cabecera Tipo Papeleta */}
-                        <div className="order-header-row bg-slate-50">
-                            <div className="order-cell" style={{flex: 3}}>
-                                <span className="order-label">CLIENTE</span>
-                                <span className="order-value xl">{order.cliente}</span>
-                            </div>
-                            <div className="order-cell" style={{flex: 2}}>
-                                <span className="order-label">FECHA DE EMISIÓN</span>
-                                <span className="order-value">{new Date().toLocaleDateString('es-MX')}</span>
+    <script>
+        // Datos de ejemplo para demostración
+        const sampleOrders = {
+            "12345": {
+                cliente: "MODATEX S.A.",
+                partida: "MAR25_01",
+                codigo: "POLO-2024",
+                maquina: "12",
+                subPiecesData: [
+                    { pieza: "FRENTE", talla: "L", totalPedido: "150" },
+                    { pieza: "ESPALDA", talla: "L", totalPedido: "150" },
+                    { pieza: "MANGA", talla: "L", totalPedido: "300" }
+                ],
+                threading: [
+                    { material: "HILO POLIESTER - BLANCO", porcentaje: "70%" },
+                    { material: "HILO ALGODÓN - NEGRO", porcentaje: "30%" }
+                ],
+                progreso: [
+                    { id: 1, codigoUnico: "MAR25_01F_1_5", cantidad: "30", tejedor: "BALTA", fecha: "2024-03-10", defectos: "0", agujas: "OK", observaciones: "Normal" },
+                    { id: 2, codigoUnico: "MAR25_01F_2_5", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" },
+                    { id: 3, codigoUnico: "MAR25_01F_3_5", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" },
+                    { id: 4, codigoUnico: "MAR25_01E_1_3", cantidad: "50", tejedor: "ANDRÉS", fecha: "2024-03-09", defectos: "1", agujas: "OK", observaciones: "Un defecto menor" },
+                    { id: 5, codigoUnico: "MAR25_01E_2_3", cantidad: "50", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" },
+                    { id: 6, codigoUnico: "MAR25_01M_1_10", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" }
+                ],
+                tiempoPromedio: 2.5 // minutos por pieza
+            },
+            "12346": {
+                cliente: "TEXTIL MODA",
+                partida: "MAR25_02",
+                codigo: "CAMISA-2024",
+                maquina: "8",
+                subPiecesData: [
+                    { pieza: "CUERPO", talla: "M", totalPedido: "200" },
+                    { pieza: "MANGA", talla: "M", totalPedido: "200" },
+                    { pieza: "CUELLO", talla: "M", totalPedido: "200" }
+                ],
+                threading: [
+                    { material: "HILO ALGODÓN - AZUL", porcentaje: "100%" }
+                ],
+                progreso: [
+                    { id: 1, codigoUnico: "MAR25_02C_1_8", cantidad: "25", tejedor: "CARLOS", fecha: "2024-03-08", defectos: "0", agujas: "OK", observaciones: "" },
+                    { id: 2, codigoUnico: "MAR25_02C_2_8", cantidad: "25", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" }
+                ],
+                tiempoPromedio: 3.2 // minutos por pieza
+            }
+        };
+        
+        // Referencias a elementos DOM
+        const orderIdInput = document.getElementById('orderId');
+        const imageUrlInput = document.getElementById('imageUrl');
+        const generateBtn = document.getElementById('generateBtn');
+        const printBtn = document.getElementById('printBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const printPreview = document.getElementById('printPreview');
+        
+        // Generar hoja de orden para impresión
+        function generateOrderSheet(orderData, orderNumber = 1) {
+            // Calcular métricas
+            const tiempoPorPieza = orderData.tiempoPromedio || 2.5;
+            const piezasPorHora = tiempoPorPieza > 0 ? Math.floor(60 / tiempoPorPieza) : 0;
+            const piezasPorTurno = piezasPorHora * 12;
+            
+            // Crear filas para tabla de piezas
+            const piecesRows = orderData.subPiecesData.map(piece => `
+                <tr>
+                    <td>${piece.pieza}</td>
+                    <td class="text-center">${piece.talla || 'UNI'}</td>
+                    <td class="text-center">${piece.totalPedido}</td>
+                </tr>
+            `).join('');
+            
+            // Crear filas para enhebrado
+            const threadingRows = orderData.threading.map(thread => `
+                <tr>
+                    <td>${thread.material}</td>
+                    <td class="text-center">${thread.porcentaje}</td>
+                </tr>
+            `).join('');
+            
+            // Crear filas para control de tejido
+            const controlRows = orderData.progreso.map((pkg, index) => `
+                <tr>
+                    <td class="text-center">${index + 1}</td>
+                    <td class="pl-1 font-mono truncate" title="${pkg.codigoUnico || pkg.piezaNombre}">${pkg.codigoUnico || pkg.piezaNombre}</td>
+                    <td class="text-center">${pkg.cantidad}</td>
+                    <td class="manual-input">${pkg.tejedor || '_'}</td>
+                    <td class="manual-input">${pkg.fecha || '_'}</td>
+                    <td class="manual-input">${pkg.defectos || '_'}</td>
+                    <td class="manual-input">${pkg.agujas || '_'}</td>
+                    <td class="manual-input">${pkg.observaciones || '_'}</td>
+                </tr>
+            `).join('');
+            
+            // Determinar si mostrar imagen o placeholder
+            const imageUrl = imageUrlInput.value.trim();
+            const imageContent = imageUrl 
+                ? `<img src="${imageUrl}" alt="${orderData.codigo}" onerror="this.parentElement.className='order-image placeholder'">`
+                : `<div class="order-image placeholder"></div>`;
+            
+            return `
+                <div class="order-sheet">
+                    <div class="order-header">
+                        <div class="order-title">
+                            <h3>${orderData.cliente}</h3>
+                            <div class="order-info">
+                                <div><strong>PARTIDA:</strong> ${orderData.partida}</div>
+                                <div><strong>MODELO:</strong> ${orderData.codigo}</div>
+                                <div><strong>FECHA:</strong> ${new Date().toLocaleDateString('es-MX')}</div>
                             </div>
                         </div>
-
-                        <div className="order-header-row">
-                            <div className="order-cell" style={{flex: 2}}>
-                                <span className="order-label">MODELO / CÓDIGO</span>
-                                <span className="order-value xl">{order.codigo}</span>
-                            </div>
-                            <div className="order-cell" style={{flex: 1}}>
-                                <span className="order-label">PARTIDA</span>
-                                <span className="order-value xl">{order.partida}</span>
-                            </div>
-                            <div className="order-cell" style={{flex: 1.5}}>
-                                <span className="order-label">MAQUINA</span>
-                                <div className="order-value huge-mq">{order.maquina}</div>
-                            </div>
+                        <div class="machine-box">
+                            <div class="machine-label">MÁQUINA</div>
+                            <div class="machine-number">${orderData.maquina}</div>
                         </div>
-
-                        {/* Detalle de Hilos */}
-                        <div className="p-4 border-b-3 border-black bg-indigo-50">
-                            <span className="order-label block mb-2">ESPECIFICACIONES DE ENHEBRADO</span>
-                            <div className="grid grid-cols-4 gap-4">
-                                {order.threading?.map((h, i) => (
-                                    <div key={i} className="border-l-4 border-indigo-600 pl-2">
-                                        <div className="text-[10pt] font-bold">GUÍA {h.guia}</div>
-                                        <div className="text-[12pt] font-black">{h.material || 'N/A'}</div>
-                                        <div className="text-[11pt] text-indigo-700">{h.porcentaje}%</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Tabla de Componentes Adaptada */}
-                        <div className="p-0">
-                            <table className="pieces-grid">
+                    </div>
+                    
+                    <div class="order-content">
+                        <div class="order-details">
+                            <table>
                                 <thead>
                                     <tr>
-                                        <th>PIEZA / DESCRIPCIÓN</th>
-                                        <th className="text-center">TALLA</th>
-                                        <th className="text-center">PESO (G)</th>
-                                        <th className="text-center">TIEMPO (M:S)</th>
-                                        <th className="text-center">CANT. TOTAL</th>
+                                        <th>PIEZA</th>
+                                        <th>TALLA</th>
+                                        <th>TOTAL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {order.subPiecesData?.map((p, idx) => (
-                                        <tr key={idx}>
-                                            <td>{p.pieza}</td>
-                                            <td className="text-center font-black text-2xl">{p.talla || '-'}</td>
-                                            <td className="text-center">{p.peso}g</td>
-                                            <td className="text-center">
-                                                {Math.floor(p.tiempo)}:{( (p.tiempo % 1) * 60).toFixed(0).padStart(2, '0')}
-                                            </td>
-                                            <td className="text-center bg-yellow-50">{p.totalPedido}</td>
-                                        </tr>
-                                    ))}
+                                    ${piecesRows}
                                 </tbody>
                             </table>
-                        </div>
-
-                        {/* Footer con Código de Barras */}
-                        <div className="barcode-footer">
-                            <canvas ref={canvasRef}></canvas>
-                            <div className="text-sm font-mono mt-1">NÚMERO DE ORDEN: {order.id}</div>
-                            <div className="mt-4 w-full flex justify-between px-10">
-                                <div className="text-center border-t-2 border-black w-48 pt-1 text-xs font-bold">FIRMA PROGRAMACIÓN</div>
-                                <div className="text-center border-t-2 border-black w-48 pt-1 text-xs font-bold">FIRMA PRODUCCIÓN</div>
+                            
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th colspan="2" class="bg-black text-white py-1 text-sm">ENHEBRADO</th>
+                                    </tr>
+                                    <tr>
+                                        <th>Material</th>
+                                        <th class="w-16">%</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${threadingRows}
+                                </tbody>
+                            </table>
+                            
+                            <div class="metrics">
+                                <div class="metric-box">
+                                    <div class="metric-label">PZS/HR</div>
+                                    <div class="metric-value">${piezasPorHora}</div>
+                                </div>
+                                <div class="metric-box">
+                                    <div class="metric-label">PZS/12H</div>
+                                    <div class="metric-value">${piezasPorTurno}</div>
+                                </div>
                             </div>
                         </div>
+                        
+                        <div class="order-image">
+                            ${imageContent}
+                        </div>
+                    </div>
+                    
+                    <div class="control-table">
+                        <div style="border-bottom: 4px solid black; font-weight: bold; margin-bottom: 5px; display: flex; justify-content: space-between;">
+                            <span>CONTROL DE TEJIDO</span>
+                            <span>${new Date().toLocaleDateString('es-MX')}</span>
+                        </div>
+                        <table class="package-table-print">
+                            <colgroup>
+                                <col style="width: 6%">
+                                <col style="width: 24%">
+                                <col style="width: 10%">
+                                <col style="width: 12%">
+                                <col style="width: 12%">
+                                <col style="width: 8%">
+                                <col style="width: 8%">
+                                <col style="width: 20%">
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>CÓDIGO</th>
+                                    <th>Cant</th>
+                                    <th>Tej</th>
+                                    <th>Fec</th>
+                                    <th>Def</th>
+                                    <th>Agj</th>
+                                    <th>OBS</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${controlRows}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-            );
-        };
-
-        // --- COMPONENTE PAPELETA INDIVIDUAL (Sin cambios, para referencia) ---
-        const PackageTicket = ({ order, pkg }) => {
-            const canvasRef = useRef(null);
-            const pieceInfo = order.subPiecesData?.find(p => p.pieza === pkg.piezaNombre) || {};
-
-            useEffect(() => {
-                if (canvasRef.current) {
-                    const barcodeValue = `${order.id}-${pkg.id}`;
-                    try { JsBarcode(canvasRef.current, barcodeValue, { format: "CODE128", displayValue: false, height: 50, width: 2, margin: 0, background: "transparent" }); } 
-                    catch (e) { console.error("Error barcode", e); }
+            `;
+        }
+        
+        // Generar vista previa de impresión
+        function generatePreview() {
+            const orderIds = orderIdInput.value.trim();
+            
+            if (!orderIds) {
+                printPreview.innerHTML = `
+                    <div class="message error">
+                        <i class="fas fa-exclamation-triangle"></i> Por favor ingresa al menos un ID de orden.
+                    </div>
+                `;
+                return;
+            }
+            
+            const ids = orderIds.split(',').map(id => id.trim()).filter(id => id.length > 0);
+            let previewHTML = '';
+            let foundOrders = 0;
+            
+            ids.forEach((id, index) => {
+                if (sampleOrders[id]) {
+                    previewHTML += generateOrderSheet(sampleOrders[id], index + 1);
+                    foundOrders++;
+                } else {
+                    previewHTML += `
+                        <div class="message error" style="page-break-after: always;">
+                            <i class="fas fa-exclamation-triangle"></i> No se encontró la orden con ID: ${id}
+                        </div>
+                    `;
                 }
-            }, [order, pkg]);
-
-            return (
-                <div className="ticket-container">
-                    <div className="ticket-content">
-                        <div className="ticket-row">
-                            <div className="ticket-col" style={{flex: 2}}><span className="ticket-label">MODELO</span><span className="ticket-value">{order.codigo}</span></div>
-                            <div className="ticket-col" style={{flex: 1}}><span className="ticket-label">PIEZAS</span><span className="ticket-value text-center">{pkg.cantidad}</span></div>
-                            <div className="ticket-col" style={{flex: 2}}><span className="ticket-label">PARTIDA</span><span className="ticket-value">{order.partida}</span></div>
-                        </div>
-                        <div className="ticket-row" style={{padding: '4px'}}>
-                            <div className="ticket-col border-r-0"><span className="ticket-label">DESCRIPCION</span><span className="ticket-value">{pkg.piezaNombre}</span></div>
-                        </div>
-                        <div className="ticket-row" style={{flex: '1 1 auto'}}>
-                            <div className="ticket-col text-center" style={{flex: 1}}><span className="ticket-label">PAQUETE</span><span className="ticket-value text-3xl">{pkg.paqueteNum} / {pkg.paquetesDePieza}</span></div>
-                            <div className="ticket-col text-center bg-slate-100" style={{flex: 1}}><span className="ticket-label">MAQUINA</span><span className="ticket-value text-5xl">{order.maquina}</span></div>
-                        </div>
-                        <div className="ticket-row no-border-bottom flex-col items-center justify-center pt-2">
-                            <canvas ref={canvasRef} className="max-w-full"></canvas>
-                            <div className="text-[9px] font-mono mt-1">ID: {order.id}-{pkg.id}</div>
-                        </div>
+            });
+            
+            if (foundOrders === 0) {
+                printPreview.innerHTML = `
+                    <div class="message error">
+                        <i class="fas fa-exclamation-triangle"></i> No se encontraron órdenes con los IDs proporcionados.
                     </div>
-                </div>
-            );
-        };
-
-        // --- APP PRINCIPAL (Lógica de selección de impresión) ---
-        const App = () => {
-            const [orders, setOrders] = useState([]);
-            const [printMode, setPrintMode] = useState(null); // 'order' o 'tickets'
-            const [selectedOrder, setSelectedOrder] = useState(null);
-
-            useEffect(() => {
-                const unsubscribe = db.collection('orders').onSnapshot(snap => {
-                    const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    setOrders(data);
+                    <div class="message info">
+                        <i class="fas fa-info-circle"></i> IDs de ejemplo: 12345, 12346
+                    </div>
+                `;
+            } else {
+                printPreview.innerHTML = previewHTML;
+                
+                // Mostrar mensaje de éxito
+                const successMsg = document.createElement('div');
+                successMsg.className = 'message success no-print';
+                successMsg.innerHTML = `
+                    <i class="fas fa-check-circle"></i> Generadas ${foundOrders} hoja(s) de orden. Listo para imprimir.
+                `;
+                printPreview.prepend(successMsg);
+            }
+        }
+        
+        // Función para imprimir
+        function printSheets() {
+            if (printPreview.children.length <= 1) {
+                alert("Primero genera una vista previa de las hojas a imprimir.");
+                return;
+            }
+            
+            // Ocultar elementos que no deben imprimirse
+            const noPrintElements = document.querySelectorAll('.no-print');
+            noPrintElements.forEach(el => {
+                el.style.display = 'none';
+            });
+            
+            // Imprimir
+            window.print();
+            
+            // Restaurar elementos ocultos
+            setTimeout(() => {
+                noPrintElements.forEach(el => {
+                    el.style.display = '';
                 });
-                return () => unsubscribe();
-            }, []);
-
-            const handlePrintOrder = (order) => {
-                setSelectedOrder(order);
-                setPrintMode('order');
-                document.body.classList.remove('print-mode-ticket');
-                setTimeout(() => { window.print(); }, 500);
-            };
-
-            const handlePrintTickets = (order) => {
-                setSelectedOrder(order);
-                setPrintMode('tickets');
-                document.body.classList.add('print-mode-ticket');
-                setTimeout(() => { window.print(); }, 500);
-            };
-
-            return (
-                <div className="min-h-screen">
-                    <div className="no-print p-6">
-                        <h1 className="text-2xl font-black mb-6">CIRINEO - GESTIÓN DE PRODUCCIÓN</h1>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {orders.map(order => (
-                                <div key={order.id} className="bg-white border-2 border-slate-300 p-4 rounded-xl shadow-lg">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div>
-                                            <div className="text-xs font-bold text-slate-400">PARTIDA: {order.partida}</div>
-                                            <div className="text-xl font-black">{order.codigo}</div>
-                                            <div className="text-sm text-slate-600 uppercase font-bold">{order.cliente}</div>
-                                        </div>
-                                        <div className="bg-indigo-600 text-white px-3 py-1 rounded-lg text-2xl font-black">
-                                            M{order.maquina}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handlePrintOrder(order)} className="flex-1 bg-slate-800 text-white py-2 rounded font-bold hover:bg-black transition-colors">
-                                            <Icon name="file-text" className="inline mr-2"/> Hoja Carta
-                                        </button>
-                                        <button onClick={() => handlePrintTickets(order)} className="flex-1 bg-indigo-600 text-white py-2 rounded font-bold hover:bg-indigo-700 transition-colors">
-                                            <Icon name="tag" className="inline mr-2"/> Papeletas
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* ZONA DE IMPRESIÓN DINÁMICA */}
-                    {printMode === 'order' && selectedOrder && <ProductionOrderPrint order={selectedOrder} />}
-                    {printMode === 'tickets' && selectedOrder && (
-                        <div className="print-visible-wrapper hidden">
-                            {selectedOrder.predefinedPackages?.map(pkg => (
-                                <PackageTicket key={pkg.id} order={selectedOrder} pkg={pkg} />
-                            ))}
-                        </div>
-                    )}
+            }, 500);
+        }
+        
+        // Limpiar formulario y vista previa
+        function clearAll() {
+            orderIdInput.value = '';
+            imageUrlInput.value = '';
+            printPreview.innerHTML = `
+                <div class="message warning">
+                    <i class="fas fa-exclamation-circle"></i> Ingresa un ID de orden y haz clic en "Generar Vista Previa" para ver cómo se imprimirá la hoja.
                 </div>
-            );
-        };
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+            `;
+        }
+        
+        // Event Listeners
+        generateBtn.addEventListener('click', generatePreview);
+        printBtn.addEventListener('click', printSheets);
+        clearBtn.addEventListener('click', clearAll);
+        
+        // Permitir generar con Enter
+        orderIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                generatePreview();
+            }
+        });
+        
+        // Cargar datos de ejemplo en la URL de imagen
+        imageUrlInput.value = 'https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/main/sample-image.jpg';
+        
+        // Mensaje inicial
+        printPreview.innerHTML = `
+            <div class="message warning">
+                <i class="fas fa-exclamation-circle"></i> Ingresa un ID de orden y haz clic en "Generar Vista Previa" para ver cómo se imprimirá la hoja.
+            </div>
+            <div class="message info">
+                <i class="fas fa-info-circle"></i> <strong>IDs de ejemplo:</strong> 12345, 12346
+            </div>
+        `;
     </script>
 </body>
 </html>
