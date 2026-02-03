@@ -36,6 +36,9 @@
             padding-bottom: 10px;
             margin-bottom: 25px;
             font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         h2 {
@@ -52,29 +55,101 @@
             margin-bottom: 25px;
         }
         
-        .input-group {
-            margin-bottom: 15px;
+        .selection-steps {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
         }
         
-        label {
-            display: block;
+        @media (max-width: 768px) {
+            .selection-steps {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .step-box {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        
+        .step-title {
+            font-size: 14px;
             font-weight: 600;
-            margin-bottom: 5px;
-            color: #475569;
+            color: #64748b;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
         
-        input, select, textarea {
+        .step-title i {
+            color: #3b82f6;
+        }
+        
+        select, input {
             width: 100%;
             padding: 10px 12px;
             border: 1px solid #cbd5e1;
             border-radius: 4px;
             font-size: 16px;
+            background: white;
         }
         
-        input:focus, select:focus, textarea:focus {
+        select:focus, input:focus {
             outline: none;
             border-color: #3b82f6;
             box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        select:disabled {
+            background: #f1f5f9;
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+        
+        .order-summary {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .order-summary.active {
+            display: block;
+        }
+        
+        .summary-header {
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .summary-details {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        .detail-item {
+            font-size: 14px;
+        }
+        
+        .detail-label {
+            font-weight: 600;
+            color: #64748b;
+        }
+        
+        .detail-value {
+            color: #1e293b;
         }
         
         .btn {
@@ -110,6 +185,11 @@
         
         .btn-secondary:hover {
             background: #475569;
+        }
+        
+        .btn:disabled {
+            background: #cbd5e1;
+            cursor: not-allowed;
         }
         
         .button-group {
@@ -377,6 +457,18 @@
             border-left: 4px solid #ef4444;
         }
         
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #64748b;
+        }
+        
+        .loading i {
+            font-size: 24px;
+            margin-bottom: 10px;
+            display: block;
+        }
+        
         /* Responsive */
         @media (max-width: 900px) {
             .order-content {
@@ -408,106 +500,459 @@
         <h1><i class="fas fa-print"></i> Impresión de Hojas de Órdenes</h1>
         
         <div class="controls">
-            <h2>Configurar Orden para Impresión</h2>
+            <h2>Seleccionar Orden para Imprimir</h2>
             
-            <div class="input-group">
-                <label for="orderId">ID de la Orden (separar múltiples IDs con comas)</label>
-                <input type="text" id="orderId" placeholder="Ej: 12345, 12346, 12347">
-                <div class="message info">
-                    <i class="fas fa-info-circle"></i> Ingresa uno o más IDs de órdenes separados por comas para imprimir múltiples hojas.
+            <div class="selection-steps">
+                <div class="step-box">
+                    <div class="step-title">
+                        <i class="fas fa-layer-group"></i> 1. Seleccionar Partida
+                    </div>
+                    <select id="partidaSelect">
+                        <option value="">-- Selecciona una partida --</option>
+                        <!-- Las partidas se cargarán dinámicamente -->
+                    </select>
+                </div>
+                
+                <div class="step-box">
+                    <div class="step-title">
+                        <i class="fas fa-ruler"></i> 2. Seleccionar Talla
+                    </div>
+                    <select id="tallaSelect" disabled>
+                        <option value="">-- Primero selecciona una partida --</option>
+                    </select>
+                </div>
+                
+                <div class="step-box">
+                    <div class="step-title">
+                        <i class="fas fa-cogs"></i> 3. Seleccionar Orden/Máquina
+                    </div>
+                    <select id="ordenSelect" disabled>
+                        <option value="">-- Primero selecciona una talla --</option>
+                    </select>
                 </div>
             </div>
             
-            <div class="input-group">
-                <label for="imageUrl">URL de imagen del modelo (opcional)</label>
-                <input type="text" id="imageUrl" placeholder="https://ejemplo.com/imagen.jpg">
+            <div class="order-summary" id="orderSummary">
+                <div class="summary-header">
+                    <span>Resumen de la Orden Seleccionada</span>
+                    <span id="orderStatus" class="status-active"></span>
+                </div>
+                <div class="summary-details">
+                    <div class="detail-item">
+                        <span class="detail-label">Cliente:</span>
+                        <span class="detail-value" id="summaryCliente"></span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Modelo:</span>
+                        <span class="detail-value" id="summaryModelo"></span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Máquina:</span>
+                        <span class="detail-value" id="summaryMaquina"></span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Total Piezas:</span>
+                        <span class="detail-value" id="summaryTotalPiezas"></span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="detail-label">Progreso:</span>
+                        <span class="detail-value" id="summaryProgreso"></span>
+                    </div>
+                </div>
             </div>
             
             <div class="button-group">
-                <button class="btn" id="generateBtn">
+                <button class="btn" id="generateBtn" disabled>
                     <i class="fas fa-eye"></i> Generar Vista Previa
                 </button>
-                <button class="btn btn-print" id="printBtn">
-                    <i class="fas fa-print"></i> Imprimir Hoja(s)
+                <button class="btn btn-print" id="printBtn" disabled>
+                    <i class="fas fa-print"></i> Imprimir Hoja
                 </button>
                 <button class="btn btn-secondary" id="clearBtn">
-                    <i class="fas fa-trash-alt"></i> Limpiar
+                    <i class="fas fa-redo"></i> Reiniciar Selección
                 </button>
             </div>
         </div>
         
         <div id="printPreview" class="print-area">
             <div class="message warning">
-                <i class="fas fa-exclamation-circle"></i> Ingresa un ID de orden y haz clic en "Generar Vista Previa" para ver cómo se imprimirá la hoja.
+                <i class="fas fa-exclamation-circle"></i> Selecciona una partida, talla y orden para generar la vista previa de impresión.
             </div>
         </div>
     </div>
 
     <script>
-        // Datos de ejemplo para demostración
-        const sampleOrders = {
-            "12345": {
-                cliente: "MODATEX S.A.",
-                partida: "MAR25_01",
-                codigo: "POLO-2024",
-                maquina: "12",
-                subPiecesData: [
-                    { pieza: "FRENTE", talla: "L", totalPedido: "150" },
-                    { pieza: "ESPALDA", talla: "L", totalPedido: "150" },
-                    { pieza: "MANGA", talla: "L", totalPedido: "300" }
-                ],
-                threading: [
-                    { material: "HILO POLIESTER - BLANCO", porcentaje: "70%" },
-                    { material: "HILO ALGODÓN - NEGRO", porcentaje: "30%" }
-                ],
-                progreso: [
-                    { id: 1, codigoUnico: "MAR25_01F_1_5", cantidad: "30", tejedor: "BALTA", fecha: "2024-03-10", defectos: "0", agujas: "OK", observaciones: "Normal" },
-                    { id: 2, codigoUnico: "MAR25_01F_2_5", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" },
-                    { id: 3, codigoUnico: "MAR25_01F_3_5", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" },
-                    { id: 4, codigoUnico: "MAR25_01E_1_3", cantidad: "50", tejedor: "ANDRÉS", fecha: "2024-03-09", defectos: "1", agujas: "OK", observaciones: "Un defecto menor" },
-                    { id: 5, codigoUnico: "MAR25_01E_2_3", cantidad: "50", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" },
-                    { id: 6, codigoUnico: "MAR25_01M_1_10", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" }
-                ],
-                tiempoPromedio: 2.5 // minutos por pieza
-            },
-            "12346": {
-                cliente: "TEXTIL MODA",
-                partida: "MAR25_02",
-                codigo: "CAMISA-2024",
-                maquina: "8",
-                subPiecesData: [
-                    { pieza: "CUERPO", talla: "M", totalPedido: "200" },
-                    { pieza: "MANGA", talla: "M", totalPedido: "200" },
-                    { pieza: "CUELLO", talla: "M", totalPedido: "200" }
-                ],
-                threading: [
-                    { material: "HILO ALGODÓN - AZUL", porcentaje: "100%" }
-                ],
-                progreso: [
-                    { id: 1, codigoUnico: "MAR25_02C_1_8", cantidad: "25", tejedor: "CARLOS", fecha: "2024-03-08", defectos: "0", agujas: "OK", observaciones: "" },
-                    { id: 2, codigoUnico: "MAR25_02C_2_8", cantidad: "25", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "" }
-                ],
-                tiempoPromedio: 3.2 // minutos por pieza
-            }
+        // Base de datos simulada con estructura jerárquica
+        const ordersDatabase = {
+            // Partidas activas
+            partidas: [
+                {
+                    id: "MAR25_01",
+                    nombre: "MAR25_01",
+                    cliente: "MODATEX S.A.",
+                    fechaEntrega: "2024-03-25",
+                    status: "EN PROCESO",
+                    tallas: ["L", "M", "S", "XL"]
+                },
+                {
+                    id: "MAR25_02", 
+                    nombre: "MAR25_02",
+                    cliente: "TEXTIL MODA",
+                    fechaEntrega: "2024-03-28",
+                    status: "EN PROCESO",
+                    tallas: ["M", "S"]
+                },
+                {
+                    id: "ABR25_01",
+                    nombre: "ABR25_01",
+                    cliente: "INDUSTRIAS UNIDAS",
+                    fechaEntrega: "2024-04-05",
+                    status: "EN PROCESO",
+                    tallas: ["L", "XL"]
+                },
+                {
+                    id: "FEB25_03",
+                    nombre: "FEB25_03",
+                    cliente: "CONFECCIONES DEL NORTE",
+                    fechaEntrega: "2024-02-20",
+                    status: "ARCHIVADO",
+                    tallas: ["S", "M", "L"]
+                }
+            ],
+            
+            // Órdenes por partida y talla
+            ordenes: [
+                // PARTIDA: MAR25_01
+                {
+                    id: "12345",
+                    partidaId: "MAR25_01",
+                    talla: "L",
+                    cliente: "MODATEX S.A.",
+                    partida: "MAR25_01",
+                    codigo: "POLO-2024",
+                    maquina: "12",
+                    status: "EN PROCESO",
+                    subPiecesData: [
+                        { pieza: "FRENTE", talla: "L", totalPedido: "150", peso: "85", tiempo: "2.5" },
+                        { pieza: "ESPALDA", talla: "L", totalPedido: "150", peso: "90", tiempo: "2.3" },
+                        { pieza: "MANGA", talla: "L", totalPedido: "300", peso: "45", tiempo: "1.8" }
+                    ],
+                    threading: [
+                        { material: "HILO POLIESTER - BLANCO", porcentaje: "70%" },
+                        { material: "HILO ALGODÓN - NEGRO", porcentaje: "30%" }
+                    ],
+                    progreso: [
+                        { id: 1, codigoUnico: "MAR25_01F_1_5", piezaNombre: "FRENTE", cantidad: "30", tejedor: "BALTA", fecha: "2024-03-10", defectos: "0", agujas: "OK", observaciones: "Normal", finished: true },
+                        { id: 2, codigoUnico: "MAR25_01F_2_5", piezaNombre: "FRENTE", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false },
+                        { id: 3, codigoUnico: "MAR25_01F_3_5", piezaNombre: "FRENTE", cantidad: "30", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false },
+                        { id: 4, codigoUnico: "MAR25_01E_1_3", piezaNombre: "ESPALDA", cantidad: "50", tejedor: "ANDRÉS", fecha: "2024-03-09", defectos: "1", agujas: "OK", observaciones: "Un defecto menor", finished: true },
+                        { id: 5, codigoUnico: "MAR25_01E_2_3", piezaNombre: "ESPALDA", cantidad: "50", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false }
+                    ]
+                },
+                {
+                    id: "12346",
+                    partidaId: "MAR25_01",
+                    talla: "M",
+                    cliente: "MODATEX S.A.",
+                    partida: "MAR25_01",
+                    codigo: "POLO-2024",
+                    maquina: "8",
+                    status: "EN PROCESO",
+                    subPiecesData: [
+                        { pieza: "FRENTE", talla: "M", totalPedido: "100", peso: "75", tiempo: "2.3" },
+                        { pieza: "ESPALDA", talla: "M", totalPedido: "100", peso: "80", tiempo: "2.1" },
+                        { pieza: "MANGA", talla: "M", totalPedido: "200", peso: "40", tiempo: "1.6" }
+                    ],
+                    threading: [
+                        { material: "HILO POLIESTER - BLANCO", porcentaje: "70%" },
+                        { material: "HILO ALGODÓN - NEGRO", porcentaje: "30%" }
+                    ],
+                    progreso: [
+                        { id: 1, codigoUnico: "MAR25_01F_M_1_4", piezaNombre: "FRENTE", cantidad: "25", tejedor: "CARLOS", fecha: "2024-03-11", defectos: "0", agujas: "OK", observaciones: "", finished: true },
+                        { id: 2, codigoUnico: "MAR25_01F_M_2_4", piezaNombre: "FRENTE", cantidad: "25", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false }
+                    ]
+                },
+                {
+                    id: "12347",
+                    partidaId: "MAR25_01",
+                    talla: "S",
+                    cliente: "MODATEX S.A.",
+                    partida: "MAR25_01",
+                    codigo: "POLO-2024",
+                    maquina: "5",
+                    status: "EN PROCESO",
+                    subPiecesData: [
+                        { pieza: "FRENTE", talla: "S", totalPedido: "80", peso: "70", tiempo: "2.1" },
+                        { pieza: "ESPALDA", talla: "S", totalPedido: "80", peso: "75", tiempo: "2.0" },
+                        { pieza: "MANGA", talla: "S", totalPedido: "160", peso: "35", tiempo: "1.5" }
+                    ],
+                    threading: [
+                        { material: "HILO POLIESTER - BLANCO", porcentaje: "70%" },
+                        { material: "HILO ALGODÓN - NEGRO", porcentaje: "30%" }
+                    ],
+                    progreso: [
+                        { id: 1, codigoUnico: "MAR25_01F_S_1_3", piezaNombre: "FRENTE", cantidad: "27", tejedor: "LUIS", fecha: "2024-03-12", defectos: "0", agujas: "OK", observaciones: "", finished: true },
+                        { id: 2, codigoUnico: "MAR25_01F_S_2_3", piezaNombre: "FRENTE", cantidad: "27", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false }
+                    ]
+                },
+                // PARTIDA: MAR25_02
+                {
+                    id: "12348",
+                    partidaId: "MAR25_02",
+                    talla: "M",
+                    cliente: "TEXTIL MODA",
+                    partida: "MAR25_02",
+                    codigo: "CAMISA-2024",
+                    maquina: "15",
+                    status: "EN PROCESO",
+                    subPiecesData: [
+                        { pieza: "CUERPO", talla: "M", totalPedido: "200", peso: "120", tiempo: "3.2" },
+                        { pieza: "MANGA", talla: "M", totalPedido: "200", peso: "55", tiempo: "1.9" },
+                        { pieza: "CUELLO", talla: "M", totalPedido: "200", peso: "35", tiempo: "1.2" }
+                    ],
+                    threading: [
+                        { material: "HILO ALGODÓN - AZUL", porcentaje: "100%" }
+                    ],
+                    progreso: [
+                        { id: 1, codigoUnico: "MAR25_02C_1_8", piezaNombre: "CUERPO", cantidad: "25", tejedor: "CARLOS", fecha: "2024-03-08", defectos: "0", agujas: "OK", observaciones: "", finished: true },
+                        { id: 2, codigoUnico: "MAR25_02C_2_8", piezaNombre: "CUERPO", cantidad: "25", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false }
+                    ]
+                },
+                {
+                    id: "12349",
+                    partidaId: "MAR25_02",
+                    talla: "S",
+                    cliente: "TEXTIL MODA",
+                    partida: "MAR25_02",
+                    codigo: "CAMISA-2024",
+                    maquina: "9",
+                    status: "EN PROCESO",
+                    subPiecesData: [
+                        { pieza: "CUERPO", talla: "S", totalPedido: "150", peso: "110", tiempo: "3.0" },
+                        { pieza: "MANGA", talla: "S", totalPedido: "150", peso: "50", tiempo: "1.8" },
+                        { pieza: "CUELLO", talla: "S", totalPedido: "150", peso: "32", tiempo: "1.1" }
+                    ],
+                    threading: [
+                        { material: "HILO ALGODÓN - AZUL", porcentaje: "100%" }
+                    ],
+                    progreso: [
+                        { id: 1, codigoUnico: "MAR25_02C_S_1_6", piezaNombre: "CUERPO", cantidad: "25", tejedor: "ANA", fecha: "2024-03-09", defectos: "0", agujas: "OK", observaciones: "", finished: true },
+                        { id: 2, codigoUnico: "MAR25_02C_S_2_6", piezaNombre: "CUERPO", cantidad: "25", tejedor: "", fecha: "", defectos: "", agujas: "", observaciones: "", finished: false }
+                    ]
+                },
+                // PARTIDA: ABR25_01
+                {
+                    id: "12350",
+                    partidaId: "ABR25_01",
+                    talla: "L",
+                    cliente: "INDUSTRIAS UNIDAS",
+                    partida: "ABR25_01",
+                    codigo: "CHAQUETA-2024",
+                    maquina: "22",
+                    status: "EN PROCESO",
+                    subPiecesData: [
+                        { pieza: "DELANTERO", talla: "L", totalPedido: "120", peso: "150", tiempo: "4.5" },
+                        { pieza: "ESPALDA", talla: "L", totalPedido: "120", peso: "140", tiempo: "4.2" },
+                        { pieza: "MANGA", talla: "L", totalPedido: "240", peso: "65", tiempo: "2.3" }
+                    ],
+                    threading: [
+                        { material: "HILO POLIÉSTER - NEGRO", porcentaje: "60%" },
+                        { material: "HILO ALGODÓN - GRIS", porcentaje: "40%" }
+                    ],
+                    progreso: [
+                        { id: 1, codigoUnico: "ABR25_01D_1_5", piezaNombre: "DELANTERO", cantidad: "24", tejedor: "BALTA", fecha: "2024-04-01", defectos: "0", agujas: "OK", observaciones: "", finished: true }
+                    ]
+                }
+            ]
         };
         
         // Referencias a elementos DOM
-        const orderIdInput = document.getElementById('orderId');
-        const imageUrlInput = document.getElementById('imageUrl');
+        const partidaSelect = document.getElementById('partidaSelect');
+        const tallaSelect = document.getElementById('tallaSelect');
+        const ordenSelect = document.getElementById('ordenSelect');
         const generateBtn = document.getElementById('generateBtn');
         const printBtn = document.getElementById('printBtn');
         const clearBtn = document.getElementById('clearBtn');
         const printPreview = document.getElementById('printPreview');
+        const orderSummary = document.getElementById('orderSummary');
+        
+        // Elementos del resumen
+        const summaryCliente = document.getElementById('summaryCliente');
+        const summaryModelo = document.getElementById('summaryModelo');
+        const summaryMaquina = document.getElementById('summaryMaquina');
+        const summaryTotalPiezas = document.getElementById('summaryTotalPiezas');
+        const summaryProgreso = document.getElementById('summaryProgreso');
+        const orderStatus = document.getElementById('orderStatus');
+        
+        // Variables para almacenar la selección actual
+        let partidaSeleccionada = null;
+        let tallaSeleccionada = null;
+        let ordenSeleccionada = null;
+        
+        // Inicializar la aplicación
+        function initApp() {
+            cargarPartidas();
+            setupEventListeners();
+        }
+        
+        // Cargar partidas activas en el select
+        function cargarPartidas() {
+            // Filtrar solo partidas activas (EN PROCESO)
+            const partidasActivas = ordersDatabase.partidas.filter(p => p.status === "EN PROCESO");
+            
+            // Limpiar select
+            partidaSelect.innerHTML = '<option value="">-- Selecciona una partida --</option>';
+            
+            // Agregar opciones
+            partidasActivas.forEach(partida => {
+                const option = document.createElement('option');
+                option.value = partida.id;
+                option.textContent = `${partida.nombre} - ${partida.cliente}`;
+                partidaSelect.appendChild(option);
+            });
+            
+            // Si hay partidas archivadas, agregarlas en un grupo optgroup
+            const partidasArchivadas = ordersDatabase.partidas.filter(p => p.status === "ARCHIVADO");
+            if (partidasArchivadas.length > 0) {
+                const optgroup = document.createElement('optgroup');
+                optgroup.label = "Partidas Archivadas";
+                
+                partidasArchivadas.forEach(partida => {
+                    const option = document.createElement('option');
+                    option.value = partida.id;
+                    option.textContent = `${partida.nombre} - ${partida.cliente} (ARCHIVADA)`;
+                    optgroup.appendChild(option);
+                });
+                
+                partidaSelect.appendChild(optgroup);
+            }
+        }
+        
+        // Cargar tallas disponibles para la partida seleccionada
+        function cargarTallas(partidaId) {
+            // Buscar la partida seleccionada
+            const partida = ordersDatabase.partidas.find(p => p.id === partidaId);
+            
+            if (!partida) return;
+            
+            // Limpiar y habilitar select de tallas
+            tallaSelect.innerHTML = '<option value="">-- Selecciona una talla --</option>';
+            tallaSelect.disabled = false;
+            
+            // Agregar opciones de tallas
+            partida.tallas.forEach(talla => {
+                // Contar cuántas órdenes hay para esta partida y talla
+                const ordenesParaTalla = ordersDatabase.ordenes.filter(o => 
+                    o.partidaId === partidaId && o.talla === talla
+                );
+                
+                const option = document.createElement('option');
+                option.value = talla;
+                option.textContent = `${talla} (${ordenesParaTalla.length} orden${ordenesParaTalla.length !== 1 ? 'es' : ''})`;
+                tallaSelect.appendChild(option);
+            });
+            
+            // Deshabilitar y limpiar select de órdenes
+            ordenSelect.innerHTML = '<option value="">-- Primero selecciona una talla --</option>';
+            ordenSelect.disabled = true;
+            
+            // Deshabilitar botones
+            generateBtn.disabled = true;
+            printBtn.disabled = true;
+            
+            // Ocultar resumen
+            orderSummary.classList.remove('active');
+        }
+        
+        // Cargar órdenes disponibles para la partida y talla seleccionadas
+        function cargarOrdenes(partidaId, talla) {
+            // Filtrar órdenes para esta partida y talla
+            const ordenesFiltradas = ordersDatabase.ordenes.filter(o => 
+                o.partidaId === partidaId && o.talla === talla
+            );
+            
+            // Limpiar y habilitar select de órdenes
+            ordenSelect.innerHTML = '<option value="">-- Selecciona una orden/máquina --</option>';
+            ordenSelect.disabled = false;
+            
+            // Agregar opciones de órdenes
+            ordenesFiltradas.forEach(orden => {
+                const option = document.createElement('option');
+                option.value = orden.id;
+                
+                // Calcular progreso
+                const totalPaquetes = orden.progreso.length;
+                const paquetesTerminados = orden.progreso.filter(p => p.finished).length;
+                const porcentaje = totalPaquetes > 0 ? Math.round((paquetesTerminados / totalPaquetes) * 100) : 0;
+                
+                option.textContent = `Máquina ${orden.maquina} - ${orden.codigo} (${porcentaje}% completo)`;
+                ordenSelect.appendChild(option);
+            });
+            
+            // Deshabilitar botones hasta que se seleccione una orden
+            generateBtn.disabled = true;
+            printBtn.disabled = true;
+            
+            // Ocultar resumen
+            orderSummary.classList.remove('active');
+        }
+        
+        // Mostrar resumen de la orden seleccionada
+        function mostrarResumenOrden(ordenId) {
+            // Buscar la orden
+            const orden = ordersDatabase.ordenes.find(o => o.id === ordenId);
+            
+            if (!orden) return;
+            
+            // Actualizar elementos del resumen
+            summaryCliente.textContent = orden.cliente;
+            summaryModelo.textContent = orden.codigo;
+            summaryMaquina.textContent = `Máquina ${orden.maquina}`;
+            
+            // Calcular total de piezas
+            const totalPiezas = orden.subPiecesData.reduce((sum, piece) => {
+                return sum + parseInt(piece.totalPedido);
+            }, 0);
+            summaryTotalPiezas.textContent = totalPiezas;
+            
+            // Calcular progreso
+            const totalPaquetes = orden.progreso.length;
+            const paquetesTerminados = orden.progreso.filter(p => p.finished).length;
+            const porcentaje = totalPaquetes > 0 ? Math.round((paquetesTerminados / totalPaquetes) * 100) : 0;
+            summaryProgreso.textContent = `${paquetesTerminados}/${totalPaquetes} paquetes (${porcentaje}%)`;
+            
+            // Actualizar estado
+            orderStatus.textContent = orden.status;
+            orderStatus.className = `status-${orden.status.toLowerCase().replace(' ', '-')}`;
+            
+            // Mostrar resumen
+            orderSummary.classList.add('active');
+            
+            // Habilitar botones
+            generateBtn.disabled = false;
+            printBtn.disabled = false;
+        }
         
         // Generar hoja de orden para impresión
-        function generateOrderSheet(orderData, orderNumber = 1) {
+        function generateOrderSheet(ordenId) {
+            // Buscar la orden
+            const orden = ordersDatabase.ordenes.find(o => o.id === ordenId);
+            
+            if (!orden) {
+                return '<div class="message error">Error: No se encontró la orden seleccionada.</div>';
+            }
+            
             // Calcular métricas
-            const tiempoPorPieza = orderData.tiempoPromedio || 2.5;
-            const piezasPorHora = tiempoPorPieza > 0 ? Math.floor(60 / tiempoPorPieza) : 0;
+            const tiempoTotal = orden.subPiecesData.reduce((sum, piece) => {
+                return sum + (parseFloat(piece.tiempo) || 0);
+            }, 0);
+            
+            const tiempoPromedio = orden.subPiecesData.length > 0 ? tiempoTotal / orden.subPiecesData.length : 0;
+            const piezasPorHora = tiempoPromedio > 0 ? Math.floor(60 / tiempoPromedio) : 0;
             const piezasPorTurno = piezasPorHora * 12;
             
             // Crear filas para tabla de piezas
-            const piecesRows = orderData.subPiecesData.map(piece => `
+            const piecesRows = orden.subPiecesData.map(piece => `
                 <tr>
                     <td>${piece.pieza}</td>
                     <td class="text-center">${piece.talla || 'UNI'}</td>
@@ -516,7 +961,7 @@
             `).join('');
             
             // Crear filas para enhebrado
-            const threadingRows = orderData.threading.map(thread => `
+            const threadingRows = orden.threading.map(thread => `
                 <tr>
                     <td>${thread.material}</td>
                     <td class="text-center">${thread.porcentaje}</td>
@@ -524,7 +969,7 @@
             `).join('');
             
             // Crear filas para control de tejido
-            const controlRows = orderData.progreso.map((pkg, index) => `
+            const controlRows = orden.progreso.map((pkg, index) => `
                 <tr>
                     <td class="text-center">${index + 1}</td>
                     <td class="pl-1 font-mono truncate" title="${pkg.codigoUnico || pkg.piezaNombre}">${pkg.codigoUnico || pkg.piezaNombre}</td>
@@ -537,26 +982,24 @@
                 </tr>
             `).join('');
             
-            // Determinar si mostrar imagen o placeholder
-            const imageUrl = imageUrlInput.value.trim();
-            const imageContent = imageUrl 
-                ? `<img src="${imageUrl}" alt="${orderData.codigo}" onerror="this.parentElement.className='order-image placeholder'">`
-                : `<div class="order-image placeholder"></div>`;
+            // Generar URL de imagen basada en el código del modelo
+            const imageUrl = `https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/main/${orden.codigo}.jpg`;
             
             return `
                 <div class="order-sheet">
                     <div class="order-header">
                         <div class="order-title">
-                            <h3>${orderData.cliente}</h3>
+                            <h3>${orden.cliente}</h3>
                             <div class="order-info">
-                                <div><strong>PARTIDA:</strong> ${orderData.partida}</div>
-                                <div><strong>MODELO:</strong> ${orderData.codigo}</div>
+                                <div><strong>PARTIDA:</strong> ${orden.partida}</div>
+                                <div><strong>MODELO:</strong> ${orden.codigo}</div>
                                 <div><strong>FECHA:</strong> ${new Date().toLocaleDateString('es-MX')}</div>
+                                <div><strong>TALLA:</strong> ${orden.talla}</div>
                             </div>
                         </div>
                         <div class="machine-box">
                             <div class="machine-label">MÁQUINA</div>
-                            <div class="machine-number">${orderData.maquina}</div>
+                            <div class="machine-number">${orden.maquina}</div>
                         </div>
                     </div>
                     
@@ -603,7 +1046,7 @@
                         </div>
                         
                         <div class="order-image">
-                            ${imageContent}
+                            <img src="${imageUrl}" alt="${orden.codigo}" onerror="this.parentElement.className='order-image placeholder'">
                         </div>
                     </div>
                     
@@ -646,60 +1089,43 @@
         
         // Generar vista previa de impresión
         function generatePreview() {
-            const orderIds = orderIdInput.value.trim();
+            const ordenId = ordenSelect.value;
             
-            if (!orderIds) {
+            if (!ordenId) {
                 printPreview.innerHTML = `
                     <div class="message error">
-                        <i class="fas fa-exclamation-triangle"></i> Por favor ingresa al menos un ID de orden.
+                        <i class="fas fa-exclamation-triangle"></i> Por favor selecciona una orden para generar la vista previa.
                     </div>
                 `;
                 return;
             }
             
-            const ids = orderIds.split(',').map(id => id.trim()).filter(id => id.length > 0);
-            let previewHTML = '';
-            let foundOrders = 0;
+            printPreview.innerHTML = `
+                <div class="loading">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <div>Generando vista previa...</div>
+                </div>
+            `;
             
-            ids.forEach((id, index) => {
-                if (sampleOrders[id]) {
-                    previewHTML += generateOrderSheet(sampleOrders[id], index + 1);
-                    foundOrders++;
-                } else {
-                    previewHTML += `
-                        <div class="message error" style="page-break-after: always;">
-                            <i class="fas fa-exclamation-triangle"></i> No se encontró la orden con ID: ${id}
-                        </div>
-                    `;
-                }
-            });
-            
-            if (foundOrders === 0) {
-                printPreview.innerHTML = `
-                    <div class="message error">
-                        <i class="fas fa-exclamation-triangle"></i> No se encontraron órdenes con los IDs proporcionados.
-                    </div>
-                    <div class="message info">
-                        <i class="fas fa-info-circle"></i> IDs de ejemplo: 12345, 12346
-                    </div>
-                `;
-            } else {
-                printPreview.innerHTML = previewHTML;
+            // Simular carga
+            setTimeout(() => {
+                const orderSheet = generateOrderSheet(ordenId);
+                printPreview.innerHTML = orderSheet;
                 
-                // Mostrar mensaje de éxito
+                // Agregar mensaje de éxito
                 const successMsg = document.createElement('div');
                 successMsg.className = 'message success no-print';
                 successMsg.innerHTML = `
-                    <i class="fas fa-check-circle"></i> Generadas ${foundOrders} hoja(s) de orden. Listo para imprimir.
+                    <i class="fas fa-check-circle"></i> Vista previa generada correctamente. Listo para imprimir.
                 `;
                 printPreview.prepend(successMsg);
-            }
+            }, 500);
         }
         
         // Función para imprimir
-        function printSheets() {
+        function printSheet() {
             if (printPreview.children.length <= 1) {
-                alert("Primero genera una vista previa de las hojas a imprimir.");
+                alert("Primero genera una vista previa de la hoja a imprimir.");
                 return;
             }
             
@@ -720,41 +1146,81 @@
             }, 500);
         }
         
-        // Limpiar formulario y vista previa
-        function clearAll() {
-            orderIdInput.value = '';
-            imageUrlInput.value = '';
+        // Reiniciar selección
+        function resetSelection() {
+            partidaSelect.value = "";
+            tallaSelect.innerHTML = '<option value="">-- Primero selecciona una partida --</option>';
+            tallaSelect.disabled = true;
+            ordenSelect.innerHTML = '<option value="">-- Primero selecciona una talla --</option>';
+            ordenSelect.disabled = true;
+            
+            generateBtn.disabled = true;
+            printBtn.disabled = true;
+            
+            orderSummary.classList.remove('active');
+            
             printPreview.innerHTML = `
                 <div class="message warning">
-                    <i class="fas fa-exclamation-circle"></i> Ingresa un ID de orden y haz clic en "Generar Vista Previa" para ver cómo se imprimirá la hoja.
+                    <i class="fas fa-exclamation-circle"></i> Selecciona una partida, talla y orden para generar la vista previa de impresión.
                 </div>
             `;
+            
+            // Resetear variables
+            partidaSeleccionada = null;
+            tallaSeleccionada = null;
+            ordenSeleccionada = null;
         }
         
-        // Event Listeners
-        generateBtn.addEventListener('click', generatePreview);
-        printBtn.addEventListener('click', printSheets);
-        clearBtn.addEventListener('click', clearAll);
+        // Configurar event listeners
+        function setupEventListeners() {
+            // Cambio en selección de partida
+            partidaSelect.addEventListener('change', function() {
+                if (this.value) {
+                    cargarTallas(this.value);
+                    partidaSeleccionada = this.value;
+                } else {
+                    resetSelection();
+                }
+            });
+            
+            // Cambio en selección de talla
+            tallaSelect.addEventListener('change', function() {
+                if (this.value && partidaSeleccionada) {
+                    cargarOrdenes(partidaSeleccionada, this.value);
+                    tallaSeleccionada = this.value;
+                } else {
+                    ordenSelect.innerHTML = '<option value="">-- Primero selecciona una talla --</option>';
+                    ordenSelect.disabled = true;
+                    generateBtn.disabled = true;
+                    printBtn.disabled = true;
+                    orderSummary.classList.remove('active');
+                }
+            });
+            
+            // Cambio en selección de orden
+            ordenSelect.addEventListener('change', function() {
+                if (this.value) {
+                    mostrarResumenOrden(this.value);
+                    ordenSeleccionada = this.value;
+                } else {
+                    generateBtn.disabled = true;
+                    printBtn.disabled = true;
+                    orderSummary.classList.remove('active');
+                }
+            });
+            
+            // Botón de generar vista previa
+            generateBtn.addEventListener('click', generatePreview);
+            
+            // Botón de imprimir
+            printBtn.addEventListener('click', printSheet);
+            
+            // Botón de reiniciar
+            clearBtn.addEventListener('click', resetSelection);
+        }
         
-        // Permitir generar con Enter
-        orderIdInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                generatePreview();
-            }
-        });
-        
-        // Cargar datos de ejemplo en la URL de imagen
-        imageUrlInput.value = 'https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/main/sample-image.jpg';
-        
-        // Mensaje inicial
-        printPreview.innerHTML = `
-            <div class="message warning">
-                <i class="fas fa-exclamation-circle"></i> Ingresa un ID de orden y haz clic en "Generar Vista Previa" para ver cómo se imprimirá la hoja.
-            </div>
-            <div class="message info">
-                <i class="fas fa-info-circle"></i> <strong>IDs de ejemplo:</strong> 12345, 12346
-            </div>
-        `;
+        // Inicializar la aplicación cuando el DOM esté listo
+        document.addEventListener('DOMContentLoaded', initApp);
     </script>
 </body>
 </html>
