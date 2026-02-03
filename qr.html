@@ -3,37 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador de Etiquetas QR 6.5x5cm</title>
+    <title>Generador de Etiquetas QR - CIRINEO</title>
     
-    <!-- Tailwind CSS -->
+    <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- React y Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     
     <!-- QR Code Generator -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     
     <!-- PDF Generator -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    
-    <!-- Iconos -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
 
     <style>
         body { 
-            background-color: #f8fafc; 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f1f5f9; 
+            min-height: 100vh; 
+            font-family: 'Roboto Condensed', sans-serif; 
+            overflow: hidden; 
         }
         
-        /* Tamaño exacto de la etiqueta: 6.5cm x 5cm */
-        .label-container {
+        @media (max-width: 1024px) { 
+            body { 
+                height: auto; 
+                overflow-y: auto; 
+                overflow-x: hidden; 
+            } 
+        }
+
+        /* --- TAMAÑO EXACTO DE ETIQUETA: 6.5cm x 5cm --- */
+        .pdf-fixed-container {
             width: 6.5cm;
             height: 5cm;
             background: white;
-            border: 1px solid #cbd5e1;
             page-break-after: always;
             break-after: page;
             margin: 0;
@@ -41,19 +53,29 @@
             position: relative;
             box-sizing: border-box;
             display: flex;
+            border: 1px solid #ddd;
         }
-        
-        /* Vista previa más grande para ver mejor */
-        .preview-label {
+
+        .preview-wrapper {
             width: 6.5cm;
             height: 5cm;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
             background: white;
             border: 2px dashed #94a3b8;
-            margin: 1rem auto;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
-        
-        /* Área del QR (4.5x4.5cm con márgenes) */
+
+        /* --- ESTRUCTURA DE LA ETIQUETA QR --- */
+        .qr-label-layout {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            padding: 0.25cm;
+            box-sizing: border-box;
+            background: white;
+        }
+
+        /* Sección QR (4.5x4.5cm con márgenes) */
         .qr-section {
             width: 4.5cm;
             height: 4.5cm;
@@ -61,10 +83,10 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            border-right: 1px dashed #94a3b8;
+            border-right: 1px dashed #ccc;
         }
-        
-        /* Área del código en vertical */
+
+        /* Sección del código en vertical */
         .code-section {
             width: 2cm;
             height: 100%;
@@ -73,7 +95,7 @@
             justify-content: center;
             padding: 0.5cm 0;
         }
-        
+
         /* Código en orientación vertical */
         .vertical-code {
             writing-mode: vertical-rl;
@@ -81,11 +103,11 @@
             transform: rotate(180deg);
             font-family: 'Courier New', monospace;
             font-weight: bold;
-            font-size: 16px;
-            letter-spacing: 2px;
+            font-size: 14px;
+            letter-spacing: 1px;
             color: #1e293b;
         }
-        
+
         /* QR canvas */
         .qr-canvas {
             width: 100% !important;
@@ -93,21 +115,31 @@
             max-width: 4.5cm;
             max-height: 4.5cm;
         }
-        
-        /* Contenedor para PDF (oculto) */
-        .pdf-print-area {
-            position: absolute;
-            left: -9999px;
-            top: 0;
-            width: 6.5cm;
-        }
+
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="p-4">
+<body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // Configuración de Firebase (igual que el original)
+        const firebaseConfig = {
+            apiKey: "AIzaSyCngQL1pdqghv2vbjkPycT1Xf0C46f7jYs",
+            authDomain: "cirineo-cec21.firebaseapp.com",
+            projectId: "cirineo-cec21",
+            storageBucket: "cirineo-cec21.firebasestorage.app",
+            messagingSenderId: "620210618284",
+            appId: "1:620210618284:web:482bab9bf74650fff18409",
+            measurementId: "G-B7YLM78RVW"
+        };
+        
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const FieldValue = firebase.firestore.FieldValue;
 
         // Componente de ícono
         const Icon = ({ name, size = 18, className }) => {
@@ -124,17 +156,21 @@
             return <div ref={containerRef} className="inline-block" style={{ width: size, height: size }}></div>;
         };
 
-        // Componente de etiqueta individual
-        const QRLabel = ({ code, showBorder = false }) => {
+        // --- COMPONENTE DE ETIQUETA QR ---
+        const QRLabel = ({ labelData }) => {
             const qrRef = useRef(null);
+            const order = labelData;
             
+            // Usamos el mismo packageCode que en el original
+            const qrValue = order.packageCode || `ORD-${order.id}-PKG-${order.packageIndex}`;
+
             useEffect(() => {
-                if (qrRef.current && code) {
+                if (qrRef.current && qrValue) {
                     // Limpiar contenido previo
                     qrRef.current.innerHTML = '';
                     
                     // Generar QR con tamaño específico
-                    QRCode.toCanvas(qrRef.current, code, {
+                    QRCode.toCanvas(qrRef.current, qrValue, {
                         width: 200,
                         height: 200,
                         margin: 1,
@@ -146,17 +182,17 @@
                         if (error) console.error(error);
                     });
                 }
-            }, [code]);
+            }, [qrValue]);
 
             return (
-                <div className={`label-container ${showBorder ? 'border-2 border-blue-500' : ''}`}>
+                <div className="qr-label-layout">
                     {/* Sección QR (4.5x4.5cm) */}
                     <div className="qr-section">
-                        {code ? (
+                        {qrValue ? (
                             <canvas ref={qrRef} className="qr-canvas"></canvas>
                         ) : (
                             <div className="text-slate-400 text-sm text-center">
-                                <Icon name="qrcode" size={32} className="mx-auto mb-2" />
+                                <Icon name="qrcode" size={24} className="mx-auto mb-1" />
                                 <span>Sin código</span>
                             </div>
                         )}
@@ -164,9 +200,9 @@
                     
                     {/* Sección código vertical */}
                     <div className="code-section">
-                        {code && (
-                            <div className="vertical-code">
-                                {code}
+                        {qrValue && (
+                            <div className="vertical-code" title={qrValue}>
+                                {qrValue}
                             </div>
                         )}
                     </div>
@@ -174,79 +210,84 @@
             );
         };
 
-        // Aplicación principal
+        // --- APLICACIÓN PRINCIPAL ---
         const App = () => {
-            const [codes, setCodes] = useState([]);
-            const [newCode, setNewCode] = useState('');
-            const [selectedCode, setSelectedCode] = useState(null);
-            const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+            const [orders, setOrders] = useState([]);
+            const [selectedOrder, setSelectedOrder] = useState(null);
+            const [packageLabels, setPackageLabels] = useState([]);
+            const [filterText, setFilterText] = useState('');
+            const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
             const pdfContainerRef = useRef(null);
-            
-            // Cargar códigos guardados en localStorage
+
+            // Cargar órdenes desde Firebase
             useEffect(() => {
-                const savedCodes = localStorage.getItem('qrCodes');
-                if (savedCodes) {
-                    try {
-                        setCodes(JSON.parse(savedCodes));
-                    } catch (e) {
-                        console.error('Error cargando códigos:', e);
-                    }
-                }
-            }, []);
-            
-            // Guardar códigos en localStorage cuando cambian
-            useEffect(() => {
-                localStorage.setItem('qrCodes', JSON.stringify(codes));
-            }, [codes]);
-            
-            // Agregar nuevo código
-            const handleAddCode = () => {
-                if (!newCode.trim()) return;
+                const unsubscribe = db.collection('orders')
+                    .where('status', '!=', 'ARCHIVADO')
+                    .onSnapshot(snapshot => {
+                        const fetchedOrders = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        // Ordenar por ID descendente (más recientes primero)
+                        fetchedOrders.sort((a, b) => b.id - a.id);
+                        setOrders(fetchedOrders);
+                    });
                 
-                const codeToAdd = newCode.trim();
-                if (!codes.includes(codeToAdd)) {
-                    const updatedCodes = [...codes, codeToAdd];
-                    setCodes(updatedCodes);
-                    setSelectedCode(codeToAdd);
-                    setNewCode('');
+                return () => unsubscribe();
+            }, []);
+
+            // Cuando se selecciona una orden, extraer sus paquetes
+            useEffect(() => {
+                if (selectedOrder && selectedOrder.progreso) {
+                    const labels = selectedOrder.progreso.map(p => ({
+                        ...selectedOrder,
+                        piezaNombre: p.piezaNombre,
+                        packageIndex: p.paqueteNum,
+                        totalPackages: p.paquetesDePieza,
+                        piecesInPackage: p.cantidad,
+                        packageCode: p.codigoUnico, // ¡Este es el código que usaremos para el QR!
+                        displayPackageId: `${p.paqueteNum}/${p.paquetesDePieza}`
+                    }));
+                    setPackageLabels(labels);
                 } else {
-                    alert('Este código ya existe');
+                    setPackageLabels([]);
                 }
-            };
-            
-            // Eliminar código
-            const handleDeleteCode = (codeToDelete) => {
-                if (window.confirm(`¿Eliminar código "${codeToDelete}"?`)) {
-                    const updatedCodes = codes.filter(c => c !== codeToDelete);
-                    setCodes(updatedCodes);
-                    if (selectedCode === codeToDelete) {
-                        setSelectedCode(updatedCodes.length > 0 ? updatedCodes[0] : null);
-                    }
-                }
-            };
-            
+            }, [selectedOrder]);
+
+            // Filtrar órdenes
+            const filteredOrders = useMemo(() => {
+                if (!filterText.trim()) return orders;
+                
+                const searchTerm = filterText.toUpperCase();
+                return orders.filter(order => 
+                    (order.codigo && order.codigo.toUpperCase().includes(searchTerm)) ||
+                    (order.cliente && order.cliente.toUpperCase().includes(searchTerm)) ||
+                    (order.partida && order.partida.toUpperCase().includes(searchTerm))
+                );
+            }, [orders, filterText]);
+
             // Generar PDF con todas las etiquetas
-            const handleGeneratePDF = async () => {
-                if (codes.length === 0) {
-                    alert('No hay códigos para generar PDF');
+            const handleDownloadPDF = async () => {
+                if (packageLabels.length === 0) {
+                    alert('No hay paquetes para generar etiquetas');
                     return;
                 }
-                
-                setIsGeneratingPDF(true);
-                
+
+                setIsGeneratingPdf(true);
+
                 // Esperar un momento para que se rendericen todos los QR
                 await new Promise(resolve => setTimeout(resolve, 500));
-                
+
                 const element = pdfContainerRef.current;
                 if (!element) {
                     alert('Error interno: Contenedor PDF no encontrado');
-                    setIsGeneratingPDF(false);
+                    setIsGeneratingPdf(false);
                     return;
                 }
-                
+
                 const options = {
                     margin: [0.2, 0.2],
-                    filename: `etiquetas_qr_${new Date().toISOString().split('T')[0]}.pdf`,
+                    filename: `etiquetas_qr_${selectedOrder.codigo || 'orden'}.pdf`,
                     image: { type: 'jpeg', quality: 1 },
                     html2canvas: { 
                         scale: 3, // Alta resolución para QR
@@ -259,268 +300,235 @@
                         orientation: 'portrait'
                     }
                 };
-                
+
                 try {
                     await html2pdf().set(options).from(element).save();
                 } catch (error) {
                     console.error('Error generando PDF:', error);
                     alert('Error al generar PDF');
                 }
-                
-                setIsGeneratingPDF(false);
-            };
-            
-            // Importar códigos desde texto
-            const handleImportCodes = () => {
-                const text = prompt('Pega los códigos (uno por línea o separados por comas):');
-                if (!text) return;
-                
-                // Separar por líneas o comas
-                const newCodes = text.split(/[\n,]/)
-                    .map(c => c.trim())
-                    .filter(c => c.length > 0)
-                    .filter((c, i, arr) => arr.indexOf(c) === i); // Eliminar duplicados
-                
-                if (newCodes.length > 0) {
-                    const updatedCodes = [...codes, ...newCodes];
-                    setCodes(updatedCodes);
-                    alert(`Se agregaron ${newCodes.length} códigos nuevos`);
-                }
-            };
-            
-            // Exportar códigos como texto
-            const handleExportCodes = () => {
-                const text = codes.join('\n');
-                navigator.clipboard.writeText(text)
-                    .then(() => alert('Códigos copiados al portapapeles'))
-                    .catch(err => console.error('Error copiando:', err));
+
+                setIsGeneratingPdf(false);
             };
 
             return (
-                <div className="max-w-7xl mx-auto">
-                    {/* Header */}
-                    <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex flex-col lg:flex-row h-screen w-full">
+                    {/* SIDEBAR - LISTA DE ÓRDENES */}
+                    <div className="w-full lg:w-80 bg-slate-800 text-white flex flex-col border-r border-slate-700 shadow-xl shrink-0 h-64 lg:h-auto">
+                        <div className="p-4 bg-slate-900 border-b border-slate-700">
+                            <h1 className="text-xl font-bold text-yellow-400 tracking-tighter">
+                                <Icon name="qrcode" className="inline mr-2" />
+                                CIRINEO QR
+                            </h1>
+                            <p className="text-xs text-slate-400 mt-1">Etiquetas 6.5x5cm</p>
+                            
+                            <input 
+                                type="text" 
+                                placeholder="Buscar orden..." 
+                                value={filterText} 
+                                onChange={e => setFilterText(e.target.value)}
+                                className="w-full mt-3 bg-slate-800 border border-slate-600 rounded p-2 text-sm placeholder-slate-400"
+                            />
+                        </div>
+                        
+                        <div className="flex-grow overflow-y-auto p-2 space-y-2">
+                            {filteredOrders.length > 0 ? (
+                                filteredOrders.map(order => (
+                                    <div 
+                                        key={order.id} 
+                                        onClick={() => setSelectedOrder(order)}
+                                        className={`p-3 rounded cursor-pointer border-l-4 transition-all ${
+                                            selectedOrder?.id === order.id 
+                                                ? 'bg-slate-700 border-yellow-400' 
+                                                : 'bg-slate-800/50 border-transparent hover:bg-slate-700'
+                                        }`}
+                                    >
+                                        <div className="font-bold text-sm flex justify-between">
+                                            <span>{order.codigo || 'SIN CÓDIGO'}</span>
+                                            {order.progreso && (
+                                                <span className="text-xs bg-blue-500 px-2 py-1 rounded">
+                                                    {order.progreso.length} pqt
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-xs text-slate-400 mt-1">{order.cliente || 'Sin cliente'}</div>
+                                        <div className="text-xs text-slate-500 mt-1">
+                                            Partida: {order.partida || '-'} • Total: {order.totalPedido || 0}
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-4 text-center text-slate-400">
+                                    <Icon name="inbox" size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p>No hay órdenes activas</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* CONTENIDO PRINCIPAL */}
+                    <div className="flex-grow bg-slate-100 flex flex-col relative overflow-hidden">
+                        {/* Header */}
+                        <div className="bg-white p-4 shadow-sm border-b flex justify-between items-center">
                             <div>
-                                <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-                                    <Icon name="qrcode" size={32} className="text-blue-600" />
-                                    Generador de Etiquetas QR
-                                </h1>
-                                <p className="text-slate-600 mt-2">
-                                    Etiquetas de 6.5cm × 5cm - QR de 4.5cm × 4.5cm
-                                </p>
+                                <h2 className="font-bold text-slate-700 text-lg">
+                                    {selectedOrder 
+                                        ? `${selectedOrder.codigo} - ${packageLabels.length} ETIQUETAS QR` 
+                                        : 'Seleccione una orden'
+                                    }
+                                </h2>
+                                {selectedOrder && (
+                                    <div className="text-sm text-slate-600 mt-1">
+                                        Cliente: {selectedOrder.cliente} • 
+                                        Partida: {selectedOrder.partida} • 
+                                        Total orden: {selectedOrder.totalPedido}
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex gap-3">
+                            
+                            {selectedOrder && packageLabels.length > 0 && (
                                 <button
-                                    onClick={handleImportCodes}
-                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-2"
-                                >
-                                    <Icon name="upload" size={18} />
-                                    Importar
-                                </button>
-                                <button
-                                    onClick={handleExportCodes}
-                                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-semibold flex items-center gap-2"
-                                >
-                                    <Icon name="download" size={18} />
-                                    Exportar
-                                </button>
-                                <button
-                                    onClick={handleGeneratePDF}
-                                    disabled={isGeneratingPDF || codes.length === 0}
-                                    className={`px-6 py-2 rounded-lg font-bold flex items-center gap-2 ${
-                                        isGeneratingPDF || codes.length === 0
-                                            ? 'bg-gray-400 cursor-not-allowed'
-                                            : 'bg-green-600 hover:bg-green-700 text-white'
+                                    onClick={handleDownloadPDF}
+                                    disabled={isGeneratingPdf}
+                                    className={`px-5 py-2.5 text-white rounded-lg font-bold flex items-center gap-2 shadow-lg ${
+                                        isGeneratingPdf 
+                                            ? 'bg-slate-400 cursor-not-allowed' 
+                                            : 'bg-red-600 hover:bg-red-700'
                                     }`}
                                 >
                                     <Icon name="file-down" size={18} />
-                                    {isGeneratingPDF ? 'Generando PDF...' : 'Descargar PDF'}
+                                    {isGeneratingPdf ? 'GENERANDO PDF...' : 'DESCARGAR PDF'}
                                 </button>
-                            </div>
+                            )}
                         </div>
-                        
-                        {/* Input para agregar código */}
-                        <div className="mt-6 flex gap-3">
-                            <input
-                                type="text"
-                                value={newCode}
-                                onChange={(e) => setNewCode(e.target.value)}
-                                onKeyPress={(e) => e.key === 'Enter' && handleAddCode()}
-                                placeholder="Ingresa un código para generar QR"
-                                className="flex-grow p-3 border-2 border-blue-300 rounded-lg focus:outline-none focus:border-blue-500"
-                            />
-                            <button
-                                onClick={handleAddCode}
-                                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-2"
-                            >
-                                <Icon name="plus" size={20} />
-                                Agregar
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div className="flex flex-col lg:flex-row gap-6">
-                        {/* Panel izquierdo - Lista de códigos */}
-                        <div className="lg:w-1/3">
-                            <div className="bg-white rounded-xl shadow-lg p-5">
-                                <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                    <Icon name="list" size={20} />
-                                    Códigos ({codes.length})
-                                </h2>
-                                
-                                <div className="max-h-[500px] overflow-y-auto pr-2">
-                                    {codes.length > 0 ? (
-                                        <div className="space-y-2">
-                                            {codes.map((code, index) => (
-                                                <div
-                                                    key={index}
-                                                    className={`p-3 rounded-lg border cursor-pointer transition-all flex justify-between items-center ${
-                                                        selectedCode === code
-                                                            ? 'border-blue-500 bg-blue-50'
-                                                            : 'border-slate-200 hover:border-slate-300'
-                                                    }`}
-                                                    onClick={() => setSelectedCode(code)}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <Icon name="hash" size={16} className="text-slate-500" />
-                                                        <span className="font-mono font-semibold">{code}</span>
-                                                    </div>
-                                                    <button
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteCode(code);
-                                                        }}
-                                                        className="text-red-500 hover:text-red-700 p-1"
-                                                    >
-                                                        <Icon name="trash-2" size={18} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-10 text-slate-500">
-                                            <Icon name="inbox" size={48} className="mx-auto mb-3 opacity-50" />
-                                            <p>No hay códigos agregados</p>
-                                            <p className="text-sm mt-2">Agrega códigos para generar etiquetas QR</p>
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                {codes.length > 0 && (
-                                    <div className="mt-4 pt-4 border-t border-slate-200">
-                                        <button
-                                            onClick={() => {
-                                                if (window.confirm(`¿Eliminar todos los ${codes.length} códigos?`)) {
-                                                    setCodes([]);
-                                                    setSelectedCode(null);
-                                                }
-                                            }}
-                                            className="w-full px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg font-semibold flex items-center justify-center gap-2"
-                                        >
-                                            <Icon name="trash-2" size={18} />
-                                            Limpiar todo
-                                        </button>
+
+                        {/* VISTA PREVIA */}
+                        <div className="flex-grow overflow-y-auto p-4 lg:p-8 flex flex-col items-center">
+                            {packageLabels.length > 0 ? (
+                                <>
+                                    <div className="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">
+                                        VISTA PREVIA (1 de {packageLabels.length})
                                     </div>
-                                )}
-                            </div>
-                        </div>
-                        
-                        {/* Panel derecho - Vista previa */}
-                        <div className="lg:w-2/3">
-                            <div className="bg-white rounded-xl shadow-lg p-5">
-                                <h2 className="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                    <Icon name="eye" size={20} />
-                                    Vista Previa
-                                </h2>
-                                
-                                <div className="flex flex-col items-center">
-                                    {selectedCode ? (
+                                    <div className="preview-wrapper">
+                                        <QRLabel labelData={packageLabels[0]} />
+                                    </div>
+                                    
+                                    <div className="mt-6 text-center max-w-md">
+                                        <div className="bg-white p-4 rounded-lg border border-slate-200">
+                                            <h3 className="font-bold text-slate-800 mb-2">Información del paquete</h3>
+                                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                                <div>
+                                                    <span className="text-slate-600">Pieza:</span>
+                                                    <div className="font-bold">{packageLabels[0].piezaNombre || 'N/A'}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-600">Paquete:</span>
+                                                    <div className="font-bold">{packageLabels[0].displayPackageId}</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-600">Cantidad:</span>
+                                                    <div className="font-bold">{packageLabels[0].piecesInPackage} pzas</div>
+                                                </div>
+                                                <div>
+                                                    <span className="text-slate-600">Código:</span>
+                                                    <div className="font-mono text-xs truncate" title={packageLabels[0].packageCode}>
+                                                        {packageLabels[0].packageCode}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <p className="text-slate-500 text-sm mt-4">
+                                            Cada etiqueta mide <strong>6.5cm × 5cm</strong>. 
+                                            El QR ocupa <strong>4.5cm × 4.5cm</strong> y el código se muestra en vertical.
+                                        </p>
+                                        <p className="text-xs text-blue-600 mt-2">
+                                            Se generarán {packageLabels.length} etiquetas en el PDF, una por cada paquete.
+                                        </p>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+                                    {selectedOrder ? (
                                         <>
-                                            <div className="preview-label">
-                                                <QRLabel code={selectedCode} showBorder={true} />
-                                            </div>
-                                            <div className="mt-6 text-center">
-                                                <p className="font-mono text-lg font-bold bg-slate-100 p-3 rounded-lg inline-block">
-                                                    {selectedCode}
-                                                </p>
-                                                <p className="text-slate-600 text-sm mt-3">
-                                                    Tamaño real: 6.5cm × 5cm • QR: 4.5cm × 4.5cm
-                                                </p>
-                                            </div>
+                                            <Icon name="alert-circle" size={48} className="mb-3 opacity-50" />
+                                            <p>Esta orden no tiene paquetes generados</p>
+                                            <p className="text-sm mt-2">Los paquetes aparecerán en "progreso"</p>
                                         </>
                                     ) : (
-                                        <div className="py-16 text-center text-slate-500">
-                                            <Icon name="qrcode" size={64} className="mx-auto mb-4 opacity-30" />
-                                            <p className="text-lg">Selecciona un código para ver la previsualización</p>
-                                            <p className="text-sm mt-2">La etiqueta incluye QR grande y código en vertical</p>
-                                        </div>
+                                        <>
+                                            <Icon name="package" size={48} className="mb-3 opacity-50" />
+                                            <p>Selecciona una orden del menú lateral</p>
+                                            <p className="text-sm mt-2">Se mostrarán las etiquetas QR de sus paquetes</p>
+                                        </>
                                     )}
                                 </div>
-                                
-                                {codes.length > 0 && (
-                                    <div className="mt-8 pt-6 border-t border-slate-200">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <h3 className="font-bold text-slate-800">Generar PDF</h3>
-                                                <p className="text-sm text-slate-600">
-                                                    Se generará 1 etiqueta por cada código ({codes.length} total)
-                                                </p>
-                                            </div>
-                                            <button
-                                                onClick={handleGeneratePDF}
-                                                disabled={isGeneratingPDF}
-                                                className={`px-6 py-3 rounded-lg font-bold flex items-center gap-2 ${
-                                                    isGeneratingPDF
-                                                        ? 'bg-gray-400 cursor-not-allowed'
-                                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                                                }`}
-                                            >
-                                                <Icon name="printer" size={20} />
-                                                {isGeneratingPDF ? 'Generando...' : 'Generar PDF'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
+                            )}
                         </div>
                     </div>
-                    
-                    {/* Contenedor oculto para PDF */}
-                    <div className="pdf-print-area">
+
+                    {/* CONTENEDOR OCULTO PARA PDF */}
+                    <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: '-9999px',
+                        width: '6.5cm'
+                    }}>
                         <div ref={pdfContainerRef}>
-                            {codes.map((code, index) => (
-                                <div key={index} className="label-container">
-                                    <QRLabel code={code} />
+                            {packageLabels.map((labelData, index) => (
+                                <div key={index} className="pdf-fixed-container">
+                                    <QRLabel labelData={labelData} />
                                 </div>
                             ))}
                         </div>
                     </div>
-                    
-                    {/* Footer con instrucciones */}
-                    <div className="mt-8 p-4 bg-slate-50 rounded-lg border border-slate-200">
-                        <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-2">
-                            <Icon name="info" size={18} />
-                            Instrucciones
-                        </h3>
-                        <ul className="text-sm text-slate-600 grid grid-cols-1 md:grid-cols-2 gap-2">
-                            <li className="flex items-start gap-2">
-                                <Icon name="check-circle" size={16} className="text-green-600 mt-0.5" />
-                                <span>Agrega códigos manualmente o importa desde una lista</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <Icon name="check-circle" size={16} className="text-green-600 mt-0.5" />
-                                <span>Cada etiqueta mide exactamente 6.5cm × 5cm</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <Icon name="check-circle" size={16} className="text-green-600 mt-0.5" />
-                                <span>El QR ocupa 4.5cm × 4.5cm con márgenes de 0.5cm</span>
-                            </li>
-                            <li className="flex items-start gap-2">
-                                <Icon name="check-circle" size={16} className="text-green-600 mt-0.5" />
-                                <span>El código se muestra en orientación vertical</span>
-                            </li>
-                        </ul>
+
+                    {/* PANEL LATERAL DERECHO - INFO */}
+                    <div className="w-full lg:w-64 bg-white border-l border-slate-200 shadow-xl z-20 shrink-0 hidden lg:flex flex-col">
+                        <div className="p-4 bg-slate-50 border-b">
+                            <h3 className="font-bold text-slate-700 flex items-center gap-2">
+                                <Icon name="info" />
+                                Información
+                            </h3>
+                        </div>
+                        <div className="p-4 flex-grow">
+                            <div className="space-y-4">
+                                <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                    <h4 className="font-bold text-blue-800 text-sm flex items-center gap-2">
+                                        <Icon name="qrcode" size={16} />
+                                        Especificaciones
+                                    </h4>
+                                    <ul className="text-xs text-blue-700 mt-2 space-y-1">
+                                        <li>• Tamaño: 6.5cm × 5cm</li>
+                                        <li>• QR: 4.5cm × 4.5cm</li>
+                                        <li>• Código en vertical</li>
+                                        <li>• 0.5cm márgenes</li>
+                                    </ul>
+                                </div>
+                                
+                                <div className="bg-amber-50 p-3 rounded-lg border border-amber-100">
+                                    <h4 className="font-bold text-amber-800 text-sm flex items-center gap-2">
+                                        <Icon name="database" size={16} />
+                                        Datos desde Firebase
+                                    </h4>
+                                    <p className="text-xs text-amber-700 mt-2">
+                                        Las etiquetas usan el código único de cada paquete almacenado en la base de datos.
+                                    </p>
+                                </div>
+                                
+                                {selectedOrder && (
+                                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                                        <h4 className="font-bold text-slate-800 text-sm">Orden seleccionada</h4>
+                                        <div className="text-xs text-slate-600 mt-2 space-y-1">
+                                            <div><strong>Código:</strong> {selectedOrder.codigo}</div>
+                                            <div><strong>Cliente:</strong> {selectedOrder.cliente}</div>
+                                            <div><strong>Partida:</strong> {selectedOrder.partida || 'N/A'}</div>
+                                            <div><strong>Paquetes:</strong> {packageLabels.length}</div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
             );
