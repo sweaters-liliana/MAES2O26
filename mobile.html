@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Logística Viva Rouss · Móvil</title>
+    <!-- Tailwind + Inter font -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <!-- React, Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <!-- SheetJS (plantillas) -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- JsBarcode + html2pdf (kits) -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { background: #0b1120; font-family: 'Inter', sans-serif; color: #e2e8f0; }
+        ::-webkit-scrollbar { width: 3px; height: 3px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        .card-mosaic {
+            background: linear-gradient(145deg, #1e293b, #0f172a);
+            border: 1px solid #334155;
+            box-shadow: 0 10px 20px -5px rgba(0,0,0,0.5);
+            transition: transform 0.15s, background 0.15s;
+            min-height: 120px;
+        }
+        .card-mosaic:active { transform: scale(0.98); background: #2d3a4f; }
+        .btn-primary { background: #4f46e5; padding: 16px; border-radius: 16px; font-weight: 700; width: 100%; transition: background 0.15s; }
+        .btn-primary:active { background: #6366f1; }
+        .btn-secondary { background: #1e293b; border: 1px solid #475569; padding: 14px; border-radius: 16px; font-weight: 600; }
+        .footer { border-top: 1px solid #1e293b; background: #0f172a; color: #64748b; font-size: 11px; padding: 12px; text-align: center; }
+        .pkg-card {
+            background: #1e293b; border: 2px solid #334155; border-radius: 16px; padding: 12px;
+            transition: all 0.1s; cursor: pointer; user-select: none;
+        }
+        .pkg-card.selected { border-color: #fbbf24; background: #2d3a4f; }
+        .pkg-card.confirmed { opacity: 0.3; filter: grayscale(1); pointer-events: none; }
+        .pkg-card.ungroup-target { border-color: #ef4444; background: #450a0a; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 70% { box-shadow: 0 0 0 8px rgba(239,68,68,0); } }
+        .modal-enter { animation: fadeUp 0.2s ease-out; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        input, select, textarea { font-size: 16px; } /* Evita zoom en iOS */
+        .chip {
+            background: #1e293b; border: 1px solid #334155; padding: 8px 16px; border-radius: 40px; font-size: 14px; font-weight: 600; white-space: nowrap;
+        }
+        .chip.active { background: #4f46e5; border-color: #818cf8; }
+        /* Estilos para vista previa de kit */
+        .preview-card {
+            width: 100%; background: white; color: black; border-radius: 24px; overflow: hidden;
+            box-shadow: 0 25px 50px -12px black;
+        }
+        .preview-header { background: black; color: white; padding: 16px; border-bottom: 4px solid #fbbf24; }
+        .preview-body { display: flex; padding: 16px; }
+        .preview-image { width: 40%; border-right: 2px solid #ccc; padding-right: 8px; }
+        .preview-details { width: 60%; padding-left: 8px; }
+        .preview-table td { padding: 4px 0; border-bottom: 1px solid #ddd; }
+        .preview-footer { border-top: 2px solid black; padding: 12px; text-align: center; background: #f9fafb; }
+        /* Labels para inputs en plantillas */
+        .field-label { display: block; font-size: 10px; font-weight: 600; color: #94a3b8; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        (function() {
+            const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+            // --- Firebase config ---
+            const firebaseConfig = {
+                apiKey: "AIzaSyBqHgV4vDat1-VmZfKbiPg7nuiX-ROcexw",
+                authDomain: "cirineo-cec21.firebaseapp.com",
+                projectId: "cirineo-cec21",
+                storageBucket: "cirineo-cec21.firebasestorage.app",
+                messagingSenderId: "620210618284",
+                appId: "1:620210618284:web:482bab9bf74650fff18409"
+            };
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            const db = firebase.firestore();
+
+            // --- GitHub config para plantillas ---
+            const GITHUB_CONFIG = { owner: 'sweaters-liliana', repo: 'MAES2O26', path: 'Fichas' };
+
+            // --- Icon helper ---
+            const Icon = ({ name, size = 24, className }) => {
+                const ref = useRef();
+                useEffect(() => {
+                    if (ref.current && lucide.icons[name]) {
+                        ref.current.innerHTML = lucide.icons[name].toSvg({ width: size, height: size });
+                    }
+                }, [name, size]);
+                return <span ref={ref} className={`inline-flex items-center ${className || ''}`} />;
+            };
+
+            // --- TimeInput (reutilizado) ---
+            const TimeInput = React.memo(({ value, onChange, disabled }) => {
+                const [mins, setMins] = useState('');
+                const [secs, setSecs] = useState('');
+                useEffect(() => {
+                    if (!value && value !== 0) { setMins(''); setSecs(''); }
+                    else {
+                        const total = parseFloat(value) || 0;
+                        const m = Math.floor(total);
+                        const s = Math.round((total - m) * 60);
+                        setMins(m.toString());
+                        setSecs(s < 10 ? '0' + s : s.toString());
+                    }
+                }, [value]);
+                const handleChange = useCallback((m, s) => {
+                    const newVal = (parseInt(m)||0) + (parseInt(s)||0)/60;
+                    onChange(newVal.toFixed(4));
+                }, [onChange]);
+                return (
+                    <div className="flex items-center gap-1 bg-slate-800 border border-slate-600 rounded-lg p-1">
+                        <input type="number" value={mins} placeholder="0" disabled={disabled} onChange={e => { setMins(e.target.value); handleChange(e.target.value, secs); }} className="w-8 text-center bg-transparent outline-none text-sm" />
+                        <span className="text-slate-500 text-xs">:</span>
+                        <input type="number" value={secs} placeholder="00" max="59" disabled={disabled} onChange={e => { setSecs(e.target.value); handleChange(mins, e.target.value); }} className="w-8 text-center bg-transparent outline-none text-sm" />
+                    </div>
+                );
+            });
+
+            // --- Funciones auxiliares para kits ---
+            const getCleanName = (fullName) => fullName ? fullName.trim().split(' ')[0] : '';
+
+            // --- SmartImage (para kits) ---
+            const SmartImage = ({ modelo, repos }) => {
+                const [src, setSrc] = useState(null);
+                const [idx, setIdx] = useState(0);
+                const urls = useMemo(() => {
+                    if (!modelo || !repos.length) return [];
+                    const res = [];
+                    const variants = [modelo, modelo.toUpperCase()];
+                    repos.forEach(repo => {
+                        const base = repo.url.endsWith('/') ? repo.url : repo.url + '/';
+                        variants.forEach(v => ['png', 'jpg', 'jpeg'].forEach(e => res.push(`${base}${v}.${e}`)));
+                    });
+                    return res;
+                }, [modelo, repos]);
+                useEffect(() => { setIdx(0); setSrc(urls[0] || null); }, [urls]);
+                return src ? (
+                    <img src={src} onError={() => { if(idx < urls.length-1) { setIdx(idx+1); setSrc(urls[idx+1]); } }} 
+                        className="w-full h-full object-contain" />
+                ) : <div className="text-[10px] text-gray-300 flex items-center justify-center h-full">S/I</div>;
+            };
+
+            // ==================== MÓDULO 1: PLANTILLAS (con etiquetas visibles) ====================
+            const TemplateGenerator = ({ onBack }) => {
+                const [form, setForm] = useState({ modelo: '', cliente: '' });
+                const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
+                const [threading, setThreading] = useState([{ guia: 1, material: '', porcentaje: '', materialId: null }]);
+                const [inventory, setInventory] = useState([]);
+                const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+                const [excelFile, setExcelFile] = useState(null);
+                const [isLoadingExcel, setIsLoadingExcel] = useState(false);
+                const [excelError, setExcelError] = useState(null);
+
+                useEffect(() => {
+                    const unsubscribe = db.collection('inventory').doc('main').onSnapshot(doc => {
+                        if (doc.exists && doc.data().items) setInventory(doc.data().items);
+                    });
+                    return unsubscribe;
+                }, []);
+
+                const fetchExcel = useCallback(async () => {
+                    if (!form.modelo) return alert('Ingresa un modelo');
+                    setIsLoadingExcel(true); setExcelError(null); setExcelFile(null);
+                    try {
+                        const apiUrl = `https://api.github.com/repos/${GITHUB_CONFIG.owner}/${GITHUB_CONFIG.repo}/contents/${GITHUB_CONFIG.path}`;
+                        const list = await (await fetch(apiUrl)).json();
+                        const target = list.find(f => f.name.toLowerCase().includes(form.modelo.toLowerCase()) && f.name.endsWith('.xlsx'));
+                        if (!target) throw new Error('No se encontró ficha');
+                        const file = await (await fetch(target.download_url)).blob();
+                        const ab = await file.arrayBuffer();
+                        const wb = XLSX.read(ab);
+                        setExcelFile({ fileName: target.name, worksheet: wb.Sheets[wb.SheetNames[0]] });
+                    } catch (e) { setExcelError(e.message); } finally { setIsLoadingExcel(false); }
+                }, [form.modelo]);
+
+                const handleMaterialInput = useCallback((idx, val) => {
+                    setThreading(prev => {
+                        const newThreads = [...prev];
+                        newThreads[idx].material = val;
+                        return newThreads;
+                    });
+                    if (val.length > 1) {
+                        const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase()));
+                        setSuggestions({ index: idx, items: filtered });
+                    } else setSuggestions({ index: null, items: [] });
+                }, [inventory]);
+
+                const selectSuggestion = useCallback((idx, item) => {
+                    setThreading(prev => {
+                        const newThreads = [...prev];
+                        newThreads[idx] = { ...newThreads[idx], material: `${item.material} - ${item.color}`, materialId: item.id };
+                        return newThreads;
+                    });
+                    setSuggestions({ index: null, items: [] });
+                }, []);
+
+                const saveTemplate = useCallback(async () => {
+                    if (!form.modelo || !form.cliente) return alert('Completa modelo y cliente');
+                    try {
+                        await db.collection('model_templates').doc(form.modelo.toUpperCase()).set({
+                            modelo: form.modelo.toUpperCase(),
+                            cliente: form.cliente.toUpperCase(),
+                            components: components.map(c => ({ ...c, descripcion: c.descripcion.toUpperCase(), sufijo: c.sufijo.toUpperCase(), talla: c.talla.toUpperCase() })),
+                            threading,
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        alert('Plantilla guardada');
+                        onBack();
+                    } catch (e) { alert('Error: ' + e.message); }
+                }, [form, components, threading, onBack]);
+
+                return (
+                    <div className="h-full flex flex-col bg-slate-900">
+                        <header className="bg-indigo-800 p-4 flex items-center gap-3 sticky top-0 z-10">
+                            <button onClick={onBack} className="p-2"><Icon name="arrow-left" /></button>
+                            <h1 className="text-xl font-black">Plantilla Maestra</h1>
+                        </header>
+                        <main className="flex-1 overflow-y-auto p-4 space-y-5 pb-8">
+                            <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label className="field-label">Modelo</label>
+                                    <input value={form.modelo} onChange={e => setForm({...form, modelo: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm" />
+                                </div>
+                                <div>
+                                    <label className="field-label">Cliente</label>
+                                    <input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full bg-slate-800 border border-slate-700 rounded p-2 text-sm" />
+                                </div>
+                            </div>
+                            <button onClick={fetchExcel} disabled={isLoadingExcel} className="bg-emerald-700 p-3 rounded-lg text-sm font-bold flex items-center justify-center gap-2 w-full">
+                                {isLoadingExcel ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="file-spreadsheet" />} Buscar en GitHub
+                            </button>
+                            {excelError && <div className="text-red-400 text-xs bg-red-900/20 p-2 rounded">{excelError}</div>}
+                            {excelFile && (
+                                <div className="bg-green-900/30 border border-green-700 p-2 rounded text-xs flex justify-between">
+                                    <span className="truncate">{excelFile.fileName}</span>
+                                    <button onClick={() => setExcelFile(null)}><Icon name="x" size={16} /></button>
+                                </div>
+                            )}
+
+                            <section className="bg-slate-800 p-3 rounded-lg">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h2 className="font-bold text-indigo-300">Receta de Hilos</h2>
+                                    <button onClick={() => setThreading([...threading, { guia: threading.length+1, material: '', porcentaje: '' }])} className="text-xs bg-indigo-900 px-3 py-1.5 rounded">+ Hilo</button>
+                                </div>
+                                <div className="space-y-2 max-h-60 overflow-auto pr-1">
+                                    {threading.map((h, i) => (
+                                        <div key={i} className="grid grid-cols-12 gap-1 items-center text-xs relative">
+                                            <input value={h.guia} onChange={e => setThreading(prev => { const t=[...prev]; t[i].guia=e.target.value; return t; })} className="col-span-2 bg-slate-900 border border-slate-600 rounded p-1 text-center" placeholder="Guía" />
+                                            <div className="col-span-6 relative">
+                                                <input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-1" placeholder="Material" />
+                                                {suggestions.index === i && suggestions.items.length > 0 && (
+                                                    <div className="absolute z-20 bg-slate-800 border border-slate-600 rounded mt-1 max-h-32 overflow-auto w-full">
+                                                        {suggestions.items.map(item => (
+                                                            <div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-1 hover:bg-indigo-900 cursor-pointer border-b border-slate-700 text-[10px]">
+                                                                {item.material} - {item.color} (stock {item.stock})
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <input value={h.porcentaje} onChange={e => setThreading(prev => { const t=[...prev]; t[i].porcentaje=e.target.value; return t; })} className="col-span-2 bg-slate-900 border border-slate-600 rounded p-1 text-center" placeholder="%" />
+                                            <button onClick={() => setThreading(prev => prev.filter((_, idx) => idx !== i))} className="col-span-1 text-red-400"><Icon name="trash-2" size={14} /></button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <section className="bg-slate-800 p-3 rounded-lg">
+                                <div className="flex justify-between items-center mb-2">
+                                    <h2 className="font-bold text-indigo-300">Componentes</h2>
+                                    <button onClick={() => setComponents([...components, { descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }])} className="text-xs bg-indigo-900 px-3 py-1.5 rounded">+ Pieza</button>
+                                </div>
+                                <div className="space-y-4">
+                                    {components.map((c, i) => (
+                                        <div key={i} className="bg-slate-900 p-3 rounded-lg border border-slate-700 relative">
+                                            <button onClick={() => setComponents(prev => prev.filter((_, idx) => idx !== i))} className="absolute top-2 right-2 text-red-400"><Icon name="x" size={16} /></button>
+                                            <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                                                <div className="col-span-2">
+                                                    <label className="field-label">Descripción</label>
+                                                    <input value={c.descripcion} onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].descripcion = e.target.value.toUpperCase(); return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="Ej: DELANTERO" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Talla</label>
+                                                    <input value={c.talla} onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].talla = e.target.value.toUpperCase(); return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="UNI" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Sufijo</label>
+                                                    <input value={c.sufijo} onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].sufijo = e.target.value.toUpperCase(); return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="A" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Máquina</label>
+                                                    <input type="number" value={c.maquina} onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].maquina = e.target.value; return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="1" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Mult. (pz/lienzo)</label>
+                                                    <input type="number" value={c.multiplicador} min="1" onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].multiplicador = Number(e.target.value); return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="1" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Pz/paquete</label>
+                                                    <input type="number" value={c.piezasPorPaquete} min="0" onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].piezasPorPaquete = Number(e.target.value); return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="0" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Peso (g)</label>
+                                                    <input type="number" value={c.peso} onChange={e => setComponents(prev => { const newC = [...prev]; newC[i].peso = e.target.value; return newC; })} className="w-full bg-slate-800 border border-slate-600 rounded p-1" placeholder="0.0" />
+                                                </div>
+                                                <div>
+                                                    <label className="field-label">Tiempo (MM:SS)</label>
+                                                    <TimeInput value={c.tiempo} onChange={val => setComponents(prev => { const newC = [...prev]; newC[i].tiempo = val; return newC; })} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        </main>
+                        <footer className="p-4 border-t border-slate-800 bg-slate-900">
+                            <button onClick={saveTemplate} className="btn-primary">GUARDAR PLANTILLA</button>
+                        </footer>
+                    </div>
+                );
+            };
+
+            // ==================== MÓDULO 2: ÓRDENES (con partida editable) ====================
+            const OrderGenerator = ({ onBack }) => {
+                const [step, setStep] = useState('search');
+                const [searchTerm, setSearchTerm] = useState('');
+                const [template, setTemplate] = useState(null);
+                const [loading, setLoading] = useState(false);
+                const [drafts, setDrafts] = useState([]);
+                const [editingIndex, setEditingIndex] = useState(null);
+                // Datos generales del pedido (incluye partida editable)
+                const [orderForm, setOrderForm] = useState({ partida: '' });
+
+                const searchModel = useCallback(async () => {
+                    if (!searchTerm.trim()) return;
+                    setLoading(true);
+                    try {
+                        const doc = await db.collection('model_templates').doc(searchTerm.toUpperCase().trim()).get();
+                        if (doc.exists) {
+                            setTemplate(doc.data());
+                            setStep('selection');
+                        } else alert('Plantilla no encontrada');
+                    } catch (e) { alert('Error: ' + e.message); }
+                    setLoading(false);
+                }, [searchTerm]);
+
+                // Pantalla de selección de piezas (con lienzos)
+                const PieceSelector = ({ template, onGenerate }) => {
+                    const [pieces, setPieces] = useState([]);
+                    const [partida, setPartida] = useState('');
+
+                    useEffect(() => {
+                        if (template?.components) {
+                            const initial = template.components.map(c => ({
+                                ...c,
+                                selected: true,
+                                lienzos: '',
+                                piezasPorPaquete: c.piezasPorPaquete || 0,
+                            }));
+                            setPieces(initial);
+                        }
+                    }, [template]);
+
+                    const toggleSelected = useCallback((idx) => setPieces(p => p.map((p, i) => i === idx ? {...p, selected: !p.selected} : p)), []);
+                    const updateLienzos = useCallback((idx, val) => setPieces(p => p.map((p, i) => i === idx ? {...p, lienzos: val} : p)), []);
+                    const updatePaquete = useCallback((idx, val) => setPieces(p => p.map((p, i) => i === idx ? {...p, piezasPorPaquete: Number(val)} : p)), []);
+
+                    const generate = useCallback(() => {
+                        const selected = pieces.filter(p => p.selected && p.lienzos > 0);
+                        if (selected.length === 0) return alert('Selecciona piezas con lienzos > 0');
+                        if (!partida.trim()) return alert('Debes ingresar un código de partida');
+                        onGenerate(selected, template, partida.toUpperCase());
+                    }, [pieces, onGenerate, template, partida]);
+
+                    const byTalla = useMemo(() => {
+                        return pieces.reduce((acc, p) => {
+                            const talla = p.talla || 'UNI';
+                            if (!acc[talla]) acc[talla] = [];
+                            acc[talla].push(p);
+                            return acc;
+                        }, {});
+                    }, [pieces]);
+                    const sortedTallas = useMemo(() => Object.keys(byTalla).sort((a,b) => a.localeCompare(b, undefined, {numeric: true})), [byTalla]);
+
+                    return (
+                        <div className="h-full flex flex-col">
+                            <header className="bg-indigo-800 p-4 flex items-center gap-3 sticky top-0 z-10">
+                                <button onClick={() => setStep('search')} className="p-2"><Icon name="arrow-left" /></button>
+                                <h2 className="font-black text-lg">{template.modelo}</h2>
+                            </header>
+                            <main className="flex-1 overflow-y-auto p-4 space-y-6 pb-24">
+                                {/* Campo de partida editable */}
+                                <div className="bg-slate-800 p-3 rounded-lg">
+                                    <label className="field-label text-indigo-300">Código de Partida</label>
+                                    <input value={partida} onChange={e => setPartida(e.target.value.toUpperCase())} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-center font-bold text-lg" placeholder="Ej: ENE25_01" />
+                                </div>
+
+                                {sortedTallas.map(talla => (
+                                    <div key={talla}>
+                                        <div className="sticky top-14 bg-slate-900 py-1 font-bold text-indigo-300 text-sm">TALLA {talla}</div>
+                                        {byTalla[talla].map((piece, idx) => {
+                                            const originalIdx = pieces.findIndex(p => p.descripcion === piece.descripcion && p.talla === piece.talla);
+                                            return (
+                                                <div key={originalIdx} className="bg-slate-800/60 rounded-xl p-3 border border-slate-700 flex items-start gap-3 mt-2">
+                                                    <input type="checkbox" checked={piece.selected} onChange={() => toggleSelected(originalIdx)} className="w-5 h-5 accent-indigo-500 mt-1 flex-shrink-0" />
+                                                    <div className="flex-1 grid grid-cols-2 gap-2 text-sm">
+                                                        <div className="col-span-2 font-bold text-indigo-200 uppercase">{piece.descripcion}</div>
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-400">Lienzos</label>
+                                                            <input type="number" min="0" value={piece.lienzos} onChange={e => updateLienzos(originalIdx, e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-center" />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-slate-400">Piezas/paq</label>
+                                                            <input type="number" min="0" value={piece.piezasPorPaquete} onChange={e => updatePaquete(originalIdx, e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-1 text-center" />
+                                                        </div>
+                                                        <div className="col-span-2 text-[10px] text-slate-500 flex justify-between">
+                                                            <span>🧵 Mult: {piece.multiplicador} pzs/lienzo</span>
+                                                            <span>📦 Total: {piece.lienzos ? piece.lienzos * piece.multiplicador : 0}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ))}
+                            </main>
+                            <footer className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-900 via-slate-900/90 to-transparent">
+                                <button onClick={generate} className="btn-primary">GENERAR BORRADORES</button>
+                            </footer>
+                        </div>
+                    );
+                };
+
+                const generateDrafts = useCallback((selectedPieces, tmpl, partida) => {
+                    const byMachine = {};
+                    selectedPieces.forEach(p => {
+                        const maq = p.maquina;
+                        if (!byMachine[maq]) {
+                            byMachine[maq] = {
+                                codigo: tmpl.modelo,
+                                cliente: tmpl.cliente,
+                                maquina: maq,
+                                partida: partida, // Usamos la partida ingresada
+                                subPiecesData: [],
+                                predefinedPackages: [],
+                                threading: tmpl.threading ? tmpl.threading.map(t => ({...t})) : [{ guia: 1, material: '', porcentaje: '' }],
+                            };
+                        }
+                        const totalPiezas = Number(p.lienzos) * p.multiplicador;
+                        byMachine[maq].subPiecesData.push({
+                            pieza: p.descripcion,
+                            talla: p.talla || 'UNI',
+                            totalPedido: totalPiezas,
+                            peso: p.peso || '',
+                            tiempo: p.tiempo || '',
+                        });
+                        const pzsPaq = p.piezasPorPaquete || 1;
+                        const numPaquetes = Math.ceil(totalPiezas / pzsPaq);
+                        for (let i=1; i<=numPaquetes; i++) {
+                            byMachine[maq].predefinedPackages.push({
+                                id: Date.now() + Math.random() + i,
+                                piezaNombre: p.descripcion,
+                                cantidad: i===numPaquetes && totalPiezas % pzsPaq ? totalPiezas % pzsPaq : pzsPaq,
+                                paqueteNum: i,
+                                codigoUnico: `${tmpl.modelo}-${p.sufijo || ''}_${i}`,
+                                finished: false,
+                            });
+                        }
+                    });
+                    setDrafts(Object.values(byMachine));
+                    setStep('staging');
+                }, []);
+
+                // DraftEditor y StagingScreen similares a versión anterior (se omiten por brevedad, pero funcionales)
+                // Incluimos versiones simplificadas pero completas
+                const DraftEditorComp = ({ draft, onSave, onCancel }) => {
+                    const [localDraft, setLocalDraft] = useState(draft);
+                    const [inventory, setInventory] = useState([]);
+                    const [suggestions, setSuggestions] = useState({ index: null, items: [] });
+
+                    useEffect(() => {
+                        const unsub = db.collection('inventory').doc('main').onSnapshot(doc => {
+                            if (doc.exists) setInventory(doc.data().items || []);
+                        });
+                        return unsub;
+                    }, []);
+
+                    const addThread = useCallback(() => setLocalDraft(d => ({ ...d, threading: [...(d.threading || []), { guia: (d.threading?.length || 0) + 1, material: '', porcentaje: '' }] })), []);
+                    const removeThread = useCallback((idx) => setLocalDraft(d => ({ ...d, threading: d.threading.filter((_, i) => i !== idx) })), []);
+                    const updateThread = useCallback((idx, field, val) => setLocalDraft(d => {
+                        const t = [...d.threading]; t[idx] = { ...t[idx], [field]: val }; return { ...d, threading: t };
+                    }), []);
+                    const handleMaterialInput = useCallback((idx, val) => {
+                        updateThread(idx, 'material', val);
+                        if (val.length > 1) {
+                            const filtered = inventory.filter(i => `${i.material} ${i.color}`.toLowerCase().includes(val.toLowerCase()));
+                            setSuggestions({ index: idx, items: filtered });
+                        } else setSuggestions({ index: null, items: [] });
+                    }, [inventory, updateThread]);
+                    const selectSuggestion = useCallback((idx, item) => {
+                        setLocalDraft(d => {
+                            const t = [...d.threading];
+                            t[idx] = { ...t[idx], material: `${item.material} - ${item.color}`, materialId: item.id };
+                            return { ...d, threading: t };
+                        });
+                        setSuggestions({ index: null, items: [] });
+                    }, []);
+                    const updatePiece = useCallback((idx, field, val) => setLocalDraft(d => {
+                        const newPieces = [...d.subPiecesData];
+                        newPieces[idx] = { ...newPieces[idx], [field]: val };
+                        return { ...d, subPiecesData: newPieces };
+                    }), []);
+
+                    return (
+                        <div className="h-full flex flex-col bg-slate-900">
+                            <header className="bg-indigo-800 p-4 flex items-center gap-3 sticky top-0 z-10">
+                                <button onClick={onCancel} className="p-2"><Icon name="arrow-left" /></button>
+                                <h2 className="font-bold">Máq. {localDraft.maquina}</h2>
+                            </header>
+                            <main className="flex-1 overflow-y-auto p-4 space-y-6 pb-8">
+                                <div className="bg-slate-800 p-3 rounded-lg grid grid-cols-2 gap-2 text-sm">
+                                    <div><span className="text-slate-400">Cliente:</span> {localDraft.cliente}</div>
+                                    <div><span className="text-slate-400">Partida:</span> {localDraft.partida}</div>
+                                </div>
+                                <section className="bg-slate-800 p-3 rounded-lg">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <h3 className="font-bold text-indigo-300">Enhebrado</h3>
+                                        <button onClick={addThread} className="text-xs bg-indigo-900 px-3 py-1.5 rounded">+ Hilo</button>
+                                    </div>
+                                    <div className="space-y-2 max-h-60 overflow-auto pr-1">
+                                        {localDraft.threading?.map((h, i) => (
+                                            <div key={i} className="grid grid-cols-12 gap-1 items-center text-xs relative">
+                                                <input value={h.guia} onChange={e => updateThread(i, 'guia', e.target.value)} className="col-span-2 bg-slate-900 border border-slate-600 rounded p-1 text-center" />
+                                                <div className="col-span-6 relative">
+                                                    <input value={h.material} onChange={e => handleMaterialInput(i, e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-1" placeholder="material" />
+                                                    {suggestions.index === i && suggestions.items.length > 0 && (
+                                                        <div className="absolute z-20 bg-slate-800 border border-slate-600 rounded mt-1 max-h-32 overflow-auto w-full">
+                                                            {suggestions.items.map(item => (
+                                                                <div key={item.id} onClick={() => selectSuggestion(i, item)} className="p-1 hover:bg-indigo-900 cursor-pointer border-b border-slate-700 text-[10px]">
+                                                                    {item.material} - {item.color} (stock {item.stock})
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <input value={h.porcentaje} onChange={e => updateThread(i, 'porcentaje', e.target.value)} className="col-span-2 bg-slate-900 border border-slate-600 rounded p-1 text-center" placeholder="%" />
+                                                <button onClick={() => removeThread(i)} className="col-span-1 text-red-400"><Icon name="trash-2" size={14} /></button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+                                <div>
+                                    <h3 className="font-bold text-indigo-300 mb-2">Piezas</h3>
+                                    {localDraft.subPiecesData.map((p, idx) => (
+                                        <div key={idx} className="bg-slate-800 p-3 rounded-lg mb-2">
+                                            <div className="font-bold text-white text-sm mb-2">{p.pieza}</div>
+                                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                                <div><label className="text-slate-400">Talla</label><input value={p.talla} onChange={e => updatePiece(idx, 'talla', e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-1" /></div>
+                                                <div><label className="text-slate-400">Peso (g)</label><input type="number" value={p.peso} onChange={e => updatePiece(idx, 'peso', e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-1" /></div>
+                                                <div><label className="text-slate-400">Tiempo</label><TimeInput value={p.tiempo} onChange={val => updatePiece(idx, 'tiempo', val)} /></div>
+                                                <div><label className="text-slate-400">Total</label><input value={p.totalPedido} disabled className="w-full bg-slate-700 text-slate-300 rounded p-1 text-center" /></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </main>
+                            <footer className="p-4 border-t border-slate-800 flex gap-2">
+                                <button onClick={onCancel} className="flex-1 py-3 rounded-lg border border-slate-600 font-bold">Cancelar</button>
+                                <button onClick={() => onSave(localDraft)} className="flex-1 bg-green-600 py-3 rounded-lg font-bold">CONFIRMAR</button>
+                            </footer>
+                        </div>
+                    );
+                };
+
+                const StagingScreen = ({ drafts, onEdit, onBack, onConfirmAll }) => (
+                    <div className="h-full flex flex-col">
+                        <header className="bg-indigo-800 p-4 flex items-center gap-3 sticky top-0 z-10">
+                            <button onClick={onBack} className="p-2"><Icon name="arrow-left" /></button>
+                            <h2 className="font-bold">Borradores ({drafts.length})</h2>
+                        </header>
+                        <main className="flex-1 overflow-y-auto p-4 space-y-3">
+                            {drafts.map((d, idx) => (
+                                <div key={idx} className="bg-slate-800 p-4 rounded-xl flex justify-between items-center">
+                                    <div>
+                                        <div className="font-black text-2xl">Máq. {d.maquina}</div>
+                                        <div className="text-sm text-slate-400 truncate max-w-[180px]">{d.subPiecesData.map(p=>p.pieza).join(' + ')}</div>
+                                    </div>
+                                    <button onClick={() => onEdit(idx)} className="bg-indigo-600 px-5 py-3 rounded-lg text-sm font-bold">REVISAR</button>
+                                </div>
+                            ))}
+                        </main>
+                        {drafts.length > 0 && (
+                            <footer className="p-4 border-t border-slate-800">
+                                <button onClick={onConfirmAll} className="btn-primary text-lg">CONFIRMAR TODAS</button>
+                            </footer>
+                        )}
+                    </div>
+                );
+
+                const handleSaveDraft = useCallback(async (finalDraft) => {
+                    try {
+                        const orderRef = db.collection('orders').doc();
+                        await orderRef.set({
+                            ...finalDraft,
+                            id: orderRef.id,
+                            displayId: `${finalDraft.partida}-M${finalDraft.maquina}`,
+                            progreso: finalDraft.predefinedPackages,
+                            status: 'EN PROCESO',
+                            totalPedido: finalDraft.subPiecesData.reduce((a,b)=>a+Number(b.totalPedido),0),
+                            createdAt: new Date().toISOString()
+                        });
+                        alert('Orden guardada');
+                        const newDrafts = drafts.filter((_, i) => i !== editingIndex);
+                        setDrafts(newDrafts);
+                        if (newDrafts.length === 0) { setStep('search'); setTemplate(null); }
+                        else { setStep('staging'); setEditingIndex(null); }
+                    } catch (e) { alert('Error: ' + e.message); }
+                }, [drafts, editingIndex]);
+
+                const confirmAllDrafts = useCallback(async () => {
+                    for (const d of drafts) {
+                        try {
+                            const orderRef = db.collection('orders').doc();
+                            await orderRef.set({
+                                ...d,
+                                id: orderRef.id,
+                                displayId: `${d.partida}-M${d.maquina}`,
+                                progreso: d.predefinedPackages,
+                                status: 'EN PROCESO',
+                                totalPedido: d.subPiecesData.reduce((a,b)=>a+Number(b.totalPedido),0),
+                                createdAt: new Date().toISOString()
+                            });
+                        } catch (e) { alert('Error en una orden: ' + e.message); return; }
+                    }
+                    alert('Todas las órdenes guardadas');
+                    setDrafts([]);
+                    setStep('search');
+                    setTemplate(null);
+                }, [drafts]);
+
+                if (step === 'selection' && template) {
+                    return <PieceSelector template={template} onGenerate={generateDrafts} />;
+                }
+                if (step === 'staging') {
+                    return <StagingScreen drafts={drafts} onEdit={(idx) => { setEditingIndex(idx); setStep('editing'); }} onBack={() => setStep('selection')} onConfirmAll={confirmAllDrafts} />;
+                }
+                if (step === 'editing' && editingIndex !== null) {
+                    return <DraftEditorComp draft={drafts[editingIndex]} onSave={handleSaveDraft} onCancel={() => setStep('staging')} />;
+                }
+
+                // Búsqueda inicial
+                return (
+                    <div className="h-full flex flex-col items-center justify-center p-6">
+                        <button onClick={onBack} className="absolute top-4 left-4 p-2"><Icon name="arrow-left" /></button>
+                        <div className="w-full max-w-md space-y-6">
+                            <h2 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400">Nueva Orden</h2>
+                            <input value={searchTerm} onChange={e => setSearchTerm(e.target.value.toUpperCase())} placeholder="Modelo (ej: POLO-2024)" className="w-full bg-slate-800 border border-slate-700 p-4 rounded-xl text-center text-xl font-bold" />
+                            <button onClick={searchModel} disabled={loading} className="btn-primary flex items-center justify-center gap-2">
+                                {loading ? <Icon name="loader-2" className="animate-spin" /> : <Icon name="search" />} BUSCAR
+                            </button>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ==================== MÓDULO 3: KITS (simplificado, pero funcional) ====================
+            // (Se mantiene igual que en la versión anterior, con todas sus características)
+            const KitAggregator = ({ onBack }) => {
+                const [orders, setOrders] = useState([]);
+                const [selectedKey, setSelectedKey] = useState(null);
+                const [checkedIds, setCheckedIds] = useState([]);
+                const [kitQueue, setKitQueue] = useState([]);
+                const [repos, setRepos] = useState([]);
+                const [isSaving, setIsSaving] = useState(false);
+                const [isUngroupMode, setIsUngroupMode] = useState(false);
+                const [pendingUngroups, setPendingUngroups] = useState([]);
+                const [showPreview, setShowPreview] = useState(false);
+                const pdfRef = useRef();
+
+                useEffect(() => {
+                    const unsub1 = db.collection('app_config').doc('imagenes').onSnapshot(d => setRepos(d.data()?.sources || []));
+                    const unsub2 = db.collection('orders').where('status','!=','ARCHIVADO').onSnapshot(s => {
+                        setOrders(s.docs.map(doc => ({...doc.data(), id: doc.id})));
+                    });
+                    return () => { unsub1(); unsub2(); };
+                }, []);
+
+                const currentData = useMemo(() => {
+                    if (!selectedKey) return null;
+                    const [mod, part] = selectedKey.split('|');
+                    const pkgs = [];
+                    orders.filter(o => o.codigo === mod && (o.partida || 'SN') === part).forEach(o => {
+                        if (o.progreso) {
+                            const cliente = o.cliente || 'S/C';
+                            const subPieces = o.subPiecesData || [];
+                            o.progreso.forEach(p => {
+                                const meta = subPieces.find(sp => sp.pieza === p.piezaNombre) || subPieces[0] || {};
+                                pkgs.push({ 
+                                    ...p, 
+                                    orderId: o.id, 
+                                    maquina: p.maquina || o.maquina || 'S/M', 
+                                    cliente, 
+                                    talla: meta.talla || 'U', 
+                                    partida: o.partida 
+                                });
+                            });
+                        }
+                    });
+                    const groupedBySize = pkgs.reduce((acc, p) => {
+                        if (!acc[p.talla]) acc[p.talla] = [];
+                        acc[p.talla].push(p);
+                        return acc;
+                    }, {});
+                    return { 
+                        modelo: mod, 
+                        partida: part, 
+                        sizes: Object.keys(groupedBySize).sort().map(s => ({ name: s, items: groupedBySize[s].sort((a,b) => a.paqueteNum - b.paqueteNum) }))
+                    };
+                }, [selectedKey, orders]);
+
+                const selectedPieces = useMemo(() => {
+                    if (!currentData) return [];
+                    const all = [];
+                    currentData.sizes.forEach(s => all.push(...s.items));
+                    return all.filter(p => checkedIds.includes(p.codigoUnico));
+                }, [checkedIds, currentData]);
+
+                const activeSizeLock = useMemo(() => {
+                    if (isUngroupMode) return null;
+                    if (kitQueue.length > 0) return kitQueue[0].talla;
+                    if (selectedPieces.length > 0) return selectedPieces[0].talla;
+                    return null;
+                }, [kitQueue, selectedPieces, isUngroupMode]);
+
+                const toggleUngroupMode = () => {
+                    if (isUngroupMode) {
+                        setIsUngroupMode(false);
+                        setPendingUngroups([]);
+                    } else {
+                        setCheckedIds([]);
+                        setIsUngroupMode(true);
+                    }
+                };
+
+                const handleCardClick = (p, grouped, selected) => {
+                    if (isUngroupMode) {
+                        if (p.kitRef) {
+                            setPendingUngroups(prev => prev.includes(p.kitRef) ? prev.filter(k => k !== p.kitRef) : [...prev, p.kitRef]);
+                        }
+                    } else {
+                        if (!grouped) {
+                            setCheckedIds(prev => selected ? prev.filter(x => x !== p.codigoUnico) : [...prev, p.codigoUnico]);
+                        }
+                    }
+                };
+
+                const confirmUngroup = async () => {
+                    if (pendingUngroups.length === 0) {
+                        setIsUngroupMode(false);
+                        return;
+                    }
+                    setIsSaving(true);
+                    try {
+                        const batch = db.batch();
+                        pendingUngroups.forEach(kitId => batch.delete(db.collection('kits_datos').doc(kitId)));
+                        const affectedOrders = new Set();
+                        orders.forEach(o => {
+                            if (o.progreso && o.progreso.some(p => pendingUngroups.includes(p.kitRef))) {
+                                affectedOrders.add(o.id);
+                            }
+                        });
+                        affectedOrders.forEach(oid => {
+                            const orderObj = orders.find(o => o.id === oid);
+                            const newProg = orderObj.progreso.map(i => {
+                                if (i.kitRef && pendingUngroups.includes(i.kitRef)) {
+                                    const { agrupado, kitRef, ...rest } = i;
+                                    return rest;
+                                }
+                                return i;
+                            });
+                            batch.update(db.collection('orders').doc(oid), { progreso: newProg });
+                        });
+                        await batch.commit();
+                        setPendingUngroups([]);
+                        setIsUngroupMode(false);
+                    } catch (e) { alert("Error al desagrupar: " + e.message); }
+                    setIsSaving(false);
+                };
+
+                const handleConfirmKit = async () => {
+                    if (selectedPieces.length === 0) return;
+                    setShowPreview(true);
+                };
+
+                const createKit = async () => {
+                    setShowPreview(false);
+                    setIsSaving(true);
+                    const kitId = `K${Date.now().toString().slice(-8)}`;
+                    try {
+                        await db.collection('kits_datos').doc(kitId).set({
+                            kitId,
+                            modelo: currentData.modelo,
+                            partida: currentData.partida,
+                            talla: selectedPieces[0].talla,
+                            cliente: selectedPieces[0].cliente,
+                            piezas: selectedPieces.map(p => ({
+                                codigoUnico: p.codigoUnico,
+                                paqueteNum: p.paqueteNum,
+                                cantidad: p.cantidad,
+                                piezaNombre: p.piezaNombre,
+                                orderId: p.orderId,
+                                maquinaOriginal: p.maquina
+                            }))
+                        });
+                        const batch = db.batch();
+                        const uniqueOrders = [...new Set(selectedPieces.map(p => p.orderId))];
+                        uniqueOrders.forEach(oid => {
+                            const orderObj = orders.find(o => o.id === oid);
+                            const newProg = orderObj.progreso.map(i => 
+                                selectedPieces.some(sp => sp.codigoUnico === i.codigoUnico) ? {...i, agrupado: true, kitRef: kitId} : i
+                            );
+                            batch.update(db.collection('orders').doc(oid), { progreso: newProg });
+                        });
+                        await batch.commit();
+
+                        setKitQueue(prev => [...prev, {
+                            kitId,
+                            modelo: currentData.modelo,
+                            partida: currentData.partida,
+                            cliente: selectedPieces[0].cliente,
+                            talla: selectedPieces[0].talla,
+                            items: [...selectedPieces]
+                        }]);
+
+                        setTimeout(() => {
+                            JsBarcode(`#bc-${kitId}`, kitId, {
+                                format: "CODE128", displayValue: true, fontSize: 14, height: 50, margin: 0
+                            });
+                        }, 100);
+
+                        setCheckedIds([]);
+                    } catch (e) { alert("Error al guardar: " + e.message); }
+                    setIsSaving(false);
+                };
+
+                const downloadPDF = async () => {
+                    if (kitQueue.length === 0) return;
+                    setIsSaving(true);
+                    const opt = { 
+                        margin: 0, 
+                        filename: `KITS_${currentData?.modelo || 'kit'}.pdf`, 
+                        image: { type: 'jpeg', quality: 0.98 },
+                        html2canvas: { scale: 3, useCORS: true },
+                        jsPDF: { unit: 'in', format: [4, 6], orientation: 'portrait' } 
+                    };
+                    await html2pdf().set(opt).from(pdfRef.current).save();
+                    setKitQueue([]);
+                    setIsSaving(false);
+                };
+
+                return (
+                    <div className="h-full flex flex-col bg-slate-900">
+                        <header className="bg-indigo-800 p-4 flex items-center gap-3 sticky top-0 z-10">
+                            <button onClick={onBack} className="p-2"><Icon name="arrow-left" /></button>
+                            <h2 className="font-bold text-lg">Agrupador de Kits</h2>
+                            {kitQueue.length > 0 && !isUngroupMode && (
+                                <button onClick={downloadPDF} className="ml-auto bg-green-600 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-1">
+                                    <Icon name="file-text" size={14} /> PDF ({kitQueue.length})
+                                </button>
+                            )}
+                        </header>
+
+                        <div className="p-2 overflow-x-auto flex gap-2 bg-slate-800/50 scrollbar-thin">
+                            {Array.from(new Set(orders.map(o => `${o.codigo}|${o.partida || 'SN'}`))).sort().map(k => (
+                                <button key={k} onClick={() => { setSelectedKey(k); setCheckedIds([]); setIsUngroupMode(false); setPendingUngroups([]); }} 
+                                    className={`chip ${selectedKey === k ? 'active' : ''}`}>
+                                    {k}
+                                </button>
+                            ))}
+                        </div>
+
+                        {selectedKey && currentData ? (
+                            <>
+                                <main className="flex-1 overflow-y-auto p-4">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <h3 className="text-xl font-black">{currentData.modelo}</h3>
+                                        {!isUngroupMode && (
+                                            <button onClick={toggleUngroupMode} className="bg-red-900/30 border border-red-700 px-3 py-1.5 rounded-full text-xs flex items-center gap-1">
+                                                <Icon name="unlock" size={14} /> Desagrupar
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {isUngroupMode && (
+                                        <div className="bg-red-900/20 border border-red-500 p-3 rounded-lg mb-4 flex justify-between items-center">
+                                            <span className="text-sm">Modo desagrupar</span>
+                                            <div className="flex gap-2">
+                                                <button onClick={confirmUngroup} className="bg-red-600 px-4 py-1.5 rounded-full text-sm">Confirmar</button>
+                                                <button onClick={()=>{setIsUngroupMode(false); setPendingUngroups([]);}}><Icon name="x" /></button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {currentData.sizes.map(s => (
+                                        <div key={s.name} className={`mb-6 ${activeSizeLock && activeSizeLock !== s.name && !isUngroupMode ? 'opacity-20 pointer-events-none' : ''}`}>
+                                            <div className="sticky top-14 bg-slate-900 py-1 font-bold text-indigo-300 text-sm">TALLA {s.name}</div>
+                                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                                {s.items.map(p => {
+                                                    const isGroupedBase = p.agrupado || kitQueue.some(k => k.items.some(x => x.codigoUnico === p.codigoUnico));
+                                                    const willBeUngrouped = pendingUngroups.includes(p.kitRef);
+                                                    const displayGrouped = isGroupedBase && !willBeUngrouped;
+                                                    const displaySelected = checkedIds.includes(p.codigoUnico);
+                                                    let cardClass = 'pkg-card';
+                                                    if (displaySelected) cardClass += ' selected ';
+                                                    if (isUngroupMode) {
+                                                        if (displayGrouped) cardClass += ' ungroup-target ';
+                                                    } else {
+                                                        if (displayGrouped) cardClass += ' confirmed ';
+                                                    }
+                                                    return (
+                                                        <div key={p.codigoUnico} onClick={() => handleCardClick(p, isGroupedBase, displaySelected)} className={cardClass}>
+                                                            <div className="flex justify-between">
+                                                                <span className="font-bold text-lg">#{p.paqueteNum}</span>
+                                                                {displayGrouped && !isUngroupMode && <Icon name="lock" className="text-green-400" size={16} />}
+                                                                {displayGrouped && isUngroupMode && <Icon name="x-circle" className="text-red-300 animate-pulse" size={16} />}
+                                                            </div>
+                                                            <div className="text-xs truncate mt-1">{getCleanName(p.piezaNombre)}</div>
+                                                            <div className="font-black text-xl mt-1">{p.cantidad}</div>
+                                                            <div className="text-[10px] text-purple-400">Máq {p.maquina}</div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </main>
+
+                                {!isUngroupMode && selectedPieces.length > 0 && (
+                                    <footer className="p-4 border-t border-slate-800 bg-slate-900">
+                                        <button onClick={handleConfirmKit} className="btn-primary bg-yellow-500 text-black">
+                                            CREAR KIT ({selectedPieces.length})
+                                        </button>
+                                    </footer>
+                                )}
+                            </>
+                        ) : (
+                            <div className="flex-1 flex items-center justify-center text-slate-500">Selecciona un modelo/partida</div>
+                        )}
+
+                        {showPreview && selectedPieces.length > 0 && (
+                            <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 modal-enter" onClick={() => setShowPreview(false)}>
+                                <div className="preview-card max-w-md w-full" onClick={e => e.stopPropagation()}>
+                                    <div className="preview-header">
+                                        <div className="text-3xl font-black uppercase">{currentData.modelo}</div>
+                                        <div className="text-xs text-gray-300">{selectedPieces[0].cliente}</div>
+                                    </div>
+                                    <div className="preview-body">
+                                        <div className="preview-image">
+                                            <SmartImage modelo={currentData.modelo} repos={repos} />
+                                        </div>
+                                        <div className="preview-details">
+                                            <table className="preview-table w-full text-xs">
+                                                <tbody>
+                                                    {selectedPieces.map((p, i) => (
+                                                        <tr key={i}>
+                                                            <td className="font-black text-lg w-12">{p.cantidad}</td>
+                                                            <td className="uppercase">{getCleanName(p.piezaNombre)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    <div className="preview-footer">
+                                        <div className="text-sm font-bold mb-2">TALLA: {selectedPieces[0].talla}</div>
+                                        <button onClick={createKit} disabled={isSaving} className="w-full bg-yellow-500 text-black font-black py-3 rounded-xl">
+                                            {isSaving ? 'GUARDANDO...' : 'CONFIRMAR KIT'}
+                                        </button>
+                                        <button onClick={() => setShowPreview(false)} className="text-xs text-slate-500 mt-2">Cancelar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
+                            <div ref={pdfRef}>
+                                {kitQueue.map((kit, idx) => (
+                                    <div key={idx} style={{ width: '4in', height: '5.95in', background: 'white', color: 'black', padding: '0.2in', fontFamily: 'Arial' }}>
+                                        <div style={{ borderBottom: '4px solid black', marginBottom: '0.1in' }}>
+                                            <h1 style={{ fontSize: '40px', fontWeight: 900 }}>{kit.modelo}</h1>
+                                            <p>{kit.cliente} - {kit.partida}</p>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.1in' }}>
+                                            <div style={{ width: '40%', background: '#eee', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Imagen</div>
+                                            <div style={{ width: '60%' }}>
+                                                {kit.items.map((p, i) => (
+                                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #ccc', padding: '4px 0' }}>
+                                                        <span style={{ fontSize: '24px', fontWeight: 900 }}>{p.cantidad}</span>
+                                                        <span>{p.piezaNombre}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div style={{ marginTop: '0.2in', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '18px', fontWeight: 'bold' }}>TALLA: {kit.talla}</div>
+                                            <svg id={`bc-${kit.kitId}`} style={{ width: '100%', height: '0.5in' }}></svg>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            // ==================== PANTALLA PRINCIPAL ====================
+            const HomeScreen = ({ onSelectModule }) => (
+                <div className="h-full flex flex-col items-center justify-center p-6 bg-gradient-to-b from-slate-950 to-slate-900">
+                    <h1 className="text-4xl font-black text-center text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-cyan-400 mb-2">Logística Viva Rouss</h1>
+                    <p className="text-slate-500 text-sm mb-12">Sistema de producción inteligente</p>
+                    <div className="w-full max-w-md space-y-4">
+                        <div onClick={() => onSelectModule('templates')} className="card-mosaic p-6 rounded-3xl flex items-center gap-5 cursor-pointer">
+                            <Icon name="layout-template" size={48} className="text-indigo-400" />
+                            <div>
+                                <h2 className="text-2xl font-black">Plantillas</h2>
+                                <p className="text-slate-400 text-sm">Crear / editar modelos</p>
+                            </div>
+                        </div>
+                        <div onClick={() => onSelectModule('orders')} className="card-mosaic p-6 rounded-3xl flex items-center gap-5 cursor-pointer">
+                            <Icon name="clipboard-list" size={48} className="text-emerald-400" />
+                            <div>
+                                <h2 className="text-2xl font-black">Órdenes</h2>
+                                <p className="text-slate-400 text-sm">Generar producción</p>
+                            </div>
+                        </div>
+                        <div onClick={() => onSelectModule('kits')} className="card-mosaic p-6 rounded-3xl flex items-center gap-5 cursor-pointer">
+                            <Icon name="package" size={48} className="text-amber-400" />
+                            <div>
+                                <h2 className="text-2xl font-black">Kits</h2>
+                                <p className="text-slate-400 text-sm">Agrupar paquetes</p>
+                            </div>
+                        </div>
+                    </div>
+                    <footer className="footer absolute bottom-0 w-full">
+                        Developed by <span className="font-bold text-indigo-400">"VɅ"</span> with Deep Seek Ai technology
+                    </footer>
+                </div>
+            );
+
+            // ==================== APP ====================
+            const App = () => {
+                const [module, setModule] = useState(null); // null, 'templates', 'orders', 'kits'
+
+                return (
+                    <div className="h-screen overflow-hidden">
+                        {module === null && <HomeScreen onSelectModule={setModule} />}
+                        {module === 'templates' && <TemplateGenerator onBack={() => setModule(null)} />}
+                        {module === 'orders' && <OrderGenerator onBack={() => setModule(null)} />}
+                        {module === 'kits' && <KitAggregator onBack={() => setModule(null)} />}
+                    </div>
+                );
+            };
+
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.render(<App />);
+        })();
+    </script>
+</body>
+</html>
