@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Textil Cloud - Cirineo v4.4 (Trash Update)</title>
+    <title>Sistema Textil Cloud - Cirineo v4.4 (Color + ShortCodes)</title>
     
     <link id="appIcon" rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     <meta name="theme-color" content="#1e293b">
@@ -106,7 +106,19 @@
             return `${partida}-${piecePrefixes}-M${maquina}`;
         };
 
-        const useBarcodeScanner = (onScan) => {
+        // Escáner de código de barras por teclado (ahora también busca shortCode)
+        const useBarcodeScanner = (onScan, orders) => {
+            // Mapa de shortCode -> {orderId, pkgId}
+            const shortCodeMap = useMemo(() => {
+                const map = new Map();
+                orders.forEach(o => {
+                    o.progreso?.forEach(p => {
+                        if (p.shortCode) map.set(p.shortCode, { orderId: String(o.id), pkgId: p.id });
+                    });
+                });
+                return map;
+            }, [orders]);
+
             useEffect(() => {
                 let buffer = '';
                 let lastKeyTime = Date.now();
@@ -118,13 +130,13 @@
                     if (currentTime - lastKeyTime > 100) buffer = '';
                     lastKeyTime = currentTime;
                     if (char === 'Enter') {
-                        if (buffer.length > 5) onScan(buffer);
+                        if (buffer.length > 2) onScan(buffer, shortCodeMap);
                         buffer = '';
                     } else if (char.length === 1) buffer += char;
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [onScan]);
+            }, [onScan, shortCodeMap]);
         };
 
         // --- COMPONENTE DE INPUT DE TIEMPO (MM:SS) ---
@@ -160,17 +172,17 @@
             );
         };
 
-        // --- COMPONENTE PAPELETA INDIVIDUAL (4x6) ---
+        // --- COMPONENTE PAPELETA INDIVIDUAL (4x6) con shortCode y color ---
         const PackageTicket = ({ order, pkg }) => {
             const canvasRef = useRef(null);
             const pieceInfo = order.subPiecesData?.find(p => p.pieza === pkg.piezaNombre) || {};
+            const barcodeValue = pkg.shortCode || `${order.id}-${pkg.id}`;
             
             useEffect(() => {
                 if (canvasRef.current) {
-                    const barcodeValue = `${order.id}-${pkg.id}`;
                     try { JsBarcode(canvasRef.current, barcodeValue, { format: "CODE128", displayValue: false, height: 50, width: 2, margin: 0, background: "transparent" }); } catch (e) { console.error("Error barcode", e); }
                 }
-            }, [order, pkg]);
+            }, [barcodeValue]);
 
             return (
                 <div className="ticket-container">
@@ -191,7 +203,11 @@
                         </div>
                         <div className="ticket-row" style={{flex: '0 0 auto', fontSize: '9pt'}}>
                              <div className="ticket-col" style={{flex: 1}}><span className="ticket-label">TALLA</span><span className="ticket-value">{pieceInfo.talla || '-'}</span></div>
-                            <div className="ticket-col" style={{flex: 2}}><span className="ticket-label">MATERIALES</span><div className="flex flex-col">{order.threading?.map((h, i) => (h.material && <span key={i} className="font-bold text-xs truncate">{h.material}</span>))}</div></div>
+                            <div className="ticket-col" style={{flex: 2}}>
+                                <span className="ticket-label">MATERIALES</span>
+                                <div className="flex flex-col">{order.threading?.map((h, i) => (h.material && <span key={i} className="font-bold text-xs truncate">{h.material}</span>))}</div>
+                                {order.color && <span className="text-[8pt] font-bold text-gray-600 mt-1">COLOR: {order.color}</span>}
+                            </div>
                              <div className="ticket-col" style={{flex: 1.5}}>
                                 <div className="border-b-2 border-black mb-1 pb-1"><span className="ticket-label">FECHA ENTREGA</span><span className="ticket-value text-sm block">{new Date().toLocaleDateString('es-MX')}</span></div>
                                 <div><span className="ticket-label">TEJIDO POR:</span><span className="block border-b border-black h-4"></span></div>
@@ -199,7 +215,7 @@
                         </div>
                         <div className="ticket-row no-border-bottom flex-col items-center justify-center pt-2" style={{flex: '0 0 auto'}}>
                             <canvas ref={canvasRef} className="max-w-full"></canvas>
-                            <div className="text-[9px] font-mono text-center w-full leading-none mt-1">{pkg.codigoUnico}</div>
+                            <div className="text-[9px] font-mono text-center w-full leading-none mt-1">{barcodeValue}</div>
                             <div className="text-[8px] font-mono text-center w-full leading-none text-slate-500">ID: {order.id}-{pkg.id}</div>
                         </div>
                     </div>
@@ -207,7 +223,7 @@
             );
         };
 
-        // --- DRAFT EDITOR ---
+        // --- DRAFT EDITOR (con visualización del color) ---
         const DraftEditor = ({ draft, onSave, onCancel }) => {
             const [localDraft, setLocalDraft] = useState(draft);
             const [inventory, setInventory] = useState([]);
@@ -233,6 +249,12 @@
                             <div><label className="block text-xs font-bold text-gray-500">Cliente</label><input value={localDraft.cliente} disabled className="w-full border p-1 rounded bg-gray-200 text-gray-500"/></div>
                              <div><label className="block text-xs font-bold text-gray-500">Partida</label><input value={localDraft.partida} disabled className="w-full border p-1 rounded bg-gray-200 text-gray-500"/></div>
                         </div>
+                        {localDraft.color && (
+                            <div className="bg-purple-50 border border-purple-200 p-2 rounded text-sm">
+                                <span className="font-bold text-purple-800">Color de Teñido: </span>
+                                <span className="font-black text-purple-600">{localDraft.color}</span>
+                            </div>
+                        )}
                         <div>
                             <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-sm text-slate-700">Enhebrado e Inventario</h3><button onClick={addThread} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold hover:bg-blue-200">+ Hilo</button></div>
                             <table className="w-full text-xs border">
@@ -440,12 +462,12 @@
             );
         };
 
-        // --- ORDER GENERATOR (CON TALLA MANUAL Y AUTOMÁTICA) ---
+        // --- ORDER GENERATOR (CON COLOR DE TEÑIDO) ---
         const OrderGeneratorModal = ({ onClose, onProcess }) => {
             const [step, setStep] = useState('input');
             const [drafts, setDrafts] = useState([]);
             const [currentDraftIndex, setCurrentDraftIndex] = useState(null);
-            const [form, setForm] = useState({ modelo: '', cliente: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
+            const [form, setForm] = useState({ modelo: '', cliente: '', color: '', fecha: new Date().toISOString().split('T')[0], partidaCodigo: '', totalPrendas: 0 });
             
             const [components, setComponents] = useState([{ descripcion: '', talla: '', sufijo: '', maquina: '', multiplicador: 1, piezasPorPaquete: 0, peso: '', tiempo: '' }]);
             const [templateThreading, setTemplateThreading] = useState([]);
@@ -484,7 +506,7 @@
                             : [{ guia: 1, material: '', porcentaje: '', materialId: null }, { guia: 2, material: '', porcentaje: '', materialId: null }];
 
                         ordersByMachine[maquinaKey] = {
-                            codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(), maquina: maquinaKey, partida: form.partidaCodigo.toUpperCase(),
+                            codigo: form.modelo.toUpperCase(), cliente: form.cliente.toUpperCase(), color: form.color.toUpperCase(), maquina: maquinaKey, partida: form.partidaCodigo.toUpperCase(),
                             subPiecesData: [], predefinedPackages: [], createdAt: new Date().toLocaleString('es-MX'),
                             threading: initialThreading
                         };
@@ -516,7 +538,6 @@
                 setStep('staging');
             };
             
-            // --- FUNCION PARA ELIMINAR BORRADOR EN STAGING ---
             const removeDraft = (indexToRemove) => {
                 if(window.confirm("¿Estás seguro de eliminar este borrador de orden?")) {
                     setDrafts(drafts.filter((_, i) => i !== indexToRemove));
@@ -569,7 +590,6 @@
                                             <h3 className="font-black text-xl text-slate-700">MÁQUINA {draft.maquina}</h3>
                                             <div className="flex items-center gap-2">
                                                 <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded">BORRADOR</span>
-                                                {/* BOTÓN DE BASURA EN STAGING */}
                                                 <button onClick={() => removeDraft(idx)} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-1 rounded transition-colors" title="Eliminar este borrador">
                                                     <Icon name="trash-2" size={18}/>
                                                 </button>
@@ -577,6 +597,7 @@
                                         </div>
                                         <div className="text-sm text-gray-600 mb-2">
                                             <p><strong>Cliente:</strong> {draft.cliente}</p>
+                                            <p><strong>Color:</strong> {draft.color || 'N/D'}</p>
                                             <p><strong>Piezas:</strong> {draft.subPiecesData.map(p=>p.pieza).join(', ')}</p>
                                         </div>
                                     </div>
@@ -607,6 +628,7 @@
                                     </div>
                                     <div><label className="block text-xs font-bold text-gray-700">Cliente</label><input value={form.cliente} onChange={e => setForm({...form, cliente: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase"/></div>
                                 </div>
+                                <div><label className="block text-xs font-bold text-gray-700">Color de Teñido</label><input value={form.color} onChange={e => setForm({...form, color: e.target.value.toUpperCase()})} className="w-full p-2 border rounded font-bold uppercase" placeholder="Ej: NEGRO, ROJO"/></div>
                                 <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold text-gray-700">Fecha Entrega</label><input type="date" value={form.fecha} onChange={e => setForm({...form, fecha: e.target.value})} className="w-full p-2 border rounded"/></div><div><label className="block text-xs font-bold text-gray-700">Cód. Partida</label><input value={form.partidaCodigo} onChange={e => setForm({...form, partidaCodigo: e.target.value.toUpperCase()})} className="w-full p-2 border bg-gray-100 rounded font-black"/></div></div>
                                 <div><label className="block text-xs font-bold text-gray-700">Cantidad TOTAL</label><input type="number" value={form.totalPrendas} onChange={e => setForm({...form, totalPrendas: Number(e.target.value)})} className="w-full p-2 border rounded bg-yellow-50 text-xl font-bold text-center"/></div>
                             </div>
@@ -615,7 +637,6 @@
                                 <div className="bg-gray-50 p-2 rounded-lg border h-64 overflow-y-auto space-y-2">
                                     {components.map((comp, idx) => (
                                         <div key={idx} className="bg-white p-2 rounded shadow-sm border relative">
-                                            {/* BOTÓN DE BASURA EN PIEZAS (ACTUALIZADO) */}
                                             <button onClick={() => setComponents(components.filter((_, i) => i !== idx))} className="absolute top-1 right-1 bg-red-50 hover:bg-red-100 text-red-500 p-1.5 rounded transition" title="Eliminar pieza"><Icon name="trash-2" size={14}/></button>
                                             
                                             <div className="grid grid-cols-3 gap-2 mb-2">
@@ -752,6 +773,7 @@
                                     <div className="flex flex-col gap-1 header-info">
                                         <div className="text-3xl font-black uppercase">PARTIDA: {order.partida}</div>
                                         <div className="text-3xl font-black uppercase text-slate-800">MOD: {order.codigo}</div>
+                                        {order.color && <div className="text-2xl font-black uppercase text-rose-700">COLOR: {order.color}</div>}
                                     </div>
                                 </div>
                                 <div className="w-3/12 text-right"><div className="machine-number-box">MÁQUINA</div><div className="machine-number-val">{order.maquina}</div></div>
@@ -784,14 +806,14 @@
                             </div>
                             <div className="print-section-bottom print-only mt-4">
                                 <div className="border-b-4 border-black font-bold mb-1 text-sm flex justify-between items-end"><span>CONTROL DE TEJIDO</span><span>{new Date().toLocaleDateString('es-MX')}</span></div>
-                                <table className="package-table-print"><colgroup><col style={{width: '6%'}} /><col style={{width: '24%'}} /><col style={{width: '10%'}} /><col style={{width: '12%'}} /><col style={{width: '12%'}} /><col style={{width: '8%'}} /><col style={{width: '8%'}} /><col style={{width: '20%'}} /></colgroup><thead><tr><th>#</th><th>CÓDIGO</th><th>Cant</th><th>Tej</th><th>Fec</th><th>Def</th><th>Agj</th><th>OBS</th></tr></thead><tbody>{order.progreso?.map((p, idx) => (<tr key={p.id}><td className="text-center font-bold">{idx+1}</td><td className="pl-1 font-mono truncate" title={p.codigoUnico || p.piezaNombre}>{p.codigoUnico || p.piezaNombre}</td><td className="text-center font-bold">{p.cantidad}</td><td className="manual-input">{p.finished ? p.tejedor : '_'}</td><td className="manual-input">{p.finished ? p.fecha : '_'}</td><td className="manual-input">{p.finished ? p.defectos : '_'}</td><td className="manual-input">{p.finished ? p.agujas : '_'}</td><td className="manual-input">{p.observaciones || '_'}</td> </tr>))}</tbody></table>
+                                <table className="package-table-print"><colgroup><col style={{width: '6%'}} /><col style={{width: '24%'}} /><col style={{width: '10%'}} /><col style={{width: '12%'}} /><col style={{width: '12%'}} /><col style={{width: '8%'}} /><col style={{width: '8%'}} /><col style={{width: '20%'}} /></colgroup><thead><tr><th>#</th><th>CÓDIGO</th><th>Cant</th><th>Tej</th><th>Fec</th><th>Def</th><th>Agj</th><th>OBS</th></tr></thead><tbody>{order.progreso?.map((p, idx) => (<tr key={p.id}><td className="text-center font-bold">{idx+1}</td><td className="pl-1 font-mono truncate" title={p.codigoUnico || p.piezaNombre}>{p.shortCode || p.codigoUnico}</td><td className="text-center font-bold">{p.cantidad}</td><td className="manual-input">{p.finished ? p.tejedor : '_'}</td><td className="manual-input">{p.finished ? p.fecha : '_'}</td><td className="manual-input">{p.finished ? p.defectos : '_'}</td><td className="manual-input">{p.finished ? p.agujas : '_'}</td><td className="manual-input">{p.observaciones || '_'}</td> </tr>))}</tbody></table>
                              </div>
                         </div>
                         <div className="no-print mt-4">
                             <div className="bg-slate-100 p-4 rounded border mb-6">
                                 <div className="flex justify-between items-center mb-2"><h3 className="font-bold text-lg text-slate-700">Registro Digital</h3><div className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded font-bold border border-green-300 flex items-center gap-1"><Icon name="scan-barcode" size={14}/> MODO ESCÁNER ACTIVO</div></div>
                                 <div className="flex gap-4 items-end mb-4 bg-white p-3 rounded shadow-sm border"><div><label className="block text-xs font-bold text-slate-500 mb-1">TEJEDOR (MANUAL)</label><select value={entry.tejedor} onChange={e=>setEntry({...entry, tejedor: e.target.value})} className="border-2 border-slate-300 p-2 rounded w-40 font-bold text-indigo-700 focus:border-indigo-500 outline-none"><option value="">Seleccionar...</option><option value="BALTA">BALTA</option><option value="ANDRÉS">ANDRÉS</option></select></div><div><label className="block text-xs font-bold text-slate-500 mb-1">FECHA</label><input type="date" value={entry.fecha} onChange={e=>setEntry({...entry, fecha: e.target.value})} className="border-2 border-slate-300 p-2 rounded font-mono cursor-pointer hover:bg-slate-50"/></div></div>
-                                <div className="max-h-80 overflow-y-auto bg-white border rounded shadow-inner"><table className="w-full text-xs text-left"><thead className="bg-slate-200 sticky top-0 shadow-sm z-0"><tr><th className="p-3">CÓDIGO/PIEZA</th><th className="p-3">Pzs</th><th className="p-3">Estado</th><th className="p-3">Acción</th></tr></thead><tbody>{order.progreso.map(p=>(<tr key={p.id} className="border-b hover:bg-slate-50 transition-colors"><td className="p-3 font-mono" title={p.codigoUnico || p.piezaNombre}>{p.codigoUnico || p.piezaNombre}</td><td className="p-3 font-bold">{p.cantidad}</td><td className="p-3">{p.finished ? <span className="text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full text-[10px]">LISTO ({p.tejedor})</span> : <span className="text-slate-400 font-medium">PENDIENTE</span>}</td><td className="p-3">{!p.finished ? <button onClick={()=>markPackage(p.id)} disabled={!entry.tejedor} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded font-bold hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed transition">Registrar</button> : <button onClick={()=>unmarkPackage(p.id)} className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200 transition">Deshacer</button>}</td></tr>))}</tbody></table></div>
+                                <div className="max-h-80 overflow-y-auto bg-white border rounded shadow-inner"><table className="w-full text-xs text-left"><thead className="bg-slate-200 sticky top-0 shadow-sm z-0"><tr><th className="p-3">CÓDIGO/PIEZA</th><th className="p-3">Pzs</th><th className="p-3">Estado</th><th className="p-3">Acción</th></tr></thead><tbody>{order.progreso.map(p=>(<tr key={p.id} className="border-b hover:bg-slate-50 transition-colors"><td className="p-3 font-mono" title={p.codigoUnico || p.piezaNombre}>{p.shortCode || p.codigoUnico}</td><td className="p-3 font-bold">{p.cantidad}</td><td className="p-3">{p.finished ? <span className="text-green-600 font-bold bg-green-100 px-2 py-1 rounded-full text-[10px]">LISTO ({p.tejedor})</span> : <span className="text-slate-400 font-medium">PENDIENTE</span>}</td><td className="p-3">{!p.finished ? <button onClick={()=>markPackage(p.id)} disabled={!entry.tejedor} className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded font-bold hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed transition">Registrar</button> : <button onClick={()=>unmarkPackage(p.id)} className="bg-red-100 text-red-700 px-3 py-1 rounded font-bold hover:bg-red-200 transition">Deshacer</button>}</td></tr>))}</tbody></table></div>
                             </div>
                         </div>
                     </div>
@@ -808,7 +830,7 @@
 
         const ImageGallery = ({ config, onClose, orders }) => {
             const [filter, setFilter] = useState('');
-            const [mode, setMode] = useState('active'); // 'active' (ordenes) o 'explorer' (api github)
+            const [mode, setMode] = useState('active');
             const [apiFiles, setApiFiles] = useState([]);
             const [isLoadingApi, setIsLoadingApi] = useState(false);
             const [apiError, setApiError] = useState(null);
@@ -953,36 +975,73 @@
             
             const [showTemplateCreator, setShowTemplateCreator] = useState(false);
             
+            // Cargar órdenes y generar shortCodes si faltan
             useEffect(() => {
-                const u1 = db.collection('orders').onSnapshot(s => setOrders(s.docs.map(d=>d.data())));
+                const u1 = db.collection('orders').onSnapshot(s => {
+                    const fetchedOrders = s.docs.map(d => d.data());
+                    // Generar shortCodes para paquetes que no tengan
+                    fetchedOrders.forEach(order => {
+                        if (order.progreso) {
+                            let necesitaActualizar = false;
+                            order.progreso.forEach(pkg => {
+                                if (!pkg.shortCode) {
+                                    let code;
+                                    do {
+                                        code = Math.random().toString(36).substring(2, 7).toUpperCase();
+                                    } while (order.progreso.some(p => p.shortCode === code));
+                                    pkg.shortCode = code;
+                                    necesitaActualizar = true;
+                                }
+                            });
+                            if (necesitaActualizar) {
+                                db.collection('orders').doc(String(order.id)).update({ progreso: order.progreso })
+                                    .catch(err => console.error("Error actualizando shortCodes:", err));
+                            }
+                        }
+                    });
+                    setOrders(fetchedOrders);
+                });
                 const u2 = db.collection('settings').doc('config').onSnapshot(d => setConfig(d.data() || {}));
                 setTimeout(()=>lucide.createIcons(), 500);
                 return () => { u1(); u2(); };
             }, []);
             useEffect(()=>lucide.createIcons(), [view, orders, viewMode]);
 
-            const handleGlobalScan = async (scannedCode) => {
-                if (!scannedCode.includes('-')) return;
-                const [orderId, pkgIdString] = scannedCode.split('-');
-                const pkgId = parseFloat(pkgIdString);
-                const targetOrder = orders.find(o => String(o.id) === orderId);
-                if (targetOrder) {
-                    const targetPkg = targetOrder.progreso.find(p => p.id === pkgId);
-                    if (targetPkg) {
-                        if (targetPkg.finished) {
-                            alert(`El paquete ${targetPkg.codigoUnico} ya estaba terminado.`);
+            // Escáner global actualizado para soportar shortCode y formato antiguo
+            const handleGlobalScan = (scannedCode, shortCodeMap) => {
+                // Intentar formato antiguo: orderId-pkgId
+                if (scannedCode.includes('-')) {
+                    const [orderId, pkgIdString] = scannedCode.split('-');
+                    const pkgId = parseFloat(pkgIdString);
+                    const targetOrder = orders.find(o => String(o.id) === orderId);
+                    if (targetOrder) {
+                        const targetPkg = targetOrder.progreso.find(p => p.id === pkgId);
+                        if (targetPkg && !targetPkg.finished) {
+                            const newProgreso = targetOrder.progreso.map(p => 
+                                p.id === pkgId ? { ...p, finished: true, tejedor: 'ESCÁNER', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' } : p
+                            );
+                            db.collection('orders').doc(String(targetOrder.id)).update({ progreso: newProgreso });
                             return;
                         }
-                        const newProgreso = targetOrder.progreso.map(p => 
-                            p.id === pkgId 
-                                ? { ...p, finished: true, tejedor: 'ESCÁNER', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' } 
-                                : p
-                        );
-                        await db.collection('orders').doc(String(targetOrder.id)).update({ progreso: newProgreso });
+                    }
+                }
+                
+                // Buscar por shortCode
+                const info = shortCodeMap.get(scannedCode);
+                if (info) {
+                    const targetOrder = orders.find(o => String(o.id) === info.orderId);
+                    if (targetOrder) {
+                        const targetPkg = targetOrder.progreso.find(p => p.id === info.pkgId);
+                        if (targetPkg && !targetPkg.finished) {
+                            const newProgreso = targetOrder.progreso.map(p => 
+                                p.id === info.pkgId ? { ...p, finished: true, tejedor: 'ESCÁNER', fecha: new Date().toISOString().split('T')[0], defectos: '', agujas: '' } : p
+                            );
+                            db.collection('orders').doc(String(targetOrder.id)).update({ progreso: newProgreso });
+                        }
                     }
                 }
             };
-            useBarcodeScanner(handleGlobalScan);
+            useBarcodeScanner(handleGlobalScan, orders);
 
             const displayedGroups = useMemo(() => {
                 const filtered = viewMode === 'active' 
@@ -1019,7 +1078,7 @@
                                 <h1 className="text-2xl font-black text-slate-800 flex gap-2 items-center">
                                     <Icon name="layout-dashboard"/> 
                                     <span>{viewMode === 'active' ? 'PLANTA' : 'HISTORIAL'}</span>
-                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.2 AI-HUB</span>
+                                    <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded ml-2">v4.4 Color+ShortCodes</span>
                                 </h1>
                                 <div className="flex gap-2 items-center">
                                     <InstallButton />
