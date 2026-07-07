@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generador Cirineo v5.4 (Editor de Imagen)</title>
+    <title>Generador Cirineo v5.4 (Editor de Imagen + Color + ShortCodes)</title>
     
     <link rel="icon" href="https://raw.githubusercontent.com/jesusvn1993mplvt3-ai/CIRINEO/refs/heads/main/icon.ico">
     
@@ -28,7 +28,6 @@
         
         #reader a, #reader-hidden a { display: none !important; }
 
-        /* --- CLASES CRÍTICAS PARA EL PDF --- */
         .pdf-fixed-container {
             width: 6in;
             height: 4in;
@@ -51,7 +50,6 @@
             background: white;
         }
 
-        /* --- ESTRUCTURA DE LA ETIQUETA --- */
         .label-layout {
             width: 100%;
             height: 100%;
@@ -82,7 +80,6 @@
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-        /* Editor de imagen */
         .editor-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -226,7 +223,6 @@
             const [loading, setLoading] = useState(false);
             const previewRef = useRef(null);
 
-            // Cargar imagen desde fuentes (lógica similar a ProductionLabel)
             useEffect(() => {
                 if (isVisible && imageSources && imageSources.length > 0 && codigo) {
                     setCurrentSourceIdx(0);
@@ -255,7 +251,6 @@
                 }
             };
 
-            // Cargar ajustes existentes desde Firestore
             useEffect(() => {
                 if (isVisible && codigo) {
                     const unsubscribe = db.collection('imagenes_editadas').doc(codigo)
@@ -263,7 +258,6 @@
                             if (doc.exists && doc.data().settings) {
                                 setSettings(prev => ({ ...prev, ...doc.data().settings }));
                             } else {
-                                // Reset a valores por defecto
                                 setSettings({
                                     objectFit: 'contain',
                                     objectPosition: '50% 50%',
@@ -294,7 +288,7 @@
                         settings: settings,
                         updatedAt: FieldValue.serverTimestamp()
                     }, { merge: true });
-                    if (onSave) onSave(); // Refrescar etiquetas
+                    if (onSave) onSave();
                     onClose();
                 } catch (e) {
                     alert("Error al guardar ajustes: " + e.message);
@@ -337,7 +331,6 @@
                         </div>
 
                         <div className="flex flex-col md:flex-row flex-grow min-h-0">
-                            {/* Vista previa interactiva */}
                             <div className="w-full md:w-1/2 bg-gray-900 p-4 flex flex-col items-center justify-center">
                                 <div className="bg-white w-full aspect-square relative border-4 border-gray-300 overflow-hidden" ref={previewRef}>
                                     {imgSrc ? (
@@ -364,7 +357,6 @@
                                 </div>
                             </div>
 
-                            {/* Controles */}
                             <div className="w-full md:w-1/2 p-4 overflow-y-auto bg-slate-50">
                                 <h3 className="font-bold text-slate-700 mb-3">Recorte & Posición</h3>
                                 <div className="grid grid-cols-2 gap-3 mb-4">
@@ -436,7 +428,6 @@
                                         <Icon name="rotate-ccw" size={16}/> RESTABLECER
                                     </button>
                                 </div>
-                                <p className="text-xs text-slate-400 mt-2 text-center">Los cambios se aplican al generar etiquetas.</p>
                             </div>
                         </div>
                     </div>
@@ -444,13 +435,15 @@
             );
         };
 
-        // --- COMPONENTE DE ETIQUETA (ahora con soporte de ajustes de imagen) ---
+        // --- COMPONENTE DE ETIQUETA (con color y shortCode) ---
         const ProductionLabel = ({ labelData, shiftHours, imageSources, imageSettings }) => {
             const svgRef = useRef(null);
             const order = labelData; 
             const subPiece = order.subPiecesData ? order.subPiecesData.find(sp => sp.pieza === order.piezaNombre) : (order.subPiecesData?.[0] || {});
             
-            const barcodeValue = order.packageCode; 
+            // Usar shortCode si existe, de lo contrario usar packageCode original
+            const barcodeValue = order.shortCode || order.packageCode;
+            const barcodeDisplay = order.shortCode || order.packageCode;
             const fechaEntrega = order.fechaEntrega || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('es-MX');
 
             const tiempo = parseFloat(subPiece?.tiempo);
@@ -508,7 +501,6 @@
                 }
             }, [barcodeValue]);
 
-            // Aplicar ajustes de imagen si existen
             const imgStyle = {
                 width: '100%',
                 height: '100%',
@@ -519,7 +511,7 @@
 
             return (
                 <div className="label-layout">
-                    {/* ZONA 1: IMAGEN CON AJUSTES */}
+                    {/* ZONA 1: IMAGEN */}
                     <div className="col-img">
                         {imgSrc ? (
                             <img src={imgSrc} onError={handleImgError} alt={order.codigo} style={imgStyle} />
@@ -532,7 +524,7 @@
 
                     {/* ZONA 2: DATOS (CENTRO) */}
                     <div className="col-data">
-                        <div className="lbl-row" style={{height: '17%'}}>
+                        <div className="lbl-row" style={{height: '15%'}}>
                             <div className="lbl-col" style={{width: '65%'}}>
                                 <div className="lbl-title">MODELO</div>
                                 <div className="lbl-big">{order.codigo || 'S/N'}</div>
@@ -542,14 +534,18 @@
                                 <div className="lbl-medium">{order.totalPedido || 0}</div>
                             </div>
                         </div>
-                        <div className="lbl-row" style={{height: '13%'}}>
-                            <div className="lbl-col" style={{width: '70%'}}>
+                        <div className="lbl-row" style={{height: '11%'}}>
+                            <div className="lbl-col" style={{width: '45%'}}>
                                 <div className="lbl-title">CLIENTE</div>
                                 <div className="lbl-std truncate">{order.cliente || '---'}</div>
                             </div>
-                            <div className="lbl-col" style={{width: '30%'}}>
+                            <div className="lbl-col" style={{width: '27%'}}>
                                 <div className="lbl-title">PARTIDA</div>
                                 <div className="lbl-std">{order.partida || '-'}</div>
+                            </div>
+                            <div className="lbl-col" style={{width: '28%'}}>
+                                <div className="lbl-title">COLOR</div>
+                                <div className="lbl-std truncate" style={{fontSize:'12px'}}>{order.color || 'N/A'}</div>
                             </div>
                         </div>
                         <div className="lbl-row" style={{height: '24%', backgroundColor: '#000', color: '#FFF'}}>
@@ -599,7 +595,7 @@
                     <div className="col-barcode">
                         <div style={{transform: 'rotate(90deg)', transformOrigin: 'center', width: '3.5in', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
                              <svg ref={svgRef} style={{width: '100%', height: 'auto'}}></svg>
-                             <div style={{fontSize: '10px', fontFamily: 'monospace', marginTop: '5px'}}>{barcodeValue}</div>
+                             <div style={{fontSize: '10px', fontFamily: 'monospace', marginTop: '5px'}}>{barcodeDisplay}</div>
                         </div>
                     </div>
                 </div>
@@ -607,8 +603,6 @@
         };
 
         const QuickScannerModal = ({ isVisible, onClose, allOrders, onScanSaved }) => {
-            // ... (código sin cambios, por brevedad se omite aquí pero sigue igual)
-            // Copia exacta del código original del escáner rápido.
             const [scans, setScans] = useState([]);
             const [scanStatus, setScanStatus] = useState({ message: 'Cargando cámara...', type: 'info' });
             const [isSaving, setIsSaving] = useState(false);
@@ -617,7 +611,7 @@
             useEffect(() => {
                 if (isVisible) {
                     setScans([]);
-                    setScanStatus({ message: 'Escanee los códigos únicos de los paquetes...', type: 'info' });
+                    setScanStatus({ message: 'Escanee los códigos de los paquetes...', type: 'info' });
                     
                     setTimeout(() => {
                         const html5QrcodeScanner = new Html5QrcodeScanner(
@@ -647,22 +641,30 @@
             const handleQuickScan = (rawCode) => {
                 if (!rawCode) return;
                 const scannedCode = rawCode.trim();
+
                 if (scans.includes(scannedCode)) {
                     setScanStatus({ message: `Código ${scannedCode} ya escaneado.`, type: 'warning' });
                     return;
                 }
+
                 let foundPackage = null;
                 let foundOrder = null;
+
                 for (const order of allOrders) {
                     if (order.progreso) {
-                        const pkg = order.progreso.find(p => p.codigoUnico === scannedCode);
+                        // Buscar por shortCode (nuevo) o por codigoUnico (antiguo)
+                        const pkg = order.progreso.find(p => 
+                            p.shortCode === scannedCode || p.codigoUnico === scannedCode
+                        );
                         if (pkg) { foundPackage = pkg; foundOrder = order; break; }
                     }
                 }
+
                 if (!foundPackage || !foundOrder) {
                     setScanStatus({ message: `Código ${scannedCode} NO encontrado.`, type: 'error' });
                     return;
                 }
+
                 setScans(prev => [...prev, scannedCode]);
                 setScanStatus({ message: `¡OK! ${foundPackage.piezaNombre} (${foundPackage.paqueteNum})`, type: 'success' });
             };
@@ -676,16 +678,21 @@
                         let foundOrder = null;
                         for (const order of allOrders) {
                             if (order.progreso) {
-                                const pkg = order.progreso.find(p => p.codigoUnico === scannedCode);
+                                const pkg = order.progreso.find(p => 
+                                    p.shortCode === scannedCode || p.codigoUnico === scannedCode
+                                );
                                 if (pkg) { foundPackage = pkg; foundOrder = order; break; }
                             }
                         }
                         if (!foundPackage) continue;
-                        const globalScanCheck = await db.collection('registro_produccion').where('codigo_paquete', '==', scannedCode).get();
+
+                        // Registrar usando el codigoUnico original para mantener compatibilidad
+                        const codigoParaRegistro = foundPackage.codigoUnico || scannedCode;
+                        const globalScanCheck = await db.collection('registro_produccion').where('codigo_paquete', '==', codigoParaRegistro).get();
                         if (!globalScanCheck.empty) continue;
 
                         await db.collection('registro_produccion').doc().set({
-                            codigo_paquete: scannedCode, 
+                            codigo_paquete: codigoParaRegistro, 
                             orderId: String(foundOrder.id), 
                             fecha: FieldValue.serverTimestamp(),
                             fecha_legible: new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }), 
@@ -745,7 +752,7 @@
             const [shiftHours, setShiftHours] = useState(12);
             
             const [imageSources, setImageSources] = useState([]);
-            const [imageSettings, setImageSettings] = useState(null); // Ajustes activos para el código seleccionado
+            const [imageSettings, setImageSettings] = useState(null);
             const pdfContainerRef = useRef(null);
 
             // Cargar fuentes desde settings/config/repoUrls
@@ -761,13 +768,36 @@
                 return () => unsubscribe();
             }, []);
 
-            // Cargar órdenes
+            // Cargar órdenes y generar shortCodes si faltan
             useEffect(() => {
                 const unsubscribe = db.collection('orders').where('status', '!=', 'ARCHIVADO').onSnapshot(snapshot => {
-                        const fetchedOrders = snapshot.docs.map(doc => doc.data());
-                        fetchedOrders.sort((a, b) => b.id - a.id);
-                        setOrders(fetchedOrders);
+                    const fetchedOrders = snapshot.docs.map(doc => doc.data());
+                    fetchedOrders.sort((a, b) => b.id - a.id);
+                    
+                    // Asegurar shortCodes en todos los paquetes
+                    fetchedOrders.forEach(order => {
+                        if (order.progreso) {
+                            let necesitaActualizar = false;
+                            order.progreso.forEach(pkg => {
+                                if (!pkg.shortCode) {
+                                    // Generar shortCode único dentro de la orden (5 caracteres)
+                                    let code;
+                                    do {
+                                        code = Math.random().toString(36).substring(2, 7).toUpperCase();
+                                    } while (order.progreso.some(p => p.shortCode === code));
+                                    pkg.shortCode = code;
+                                    necesitaActualizar = true;
+                                }
+                            });
+                            if (necesitaActualizar) {
+                                // Actualizar Firestore con los nuevos shortCodes
+                                db.collection('orders').doc(String(order.id)).update({ progreso: order.progreso })
+                                    .catch(err => console.error("Error actualizando shortCodes:", err));
+                            }
+                        }
                     });
+                    setOrders(fetchedOrders);
+                });
                 return () => unsubscribe();
             }, []);
 
@@ -797,7 +827,8 @@
                         packageIndex: p.paqueteNum,
                         totalPackages: p.paquetesDePieza,
                         piecesInPackage: p.cantidad,
-                        packageCode: p.codigoUnico, 
+                        packageCode: p.codigoUnico,
+                        shortCode: p.shortCode, // pasar el shortCode a la etiqueta
                         displayPackageId: `${p.paqueteNum}/${p.paquetesDePieza}`
                     }));
                     setPackageLabels(labels);
